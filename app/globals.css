@@ -1,0 +1,214 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Cores principais */
+    --primary-dark-blue: #16375b;
+    --primary-teal: #1da7ac;
+    --primary-light-green: #8cc9cb;
+    --primary-medium-green: #1dac8c;
+    --primary-soft-green: #87d1af;
+
+    /* Cores secundárias */
+    --secondary-red: #b54c2b;
+    --secondary-coral: #ff8d69;
+    --secondary-orange: #e68b00;
+    --secondary-beige: #e7be81;
+
+    /* Cores de apoio */
+    --support-white: #ffffff;
+    --support-off-white: #fff6da;
+    --support-light-gray: #eef3f6;
+    --support-dark-purple: #291b25;
+    --support-dark-pink: #b7133f;
+
+    /* Variáveis do sistema */
+    --background: 0 0% 100%;
+    --foreground: 210 22% 22%;
+    --card: 0 0% 100%;
+    --card-foreground: 210 22% 22%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 22% 22%;
+    --primary: 199 83% 37%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 199 25% 84%;
+    --secondary-foreground: 210 22% 22%;
+    --muted: 199 15% 94%;
+    --muted-foreground: 199 8% 46%;
+    --accent: 199 25% 84%;
+    --accent-foreground: 210 22% 22%;
+    --destructive: 10 78% 44%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 199 15% 91%;
+    --input: 199 15% 91%;
+    --ring: 199 83% 37%;
+    --radius: 0.75rem;
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 210 22% 22%;
+    --sidebar-primary: 199 83% 37%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 199 15% 94%;
+    --sidebar-accent-foreground: 210 22% 22%;
+    --sidebar-border: 199 15% 91%;
+    --sidebar-ring: 199 83% 37%;
+  }
+
+  .dark {
+    --background: 291 24% 15%;
+    --foreground: 0 0% 98%;
+    --card: 291 24% 15%;
+    --card-foreground: 0 0% 98%;
+    --popover: 291 24% 15%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 199 83% 37%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 291 24% 20%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 291 24% 20%;
+    --muted-foreground: 291 12% 65%;
+    --accent: 291 24% 20%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 10 78% 44%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 291 24% 20%;
+    --input: 291 24% 20%;
+    --ring: 199 83% 37%;
+
+    --sidebar-background: 291 24% 15%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 199 83% 37%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 291 24% 20%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 291 24% 20%;
+    --sidebar-ring: 199 83% 37%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Tipografias */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-inter), system-ui, sans-serif;
+    font-weight: 600;
+  }
+
+  p,
+  span,
+  button,
+  input,
+  label,
+  td,
+  th {
+    font-family: var(--font-roboto), system-ui, sans-serif;
+  }
+}
+
+/* Classes utilitárias para cores personalizadas */
+@layer utilities {
+  .bg-primary-dark-blue {
+    background-color: var(--primary-dark-blue);
+  }
+  .bg-primary-teal {
+    background-color: var(--primary-teal);
+  }
+  .bg-primary-light-green {
+    background-color: var(--primary-light-green);
+  }
+  .bg-primary-medium-green {
+    background-color: var(--primary-medium-green);
+  }
+  .bg-primary-soft-green {
+    background-color: var(--primary-soft-green);
+  }
+
+  .bg-secondary-red {
+    background-color: var(--secondary-red);
+  }
+  .bg-secondary-coral {
+    background-color: var(--secondary-coral);
+  }
+  .bg-secondary-orange {
+    background-color: var(--secondary-orange);
+  }
+  .bg-secondary-beige {
+    background-color: var(--secondary-beige);
+  }
+
+  .bg-support-off-white {
+    background-color: var(--support-off-white);
+  }
+  .bg-support-light-gray {
+    background-color: var(--support-light-gray);
+  }
+  .bg-support-dark-purple {
+    background-color: var(--support-dark-purple);
+  }
+  .bg-support-dark-pink {
+    background-color: var(--support-dark-pink);
+  }
+
+  .text-primary-dark-blue {
+    color: var(--primary-dark-blue);
+  }
+  .text-primary-teal {
+    color: var(--primary-teal);
+  }
+  .text-primary-light-green {
+    color: var(--primary-light-green);
+  }
+  .text-primary-medium-green {
+    color: var(--primary-medium-green);
+  }
+  .text-primary-soft-green {
+    color: var(--primary-soft-green);
+  }
+
+  .text-secondary-red {
+    color: var(--secondary-red);
+  }
+  .text-secondary-coral {
+    color: var(--secondary-coral);
+  }
+  .text-secondary-orange {
+    color: var(--secondary-orange);
+  }
+  .text-secondary-beige {
+    color: var(--secondary-beige);
+  }
+
+  .text-support-off-white {
+    color: var(--support-off-white);
+  }
+  .text-support-light-gray {
+    color: var(--support-light-gray);
+  }
+  .text-support-dark-purple {
+    color: var(--support-dark-purple);
+  }
+  .text-support-dark-pink {
+    color: var(--support-dark-pink);
+  }
+
+  .border-primary-teal {
+    border-color: var(--primary-teal);
+  }
+  .border-primary-light-green {
+    border-color: var(--primary-light-green);
+  }
+}
