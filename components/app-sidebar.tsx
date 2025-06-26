@@ -1,6 +1,18 @@
 "use client"
 
-import { Calendar, DollarSign, FileText, Home, MessageSquare, Stethoscope, Users, UserCheck } from "lucide-react"
+import {
+  Calendar,
+  DollarSign,
+  FileText,
+  Home,
+  MessageSquare,
+  Stethoscope,
+  Users,
+  UserCheck,
+  CheckCircle,
+  UserPlus,
+  MessageCircle,
+} from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
@@ -51,6 +63,26 @@ const items = [
     title: "Avisos",
     url: "/avisos",
     icon: MessageSquare,
+  },
+  {
+    title: "Tarefas",
+    url: "/tarefas",
+    icon: CheckCircle,
+  },
+  {
+    title: "Aprovação de Acesso",
+    url: "/aprovacao-acesso",
+    icon: UserPlus,
+  },
+  {
+    title: "Comunicação",
+    url: "/comunicacao",
+    icon: MessageCircle,
+  },
+  {
+    title: "Plano Evolutivo",
+    url: "/plano-evolutivo",
+    icon: FileText,
   },
 ]
 
