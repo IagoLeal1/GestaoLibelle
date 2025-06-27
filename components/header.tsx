@@ -38,7 +38,7 @@ export function Header() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-8 w-8 rounded-full">
               <Avatar className="h-8 w-8">
-                <AvatarImage src="/placeholder.svg?height=32&width=32" alt="Dr. João Silva" />
+                <AvatarImage src="/placeholder.svg?height=32&width=32" alt="Iago Leal" />
                 <AvatarFallback>JS</AvatarFallback>
               </Avatar>
             </Button>
@@ -46,8 +46,8 @@ export function Header() {
           <DropdownMenuContent className="w-56" align="end" forceMount>
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">Dr. João Silva</p>
-                <p className="text-xs leading-none text-muted-foreground">joao.silva@clinica.com</p>
+                <p className="text-sm font-medium leading-none">Iago Leal</p>
+                <p className="text-xs leading-none text-muted-foreground">IagoLeal@clinica.com</p>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
