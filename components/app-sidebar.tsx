@@ -12,6 +12,7 @@ import {
   CheckCircle,
   UserPlus,
   MessageCircle,
+  MapPin,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -83,6 +84,11 @@ const items = [
     title: "Plano Evolutivo",
     url: "/plano-evolutivo",
     icon: FileText,
+  },
+  {
+    title: "Mapeamento de Salas",
+    url: "/mapeamento-salas",
+    icon: MapPin,
   },
 ]
 
