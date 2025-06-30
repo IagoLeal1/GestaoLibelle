@@ -46,29 +46,29 @@ const items = [
     icon: Users,
   },
   {
+    title: "Mapeamento de Salas",
+    url: "/mapeamento-salas",
+    icon: MapPin,
+  },
+  {
     title: "Profissionais",
     url: "/profissionais",
     icon: UserCheck,
   },
   {
-    title: "Financeiro",
-    url: "/financeiro",
-    icon: DollarSign,
-  },
-  {
-    title: "Relatórios",
-    url: "/relatorios",
+    title: "Plano Evolutivo",
+    url: "/plano-evolutivo",
     icon: FileText,
-  },
-  {
-    title: "Avisos",
-    url: "/avisos",
-    icon: MessageSquare,
   },
   {
     title: "Tarefas",
     url: "/tarefas",
     icon: CheckCircle,
+  },
+  {
+    title: "Financeiro",
+    url: "/financeiro",
+    icon: DollarSign,
   },
   {
     title: "Aprovação de Acesso",
@@ -81,14 +81,9 @@ const items = [
     icon: MessageCircle,
   },
   {
-    title: "Plano Evolutivo",
-    url: "/plano-evolutivo",
-    icon: FileText,
-  },
-  {
-    title: "Mapeamento de Salas",
-    url: "/mapeamento-salas",
-    icon: MapPin,
+    title: "Avisos",
+    url: "/avisos",
+    icon: MessageSquare,
   },
 ]
 

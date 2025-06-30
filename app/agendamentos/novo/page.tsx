@@ -108,22 +108,20 @@ export default function NovoAgendamento() {
                     <SelectValue placeholder="Selecione o horário" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="08:00">08:00</SelectItem>
-                    <SelectItem value="08:30">08:30</SelectItem>
+                    <SelectItem value="08:00">07:20</SelectItem>
+                    <SelectItem value="08:30">08:10</SelectItem>
                     <SelectItem value="09:00">09:00</SelectItem>
-                    <SelectItem value="09:30">09:30</SelectItem>
-                    <SelectItem value="10:00">10:00</SelectItem>
-                    <SelectItem value="10:30">10:30</SelectItem>
-                    <SelectItem value="11:00">11:00</SelectItem>
-                    <SelectItem value="11:30">11:30</SelectItem>
-                    <SelectItem value="14:00">14:00</SelectItem>
-                    <SelectItem value="14:30">14:30</SelectItem>
-                    <SelectItem value="15:00">15:00</SelectItem>
-                    <SelectItem value="15:30">15:30</SelectItem>
-                    <SelectItem value="16:00">16:00</SelectItem>
-                    <SelectItem value="16:30">16:30</SelectItem>
-                    <SelectItem value="17:00">17:00</SelectItem>
-                    <SelectItem value="17:30">17:30</SelectItem>
+                    <SelectItem value="09:30">09:50</SelectItem>
+                    <SelectItem value="10:00">10:40</SelectItem>
+                    <SelectItem value="10:30">11:30</SelectItem>
+                    <SelectItem value="11:00">12:20</SelectItem>
+                    <SelectItem value="11:30">13:20</SelectItem>
+                    <SelectItem value="14:00">14:10</SelectItem>
+                    <SelectItem value="14:30">15:00</SelectItem>
+                    <SelectItem value="15:00">15:50</SelectItem>
+                    <SelectItem value="15:30">16:40</SelectItem>
+                    <SelectItem value="16:00">17:30</SelectItem>
+                    <SelectItem value="16:30">18:20</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
