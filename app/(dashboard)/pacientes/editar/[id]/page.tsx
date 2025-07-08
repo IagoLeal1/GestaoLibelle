@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useRouter, useParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,21 +11,58 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, User, Phone, MapPin } from "lucide-react"
 
-// Importamos a função de criar e o tipo do formulário
-import { createPatient, PatientFormData } from "@/services/patientService"
+// Importamos as funções e tipos necessários do nosso serviço
+import { getPatientById, updatePatient, PatientFormData } from "@/services/patientService"
 
-export default function NovoPacientePage() {
+export default function EditPatientPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const params = useParams();
+  const patientId = params.id as string;
+
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [formData, setFormData] = useState<Partial<PatientFormData>>({});
 
-  // O estado que você já tinha, mas agora com o tipo importado
-  const [formData, setFormData] = useState<Partial<PatientFormData>>({
-    fullName: "", cpf: "", rg: "", dataNascimento: "", sexo: "", telefone: "", celular: "",
-    email: "", endereco: "", numero: "", complemento: "", bairro: "", cidade: "", cep: "",
-    estado: "", profissao: "", estadoCivil: "", observacoes: "",
-  });
+  // useEffect para buscar e preencher os dados do paciente
+  useEffect(() => {
+    if (!patientId) return;
 
+    const fetchPatientData = async () => {
+      setLoading(true);
+      const patient = await getPatientById(patientId);
+      
+      if (patient) {
+        // CORREÇÃO 1: Preenchemos TODOS os campos do formulário
+        setFormData({
+          fullName: patient.fullName || "",
+          dataNascimento: patient.dataNascimento?.toDate().toISOString().split('T')[0] || "",
+          cpf: patient.cpf || "",
+          rg: patient.rg || "",
+          sexo: patient.sexo || "",
+          telefone: patient.telefone || "",
+          celular: patient.celular || "",
+          email: patient.email || "",
+          endereco: patient.endereco || "",
+          numero: patient.numero || "",
+          complemento: patient.complemento || "",
+          bairro: patient.bairro || "",
+          cidade: patient.cidade || "",
+          cep: patient.cep || "",
+          estado: patient.estado || "",
+          profissao: patient.profissao || "",
+          estadoCivil: patient.estadoCivil || "",
+          observacoes: patient.observacoes || "",
+        });
+      } else {
+        setError("Paciente não encontrado.");
+      }
+      setLoading(false);
+    };
+
+    fetchPatientData();
+  }, [patientId]);
+
+  // CORREÇÃO 2: Adicionamos a função que faltava para atualizar o estado do formulário
   const handleInputChange = (field: keyof PatientFormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -35,43 +72,33 @@ export default function NovoPacientePage() {
     setLoading(true);
     setError(null);
 
-    // Validação dos campos obrigatórios
-    if (!formData.fullName || !formData.dataNascimento || !formData.cpf || !formData.celular) {
-        setError("Nome, Data de Nascimento, CPF e Celular são obrigatórios.");
-        setLoading(false);
-        return;
-    }
-
-    // Chamada para o serviço do Firebase
-    const result = await createPatient(formData as PatientFormData);
+    const result = await updatePatient(patientId, formData as PatientFormData);
 
     setLoading(false);
     if (result.success) {
-      alert("Paciente cadastrado com sucesso!");
+      alert("Paciente atualizado com sucesso!");
       router.push('/pacientes');
-      router.refresh()
+      router.refresh();
     } else {
-      setError(result.error || "Ocorreu um erro desconhecido ao salvar.");
+      setError(result.error || "Ocorreu um erro ao atualizar.");
     }
   };
 
+  if (loading) return <p className="p-4 text-center">Carregando dados do paciente...</p>;
+  if (error) return <p className="p-4 text-center text-red-500">{error}</p>
+
   return (
-    // Seu layout original e intacto, mas agora funcional
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link href="/pacientes">
-          <Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button>
-        </Link>
+        <Link href="/pacientes"><Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button></Link>
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-primary-dark-blue">Novo Paciente</h2>
-          <p className="text-muted-foreground">Cadastre um novo paciente no sistema</p>
+          <h2 className="text-2xl font-bold tracking-tight">Editar Paciente</h2>
+          <p className="text-muted-foreground">Altere os dados de {formData.fullName}</p>
         </div>
       </div>
 
-      {/* A tag <form> agora envolve todos os cards e o botão final */}
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Dados Pessoais */}
-        <Card>
+      <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><User className="h-5 w-5" /> Dados Pessoais</CardTitle></CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -148,14 +175,14 @@ export default function NovoPacientePage() {
           </CardContent>
         </Card>
 
-        {/* Botões de Ação */}
+        {error && <p className="text-sm font-medium text-red-500 text-center">{error}</p>}
         <div className="flex justify-end gap-4">
-          <Link href="/pacientes" passHref><Button type="button" variant="outline">Cancelar</Button></Link>
+          <Button type="button" variant="outline" onClick={() => router.push('/pacientes')}>Cancelar</Button>
           <Button type="submit" disabled={loading}>
-            {loading ? "Salvando..." : "Salvar Paciente"}
+            {loading ? "Salvando..." : "Salvar Alterações"}
           </Button>
         </div>
       </form>
     </div>
-  )
+  );
 }
