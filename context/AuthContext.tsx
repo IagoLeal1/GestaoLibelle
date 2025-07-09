@@ -7,7 +7,7 @@ import { auth, db } from '@/lib/firebaseConfig';
 
 // Interface para os dados do nosso perfil de usuário no Firestore
 export interface UserProfile {
-  role: 'familiar' | 'profissional' | 'funcionario';
+  role: 'familiar' | 'profissional' | 'funcionario' | 'admin';
   status: 'pendente' | 'aprovado';
   position?: string; // ex: 'Recepção'
   // Adicione outros campos que você precise

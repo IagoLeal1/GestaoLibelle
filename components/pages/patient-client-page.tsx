@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Plus, Search, Filter, MoreHorizontal, User, Phone, Calendar, MapPin } from "lucide-react"
 import { Timestamp } from "firebase/firestore"
-import { Patient, getPatients } from "@/services/patientService"
+import { Patient, getPatients, updatePatientStatus } from "@/services/patientService"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -26,7 +26,6 @@ const getStatusBadge = (status: string) => {
   const config = statusConfig[status as keyof typeof statusConfig] || { label: 'Desconhecido', className: 'bg-gray-100 text-gray-800' };
   return <Badge variant="outline" className={config.className}>{config.label}</Badge>
 };
-
 const getSexoBadge = (sexo: string) => {
   const sexoConfig = {
     masculino: "bg-blue-100 text-blue-800",
@@ -36,7 +35,6 @@ const getSexoBadge = (sexo: string) => {
   const className = sexoConfig[sexo as keyof typeof sexoConfig] || "bg-gray-100 text-gray-800";
   return <Badge variant="outline" className={className}>{sexo.charAt(0).toUpperCase() + sexo.slice(1)}</Badge>
 };
-
 const calcularIdade = (dataNascimento: Timestamp) => {
   if (!dataNascimento?.toDate) return 0;
   const hoje = new Date();
@@ -48,7 +46,6 @@ const calcularIdade = (dataNascimento: Timestamp) => {
   }
   return idade;
 };
-
 const formatDate = (date: Timestamp | undefined) => {
     if (!date?.toDate) return "Nunca";
     return date.toDate().toLocaleDateString("pt-BR");
@@ -79,6 +76,19 @@ export function PatientClientPage() {
     setModalAberto(true);
   };
 
+  const handleToggleStatus = async (paciente: Patient) => {
+    const newStatus = paciente.status === 'ativo' ? 'inativo' : 'ativo';
+    const actionText = newStatus === 'ativo' ? 'ativar' : 'desativar';
+    if (window.confirm(`Tem certeza que deseja ${actionText} o paciente ${paciente.fullName}?`)) {
+      const result = await updatePatientStatus(paciente.id, newStatus);
+      if (result.success) {
+        setPacientes(prev => prev.map(p => p.id === paciente.id ? { ...p, status: newStatus } : p));
+      } else {
+        alert(`Erro ao ${actionText} o paciente.`);
+      }
+    }
+  };
+
   const pacientesFiltrados = pacientes.filter((paciente) => {
     const search = searchTerm.toLowerCase();
     const matchesSearch =
@@ -96,22 +106,17 @@ export function PatientClientPage() {
     inativos: pacientes.filter((p) => p.status === "inativo").length,
     mediaIdade: pacientes.length > 0 ? Math.round(pacientes.reduce((acc, p) => acc + calcularIdade(p.birthDate), 0) / pacientes.length) : 0,
   };
-
-  if (loading) {
-    return <div className="text-center p-8">Carregando pacientes...</div>
-  }
+  
+  if (loading) return <div className="text-center p-8">Carregando pacientes...</div>
 
   return (
     <>
-      {/* Estatísticas */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card><CardContent className="p-4"><div className="text-center"><p className="text-2xl font-bold">{estatisticas.total}</p><p className="text-xs font-medium">Total</p></div></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="text-center"><p className="text-2xl font-bold text-green-600">{estatisticas.ativos}</p><p className="text-xs font-medium text-green-600">Ativos</p></div></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="text-center"><p className="text-2xl font-bold text-red-600">{estatisticas.inativos}</p><p className="text-xs font-medium text-red-600">Inativos</p></div></CardContent></Card>
-        <Card><CardContent className="p-4"><div className="text-center"><p className="text-2xl font-bold text-orange-600">{estatisticas.mediaIdade}</p><p className="text-xs font-medium text-orange-600">Idade Média</p></div></CardContent></Card>
+         <Card><CardContent className="p-4"><div className="text-center"><p className="text-2xl font-bold">{estatisticas.total}</p><p className="text-xs font-medium">Total</p></div></CardContent></Card>
+         <Card><CardContent className="p-4"><div className="text-center"><p className="text-2xl font-bold text-green-600">{estatisticas.ativos}</p><p className="text-xs font-medium text-green-600">Ativos</p></div></CardContent></Card>
+         <Card><CardContent className="p-4"><div className="text-center"><p className="text-2xl font-bold text-red-600">{estatisticas.inativos}</p><p className="text-xs font-medium text-red-600">Inativos</p></div></CardContent></Card>
+         <Card><CardContent className="p-4"><div className="text-center"><p className="text-2xl font-bold text-orange-600">{estatisticas.mediaIdade}</p><p className="text-xs font-medium text-orange-600">Idade Média</p></div></CardContent></Card>
       </div>
-
-      {/* Filtros */}
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5" /> Filtros</CardTitle></CardHeader>
         <CardContent>
@@ -137,53 +142,49 @@ export function PatientClientPage() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Lista de Pacientes */}
       <Card>
         <CardHeader><CardTitle>Lista de Pacientes ({pacientesFiltrados.length})</CardTitle></CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader><TableRow>
-                  <TableHead className="min-w-[150px]">Nome</TableHead>
-                  <TableHead className="min-w-[80px] hidden sm:table-cell">Idade</TableHead>
-                  <TableHead className="min-w-[80px] hidden md:table-cell">Sexo</TableHead>
-                  <TableHead className="min-w-[120px] hidden lg:table-cell">Responsável</TableHead>
-                  <TableHead className="min-w-[120px] hidden xl:table-cell">Terapeuta</TableHead>
-                  <TableHead className="min-w-[100px] hidden lg:table-cell">Última Consulta</TableHead>
-                  <TableHead className="min-w-[80px]">Status</TableHead>
-                  <TableHead className="text-right min-w-[60px]">Ações</TableHead>
+                  <TableHead>Nome</TableHead>
+                  <TableHead className="hidden sm:table-cell">Idade</TableHead>
+                  <TableHead className="hidden md:table-cell">Sexo</TableHead>
+                  <TableHead className="hidden lg:table-cell">Responsável</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
               </TableRow></TableHeader>
               <TableBody>
                 {pacientesFiltrados.length > 0 ? pacientesFiltrados.map((paciente) => (
                   <TableRow key={paciente.id}>
-                    <TableCell><p className="font-medium text-sm">{paciente.fullName}</p></TableCell>
-                    <TableCell className="hidden sm:table-cell text-sm">{calcularIdade(paciente.birthDate)} anos</TableCell>
+                    <TableCell className="font-medium">{paciente.fullName}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{calcularIdade(paciente.birthDate)} anos</TableCell>
                     <TableCell className="hidden md:table-cell">{getSexoBadge(paciente.sexo)}</TableCell>
-                    <TableCell className="hidden lg:table-cell text-sm">{paciente.responsavel}</TableCell>
-                    <TableCell className="hidden xl:table-cell text-sm">{paciente.terapeutaAtual || "Não definido"}</TableCell>
-                    <TableCell className="hidden lg:table-cell text-sm">{formatDate(paciente.ultimaConsulta)}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{paciente.responsavel}</TableCell>
                     <TableCell>{getStatusBadge(paciente.status)}</TableCell>
                     <TableCell className="text-right">
+                      {/* CORREÇÃO: Todos os itens de menu dentro de um único DropdownMenuContent */}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => abrirDetalhes(paciente)}>Ver Detalhes</DropdownMenuItem>
-                          <Link href={`/pacientes/editar/${paciente.id}`}><DropdownMenuItem>Editar</DropdownMenuItem></Link>
+                          <Link href={`/pacientes/editar/${paciente.id}`} passHref><DropdownMenuItem>Editar</DropdownMenuItem></Link>
+                          <DropdownMenuItem className={paciente.status === 'ativo' ? "text-red-600 focus:bg-red-50 focus:text-red-700" : "text-green-600 focus:bg-green-50 focus:text-green-700"} onClick={() => handleToggleStatus(paciente)}>
+                            {paciente.status === 'ativo' ? 'Desativar' : 'Ativar'}
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                )) : <TableRow><TableCell colSpan={8} className="text-center">Nenhum paciente encontrado.</TableCell></TableRow>}
+                )) : <TableRow><TableCell colSpan={6} className="text-center">Nenhum paciente encontrado.</TableCell></TableRow>}
               </TableBody>
             </Table>
           </div>
         </CardContent>
       </Card>
-
-      {/* Modal de Detalhes do Paciente */}
       <Dialog open={modalAberto} onOpenChange={setModalAberto}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><User /> Detalhes do Paciente</DialogTitle></DialogHeader>
           {pacienteSelecionado && (
             <div className="space-y-6 py-4">

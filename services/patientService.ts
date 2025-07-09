@@ -139,3 +139,15 @@ export const updatePatient = async (id: string, patientData: PatientFormData) =>
     return { success: false, error: "Falha ao atualizar paciente." };
   }
 };
+export const updatePatientStatus = async (id: string, newStatus: 'ativo' | 'inativo' | 'suspenso') => {
+  try {
+    const patientDocRef = doc(db, 'patients', id);
+    await updateDoc(patientDocRef, {
+      status: newStatus
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("Erro ao atualizar status do paciente:", error);
+    return { success: false, error: "Falha ao atualizar o status." };
+  }
+};
