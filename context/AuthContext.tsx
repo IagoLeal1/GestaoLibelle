@@ -2,67 +2,82 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, DocumentData } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebaseConfig';
 
-// Interface para os dados do nosso perfil de usuário no Firestore
-export interface UserProfile {
-  role: 'familiar' | 'profissional' | 'funcionario' | 'admin';
-  status: 'pendente' | 'aprovado';
-  position?: string; // ex: 'Recepção'
-  // Adicione outros campos que você precise
+export interface FirestoreUser {
+  id: string;
+  uid: string;
+  displayName: string;
+  email: string;
+  profile: {
+    role: 'familiar' | 'profissional' | 'funcionario' | 'admin';
+    status: 'pendente' | 'aprovado' | 'rejeitado';
+    [key: string]: any;
+  };
+  [key: string]: any;
 }
 
 interface AuthContextType {
-  user: User | null; // O usuário do Firebase Auth
-  userProfile: UserProfile | null; // Nosso perfil do Firestore
-  loading: boolean; // Para sabermos quando a autenticação está carregando
+  user: User | null;
+  firestoreUser: FirestoreUser | null;
+  loading: boolean;
 }
 
-// Criamos o contexto com um valor padrão
 const AuthContext = createContext<AuthContextType>({
   user: null,
-  userProfile: null,
+  firestoreUser: null,
   loading: true,
 });
 
-// Este é o componente "Provedor" que vai envolver nosso app
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [firestoreUser, setFirestoreUser] = useState<FirestoreUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // onAuthStateChanged é um "ouvinte" do Firebase que nos diz se o usuário logou ou deslogou
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        // Se o usuário está logado, pegamos seu UID
-        setUser(user);
-        // E usamos o UID para buscar seu perfil no Firestore
-        const userDocRef = doc(db, 'users', user.uid);
+    const unsubscribe = onAuthStateChanged(auth, async (userAuth) => {
+      console.log("AUTH_CONTEXT: onAuthStateChanged disparado. Usuário Auth:", userAuth?.email);
+
+      if (userAuth) {
+        setUser(userAuth);
+        const userDocRef = doc(db, 'users', userAuth.uid);
         const userDoc = await getDoc(userDocRef);
+        
         if (userDoc.exists()) {
-          // Se o perfil existe, salvamos no nosso estado
-          setUserProfile(userDoc.data().profile as UserProfile);
+          const data = userDoc.data();
+          
+          // >>>>> O ESPIÃO ESTÁ AQUI <<<<<
+          console.log("AUTH_CONTEXT: Documento encontrado no Firestore. Dados:", data);
+          
+          const userProfileData: FirestoreUser = {
+            id: userDoc.id,
+            uid: data.uid,
+            displayName: data.displayName,
+            email: data.email,
+            profile: data.profile,
+          };
+          
+          setFirestoreUser(userProfileData);
+        } else {
+          console.warn(`AUTH_CONTEXT: Perfil não encontrado no Firestore para o UID: ${userAuth.uid}`);
+          setFirestoreUser(null);
         }
       } else {
-        // Se o usuário deslogou, limpamos os estados
         setUser(null);
-        setUserProfile(null);
+        setFirestoreUser(null);
       }
-      setLoading(false); // Finaliza o carregamento
+      setLoading(false);
     });
 
-    // Se o componente for desmontado, paramos de "ouvir" para evitar vazamento de memória
     return () => unsubscribe();
   }, []);
 
-  const value = { user, userProfile, loading };
+  const value = { user, firestoreUser, loading };
 
-  return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// Este é o nosso "Hook" customizado para acessar os dados do contexto facilmente
 export const useAuth = () => {
   return useContext(AuthContext);
 };

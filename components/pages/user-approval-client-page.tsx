@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Check, X, Search, UserPlus, Mail, Phone } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Check, X, Search, UserPlus, Mail, Phone, AlertCircle } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { 
     getPendingUsers, 
     getProcessedUsers, 
@@ -16,6 +16,7 @@ import {
 } from "@/services/adminService";
 
 // --- Funções de Ajuda (Helpers) ---
+// CORREÇÃO: Implementação completa das funções que faltavam
 const getStatusBadge = (status: string) => {
   const statusConfig: { [key: string]: { label: string; className: string } } = {
     pendente: { label: "Pendente", className: "bg-yellow-100 text-yellow-800" },
@@ -31,12 +32,13 @@ const getTipoBadge = (tipo: string) => {
     familiar: { label: "Familiar", className: "bg-blue-100 text-blue-800" },
     profissional: { label: "Profissional", className: "bg-purple-100 text-purple-800" },
     funcionario: { label: "Funcionário", className: "bg-indigo-100 text-indigo-800" },
+    admin: { label: "Admin", className: "bg-gray-800 text-white" },
   };
   const config = tipoConfig[tipo] || { label: 'Desconhecido', className: 'bg-gray-100 text-gray-800' };
   return <Badge variant="outline" className={config.className}>{config.label}</Badge>
 };
 
-
+// --- Componente Principal ---
 export function UserApprovalClientPage() {
     const [pendingUsers, setPendingUsers] = useState<UserForApproval[]>([]);
     const [processedUsers, setProcessedUsers] = useState<UserForApproval[]>([]);
@@ -45,14 +47,15 @@ export function UserApprovalClientPage() {
     const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
     const fetchData = async () => {
+        setLoading(true);
         const [pending, processed] = await Promise.all([getPendingUsers(), getProcessedUsers()]);
         setPendingUsers(pending);
-        setProcessedUsers(processed.sort((a,b) => b.profile.createdAt.seconds - a.profile.createdAt.seconds)); // Ordena por mais recente
+        setProcessedUsers(processed.sort((a,b) => b.profile.createdAt.seconds - a.profile.createdAt.seconds));
+        setLoading(false);
     };
 
     useEffect(() => {
-        setLoading(true);
-        fetchData().finally(() => setLoading(false));
+        fetchData();
     }, []);
 
     const showNotification = (type: 'success' | 'error', message: string) => {
@@ -60,24 +63,28 @@ export function UserApprovalClientPage() {
         setTimeout(() => setNotification(null), 4000);
     };
 
-    const handleAprovar = async (user: UserForApproval) => {
-        const result = await approveUserAndCreateProfile(user);
+    const handleAprovar = async (userToApprove: UserForApproval) => {
+        const result = await approveUserAndCreateProfile(userToApprove);
         if (result.success) {
-            showNotification("success", `Acesso aprovado para ${user.displayName}`);
-            fetchData(); // Re-busca os dados para atualizar as duas listas
+            showNotification("success", `Acesso aprovado para ${userToApprove.displayName}`);
+            fetchData();
         } else {
             showNotification("error", result.error || "Falha ao aprovar.");
         }
     };
 
-    const handleRejeitar = async (user: UserForApproval) => {
-        if(window.confirm(`Tem certeza que deseja rejeitar o acesso de ${user.displayName}?`)){
-            await rejectUser(user.id);
-            showNotification("success", `Acesso de ${user.displayName} foi rejeitado.`);
-            fetchData();
+    const handleRejeitar = async (userToReject: UserForApproval) => {
+        if(window.confirm(`Tem certeza que deseja rejeitar o acesso de ${userToReject.displayName}?`)){
+            const result = await rejectUser(userToReject.id);
+            if(result.success) {
+                showNotification("success", `Acesso de ${userToReject.displayName} foi rejeitado.`);
+                fetchData();
+            } else {
+                showNotification("error", result.error || "Falha ao rejeitar o usuário.");
+            }
         }
     };
-
+    
     const filteredPendingUsers = useMemo(() =>
         pendingUsers.filter(s =>
             s.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -98,17 +105,18 @@ export function UserApprovalClientPage() {
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
-                <h2 className="text-2xl font-bold tracking-tight text-primary-dark-blue">Aprovação de Acesso</h2>
+                <h2 className="text-2xl font-bold tracking-tight">Aprovação de Acesso</h2>
                 <p className="text-muted-foreground">Gerencie solicitações de acesso de novos usuários</p>
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <UserPlus className="h-4 w-4" />
-                <span>{pendingUsers.length} solicitações pendentes</span>
+                <span>{filteredPendingUsers.length} solicitações pendentes</span>
               </div>
             </div>
 
             {notification && (
               <Alert className={notification.type === "success" ? "border-green-300 bg-green-50 text-green-800" : "border-red-300 bg-red-50 text-red-800"}>
+                <AlertCircle className="h-4 w-4" />
                 <AlertDescription>{notification.message}</AlertDescription>
               </Alert>
             )}
@@ -123,7 +131,7 @@ export function UserApprovalClientPage() {
             </Card>
 
             <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2"><UserPlus className="h-5 w-5" /> Solicitações Pendentes ({filteredPendingUsers.length})</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Solicitações Pendentes ({filteredPendingUsers.length})</CardTitle></CardHeader>
               <CardContent>
                 {filteredPendingUsers.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">Nenhuma solicitação pendente</p>
@@ -151,7 +159,7 @@ export function UserApprovalClientPage() {
                 )}
               </CardContent>
             </Card>
-
+            
             <Card>
               <CardHeader><CardTitle>Histórico de Solicitações ({filteredProcessedUsers.length})</CardTitle></CardHeader>
               <CardContent>

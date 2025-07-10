@@ -1,54 +1,26 @@
-'use client';
-
-import type React from "react";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/context/AuthContext";
-
-// Importando os componentes de layout como eles foram projetados
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Header } from "@/components/header";
+import { AuthGuard } from "@/components/auth/auth-guard";
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, userProfile, loading } = useAuth();
-  const router = useRouter();
-
-  // Lógica de proteção (continua perfeita)
-  useEffect(() => {
-    if (!loading && !user) router.push("/login");
-    if (user && userProfile?.status === 'pendente') router.push("/aguardando-aprovacao");
-  }, [user, userProfile, loading, router]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p>Carregando...</p>
-      </div>
-    );
-  }
-
-  // A MÁGICA FINAL: Usamos a estrutura original do V0
-  if (user && userProfile?.status === 'aprovado') {
-    return (
+  // A única responsabilidade do layout agora é montar a estrutura visual.
+  // Ele é "envolvido" pelo AuthGuard, que faz toda a verificação.
+  return (
+    <AuthGuard>
       <SidebarProvider>
-        {/* A Sidebar fica aqui... */}
         <AppSidebar />
-        
-        {/* E o conteúdo principal vai DENTRO do SidebarInset */}
         <SidebarInset>
           <Header />
-          <main className="p-6 bg-support-light-gray">
+          <main className="p-4 sm:p-6 bg-gray-50 min-h-screen">
             {children}
           </main>
         </SidebarInset>
       </SidebarProvider>
-    );
-  }
-
-  return null;
+    </AuthGuard>
+  );
 }
