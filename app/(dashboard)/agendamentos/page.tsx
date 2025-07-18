@@ -18,8 +18,6 @@ export default function AgendamentosPage() {
           </Button>
         </Link>
       </div>
-      
-      {/* Usamos o nome correto do componente aqui */}
       <AgendamentosClientPage />
     </div>
   );

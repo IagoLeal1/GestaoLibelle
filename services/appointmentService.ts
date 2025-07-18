@@ -1,15 +1,16 @@
+
 import { db } from "@/lib/firebaseConfig";
 import { 
   collection, 
-  getDocs, 
   addDoc, 
+  getDocs, 
   query, 
   where, 
   Timestamp, 
   orderBy,
   doc,
-  getDoc
-} from "firebase/firestore";
+  getDoc 
+} from 'firebase/firestore';
 
 // --- Interfaces ---
 
@@ -20,12 +21,12 @@ export interface Appointment {
   professionalId: string;
   start: Timestamp;
   end: Timestamp;
-  status: 'agendado' | 'finalizado' | 'cancelado' | 'remarcado' | 'falta';
+ status: 'agendado' | 'finalizado' | 'nao_compareceu' | 'cancelado' | 'em_atendimento';
+  statusSecundario: string;
   tipo: string;
   sala?: string;
   convenio?: string;
   observacoes?: string;
-  // Campos que adicionamos para facilitar, mas não são salvos diretamente
   patientName?: string;
   professionalName?: string;
 }
@@ -42,76 +43,73 @@ export interface AppointmentFormData {
   observacoes?: string;
 }
 
-// Representa um evento como a biblioteca de calendário espera
+// Representa um evento para o componente de calendário
 export interface CalendarEvent {
-  id?: string;
+  id: string;
   title: string;
   start: Date;
   end: Date;
-  resourceId: string; // ID do profissional
-  allDay?: boolean;
-  data: Appointment; // Guarda o objeto de agendamento completo
+  resourceId: string;
+  data: Appointment;
 }
 
 
 // --- Funções do Serviço ---
 
-/**
- * Busca todos os agendamentos e os formata para o calendário.
- * No futuro, podemos adicionar filtros de data aqui.
- */
-export const getAppointments = async (): Promise<CalendarEvent[]> => {
+export const getAppointmentsByDate = async (date: Date): Promise<Appointment[]> => {
   try {
-    const snapshot = await getDocs(query(collection(db, "appointments"), orderBy("start")));
-    
-    const events = await Promise.all(snapshot.docs.map(async (d) => {
-      const data = d.data();
-      let patientName = 'Paciente';
-      let professionalName = 'Profissional';
+    const dayStart = new Date(date);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(date);
+    dayEnd.setHours(23, 59, 59, 999);
 
+    const q = query(
+      collection(db, 'appointments'),
+      where('start', '>=', Timestamp.fromDate(dayStart)),
+      where('start', '<=', Timestamp.fromDate(dayEnd)),
+      orderBy('start')
+    );
+
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return [];
+
+    const appointments = await Promise.all(snapshot.docs.map(async (d) => {
+      const data = d.data();
+      let patientName = 'Paciente não encontrado';
       if (data.patientId) {
         const patientDoc = await getDoc(doc(db, 'patients', data.patientId));
-        if(patientDoc.exists()) patientName = patientDoc.data().fullName;
+        if (patientDoc.exists()) patientName = patientDoc.data().fullName;
       }
+      let professionalName = 'Profissional não encontrado';
       if (data.professionalId) {
         const professionalDoc = await getDoc(doc(db, 'professionals', data.professionalId));
-        if(professionalDoc.exists()) professionalName = professionalDoc.data().fullName;
+        if (professionalDoc.exists()) professionalName = professionalDoc.data().fullName;
       }
-      
-      const event: CalendarEvent = {
-        id: d.id,
-        title: `${patientName} - ${professionalName}`,
-        start: data.start.toDate(),
-        end: data.end.toDate(),
-        resourceId: data.professionalId,
-        data: { id: d.id, ...data } as Appointment,
-      };
-      return event;
+      return {
+        id: d.id, ...data, patientName, professionalName,
+      } as Appointment;
     }));
-
-    return events;
-
+    return appointments;
   } catch (error) {
     console.error("Erro ao buscar agendamentos:", error);
     return [];
   }
 };
 
-
-/**
- * Cria um novo agendamento a partir dos dados do formulário.
- */
 export const createAppointment = async (data: AppointmentFormData) => {
   try {
-    // Combina a data e a hora do formulário em um objeto Date do JavaScript
     const [year, month, day] = data.data.split('-').map(Number);
     const [hour, minute] = data.hora.split(':').map(Number);
-    const startDate = new Date(year, month - 1, day, hour, minute);
     
-    // Define uma duração padrão de 50 minutos para o agendamento
+    const startDate = new Date(year, month - 1, day, hour, minute);
     const endDate = new Date(startDate.getTime() + 50 * 60000);
 
+    const patientDoc = await getDoc(doc(db, 'patients', data.patientId));
+    const professionalDoc = await getDoc(doc(db, 'professionals', data.professionalId));
+    const title = `${patientDoc.data()?.fullName} - ${professionalDoc.data()?.fullName}`;
+
     const appointmentData = {
+      title,
       patientId: data.patientId,
       professionalId: data.professionalId,
       tipo: data.tipo || "Consulta",
@@ -125,7 +123,6 @@ export const createAppointment = async (data: AppointmentFormData) => {
 
     await addDoc(collection(db, "appointments"), appointmentData);
     return { success: true };
-
   } catch (error) {
     console.error("Erro ao criar agendamento:", error);
     return { success: false, error: "Falha ao criar agendamento." };
