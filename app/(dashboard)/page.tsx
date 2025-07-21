@@ -1,35 +1,31 @@
-'use client';
+"use client";
 
 import { useAuth } from "@/context/AuthContext";
-
-// Importe os componentes de dashboard que você irá criar
 import { AdminDashboard } from "@/components/dashboards/AdminDashboard";
 import { ProfessionalDashboard } from "@/components/dashboards/ProfessionalDashboard";
 import { FamilyDashboard } from "@/components/dashboards/FamilyDashboard";
 
+// Este é o componente da sua página principal. Ele tem um export default.
 export default function DashboardPage() {
-  const { userProfile } = useAuth();
+  const { firestoreUser } = useAuth();
 
-  // O layout pai (DashboardLayout) já exibe um "Carregando...".
-  // Quando este componente renderiza, podemos assumir que userProfile já existe.
-  // Esta verificação é apenas uma segurança extra.
-  if (!userProfile) {
-    return null; 
+  // Enquanto o perfil não carrega, mostramos um loader.
+  // O AuthGuard já nos protege, mas esta é uma segurança extra.
+  if (!firestoreUser) {
+    return <div>Carregando perfil do usuário...</div>;
   }
 
-  // Renderiza o dashboard correto com base no 'role' do usuário
-  switch (userProfile.role) {
+  // Com base no 'role' do usuário, renderizamos o dashboard correto.
+  switch (firestoreUser.profile.role) {
     case 'admin':
       return <AdminDashboard />;
     case 'profissional':
-      return <ProfessionalDashboard />;
+      return <ProfessionalDashboard />; // Você criará este componente no futuro
     case 'familiar':
-      return <FamilyDashboard />;
+      return <FamilyDashboard />; // Você criará este componente no futuro
     case 'funcionario':
-      // Você pode criar um dashboard para funcionário também
       return <div>Painel do Funcionário em construção.</div>;
     default:
-      // Um fallback caso o role seja desconhecido
       return <div>Seu perfil não tem um dashboard associado.</div>;
   }
 }

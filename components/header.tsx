@@ -41,9 +41,9 @@ export function Header() {
       </div>
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" className="relative">
-          <Link href="/avisos">
+          <Link href="/comunicacao">
             <Bell className="h-4 w-4" />
-            <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 text-[10px] flex items-center justify-center">3</span>
+            {/* <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 text-[10px] flex items-center justify-center">3</span> */}
           </Link>
         </Button>
         <DropdownMenu>
