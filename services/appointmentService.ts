@@ -12,8 +12,7 @@ import {
   updateDoc,
   deleteDoc
 } from 'firebase/firestore';
-// A biblioteca date-fns não é mais necessária para a busca, simplificando o código
-// import { startOfDay, endOfDay } from 'date-fns';
+import { startOfDay, endOfDay } from 'date-fns';
 
 // --- Interfaces ---
 export type AppointmentStatus = 'agendado' | 'finalizado' | 'nao_compareceu' | 'cancelado' | 'em_atendimento';
@@ -44,14 +43,14 @@ export interface AppointmentFormData {
   sala?: string;
   convenio?: string;
   observacoes?: string;
+  statusSecundario?: string;
 }
 
 // --- Funções do Serviço ---
 
-// CORREÇÃO: A função agora aceita a string da data (ex: "2025-07-21")
+// Busca agendamentos por data (para a página de agendamentos e dashboard)
 export const getAppointmentsByDate = async (dateString: string): Promise<Appointment[]> => {
   try {
-    // Lógica de data robusta que interpreta a string de data como local
     const [year, month, day] = dateString.split('-').map(Number);
     const dayStart = new Date(year, month - 1, day, 0, 0, 0);
     const dayEnd = new Date(year, month - 1, day, 23, 59, 59);
@@ -82,7 +81,7 @@ export const getAppointmentsByDate = async (dateString: string): Promise<Appoint
   }
 };
 
-// CORREÇÃO: A função agora também aceita a string da data
+// Busca agendamentos de um profissional em uma data (para o dashboard do profissional)
 export const getAppointmentsByProfessional = async (professionalId: string, dateString: string): Promise<Appointment[]> => {
   try {
     const [year, month, day] = dateString.split('-').map(Number);
@@ -106,11 +105,38 @@ export const getAppointmentsByProfessional = async (professionalId: string, date
       return {
         id: d.id, ...data,
         patientName: patientDoc.exists() ? patientDoc.data().fullName : 'Paciente Excluído',
-        professionalName: data.professionalName || 'Profissional',
       } as Appointment;
     }));
   } catch (error) {
     console.error("Erro ao buscar agendamentos do profissional:", error);
+    return [];
+  }
+};
+
+// Busca agendamentos para um profissional em um período (para relatórios)
+export const getAppointmentsForReport = async (professionalId: string, startDate: Date, endDate: Date): Promise<Appointment[]> => {
+  try {
+    const q = query(
+      collection(db, 'appointments'),
+      where('professionalId', '==', professionalId),
+      where('start', '>=', Timestamp.fromDate(startOfDay(startDate))),
+      where('start', '<=', Timestamp.fromDate(endOfDay(endDate))),
+      orderBy('start')
+    );
+
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return [];
+
+    return await Promise.all(snapshot.docs.map(async (d) => {
+      const data = d.data();
+      const patientDoc = await getDoc(doc(db, 'patients', data.patientId));
+      return {
+        id: d.id, ...data,
+        patientName: patientDoc.exists() ? patientDoc.data().fullName : 'Paciente Excluído',
+      } as Appointment;
+    }));
+  } catch (error) {
+    console.error("Erro ao buscar agendamentos para relatório:", error);
     return [];
   }
 };

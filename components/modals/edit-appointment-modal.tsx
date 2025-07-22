@@ -14,7 +14,7 @@ import { Professional } from "@/services/professionalService";
 interface EditAppointmentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (formData: AppointmentFormData & { status: AppointmentStatus }) => void;
+  onSave: (formData: Partial<AppointmentFormData & { status: AppointmentStatus }>) => void;
   onDelete: () => void;
   appointment: Appointment | null;
   patients: Patient[];
@@ -37,6 +37,7 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
         convenio: appointment.convenio,
         observacoes: appointment.observacoes,
         status: appointment.status,
+        statusSecundario: appointment.statusSecundario, // Campo adicionado
       });
     }
   }, [appointment]);
@@ -45,8 +46,8 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSave = () => onSave(formData as AppointmentFormData & { status: AppointmentStatus });
-  const handleDelete = () => { if (window.confirm("Tem certeza que deseja excluir este agendamento?")) { onDelete(); } };
+  const handleSave = () => onSave(formData);
+  const handleDelete = () => { if (window.confirm("Tem certeza?")) { onDelete(); } };
 
   if (!appointment) return null;
 
@@ -66,7 +67,10 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
             <div className="space-y-2"><Label>Data</Label><Input type="date" value={formData.data} onChange={(e) => handleInputChange("data", e.target.value)} /></div>
             <div className="space-y-2"><Label>Hora</Label><Input type="time" value={formData.hora} onChange={(e) => handleInputChange("hora", e.target.value)} /></div>
           </div>
-          <div className="space-y-2"><Label>Status</Label><Select value={formData.status} onValueChange={(v) => handleInputChange("status", v)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="agendado">Agendado</SelectItem><SelectItem value="em_atendimento">Em Atendimento</SelectItem><SelectItem value="finalizado">Finalizado</SelectItem><SelectItem value="nao_compareceu">Não compareceu</SelectItem><SelectItem value="cancelado">Cancelado</SelectItem></SelectContent></Select></div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2"><Label>Status Principal</Label><Select value={formData.status} onValueChange={(v) => handleInputChange("status", v)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="agendado">Agendado</SelectItem><SelectItem value="em_atendimento">Em Atendimento</SelectItem><SelectItem value="finalizado">Finalizado</SelectItem><SelectItem value="nao_compareceu">Não compareceu</SelectItem><SelectItem value="cancelado">Cancelado</SelectItem></SelectContent></Select></div>
+            <div className="space-y-2"><Label>Status Secundário</Label><Select value={formData.statusSecundario} onValueChange={(v) => handleInputChange("statusSecundario", v)}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent><SelectItem value="fnj_paciente">FNJ paciente</SelectItem><SelectItem value="f_terapeuta">F terapeuta</SelectItem><SelectItem value="fj_paciente">FJ paciente</SelectItem><SelectItem value="f_dupla">F dupla</SelectItem><SelectItem value="suspenso_plano">Suspenso pelo plano</SelectItem></SelectContent></Select></div>
+          </div>
           <div className="space-y-2"><Label>Observações</Label><Textarea value={formData.observacoes} onChange={(e) => handleInputChange("observacoes", e.target.value)} /></div>
         </div>
         <DialogFooter className="justify-between sm:justify-between">

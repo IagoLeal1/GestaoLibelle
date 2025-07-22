@@ -10,12 +10,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Filter, MoreHorizontal, Sun, Sunset, Moon, AlertCircle } from "lucide-react"
+import { Search, Filter, MoreHorizontal, Sun, Sunset, Moon, Download, Plus, AlertCircle } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { getAppointmentsByDate, Appointment, AppointmentFormData, AppointmentStatus, updateAppointment, deleteAppointment } from "@/services/appointmentService"
+import { getAppointmentsByDate, getAppointmentsForReport, Appointment, updateAppointment, deleteAppointment, AppointmentStatus, AppointmentFormData } from "@/services/appointmentService"
 import { getProfessionals, Professional } from "@/services/professionalService"
 import { getPatients, Patient } from "@/services/patientService"
+import { ReportModal } from "@/components/modals/report-modal"
 import { EditAppointmentModal } from "@/components/modals/edit-appointment-modal"
+import Link from "next/link"
 
 // --- Funções de Ajuda (Helpers) ---
 const getStatusBadge = (status: string) => {
@@ -58,6 +60,7 @@ export function AgendamentosClientPage() {
   const [statusFilter, setStatusFilter] = useState("todos");
   const [professionalFilter, setProfessionalFilter] = useState("todos");
   const [periodoAtivo, setPeriodoAtivo] = useState("todos");
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
@@ -88,7 +91,7 @@ export function AgendamentosClientPage() {
     setSelectedAppointment(appointment);
     setIsEditModalOpen(true);
   };
-  const handleUpdateAppointment = async (formData: AppointmentFormData & { status: AppointmentStatus }) => {
+  const handleUpdateAppointment = async (formData: Partial<AppointmentFormData & { status: AppointmentStatus }>) => {
     if (!selectedAppointment) return;
     const result = await updateAppointment(selectedAppointment.id, formData);
     if (result.success) {
@@ -109,6 +112,35 @@ export function AgendamentosClientPage() {
     } else {
       alert(result.error);
     }
+  };
+
+  const handleGenerateReport = async (professionalId: string, startDateStr: string, endDateStr: string) => {
+    const startDate = new Date(startDateStr);
+    const endDate = new Date(endDateStr);
+    const appointmentsToExport = await getAppointmentsForReport(professionalId, startDate, endDate);
+    if (appointmentsToExport.length === 0) {
+      alert("Nenhum agendamento encontrado para este profissional no período selecionado.");
+      return;
+    }
+    const headers = ["Data", "Hora", "Paciente", "Status", "Tipo", "Sala", "Convenio"];
+    const csvContent = [
+      headers.join(';'),
+      ...appointmentsToExport.map(apt => [
+        apt.start.toDate().toLocaleDateString('pt-BR'),
+        apt.start.toDate().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        `"${apt.patientName}"`, apt.status, apt.tipo, apt.sala, apt.convenio || 'N/A'
+      ].join(';'))
+    ].join('\n');
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    const professional = professionals.find(p => p.id === professionalId);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `relatorio_${professional?.fullName.replace(/\s+/g, '_')}_${startDateStr}_a_${endDateStr}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const appointmentsFiltrados = appointments.filter((appointment) => {
@@ -140,18 +172,24 @@ export function AgendamentosClientPage() {
   const TabelaDeAgendamentos = ({ agendamentos }: { agendamentos: Appointment[] }) => (
     <div className="overflow-x-auto">
       <Table>
-        <TableHeader><TableRow><TableHead>Paciente</TableHead><TableHead>Profissional</TableHead><TableHead>Hora</TableHead><TableHead>Sala</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+        <TableHeader><TableRow>
+          <TableHead>Período</TableHead><TableHead>Paciente</TableHead><TableHead>Profissional</TableHead>
+          <TableHead>Hora</TableHead><TableHead>Sala</TableHead><TableHead>Status</TableHead>
+          <TableHead>Status Sec.</TableHead><TableHead className="text-right">Ações</TableHead>
+        </TableRow></TableHeader>
         <TableBody>
           {agendamentos.length > 0 ? agendamentos.map((appointment) => (
-            <TableRow key={appointment.id} className="cursor-pointer hover:bg-gray-50" onClick={() => handleOpenEditModal(appointment)}>
+            <TableRow key={appointment.id}>
+              <TableCell><div className="flex items-center gap-1 text-xs">{getPeriodoIcon(getPeriodoFromDate(appointment.start.toDate()))} <span>{getPeriodoLabel(getPeriodoFromDate(appointment.start.toDate()))}</span></div></TableCell>
               <TableCell className="font-medium">{appointment.patientName}</TableCell>
               <TableCell>{appointment.professionalName}</TableCell>
               <TableCell>{appointment.start.toDate().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</TableCell>
               <TableCell><Badge variant="outline">{appointment.sala}</Badge></TableCell>
               <TableCell>{getStatusBadge(appointment.status)}</TableCell>
-              <TableCell className="text-right"><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></TableCell>
+              <TableCell>{getStatusSecundarioBadge(appointment.statusSecundario || '')}</TableCell>
+              <TableCell className="text-right"><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent><DropdownMenuItem onClick={() => handleOpenEditModal(appointment)}>Editar / Status</DropdownMenuItem></DropdownMenuContent></DropdownMenu></TableCell>
             </TableRow>
-          )) : <TableRow><TableCell colSpan={6} className="text-center h-24">Nenhum agendamento encontrado.</TableCell></TableRow>}
+          )) : <TableRow><TableCell colSpan={8} className="text-center h-24">Nenhum agendamento encontrado.</TableCell></TableRow>}
         </TableBody>
       </Table>
     </div>
@@ -163,15 +201,34 @@ export function AgendamentosClientPage() {
   return (
     <>
       <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">Agendamentos</h2>
+            <p className="text-muted-foreground">Gerencie todos os agendamentos da clínica por período</p>
+          </div>
+          <div className="flex w-full sm:w-auto gap-2">
+            <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => setIsReportModalOpen(true)}>
+              <Download className="mr-2 h-4 w-4" />
+              Exportar Relatório
+            </Button>
+            <Link href="/agendamentos/novo" className="w-full">
+              <Button className="w-full">
+                <Plus className="mr-2 h-4 w-4" />
+                Novo Agendamento
+              </Button>
+            </Link>
+          </div>
+        </div>
+        
         <BlocoDeEstatisticas agendamentos={appointments} />
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5" />Filtros</CardTitle></CardHeader>
           <CardContent>
               <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="space-y-2"><Label htmlFor="search">Buscar</Label><div className="relative"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input id="search" placeholder="Nome do paciente..." className="pl-8" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div></div>
+                  <div className="space-y-2"><Label htmlFor="search">Buscar paciente</Label><div className="relative"><Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input id="search" placeholder="Nome do paciente..." className="pl-8" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div></div>
                   <div className="space-y-2"><Label htmlFor="date">Data</Label><Input id="date" type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} /></div>
-                  <div className="space-y-2"><Label htmlFor="professional">Profissional</Label><Select value={professionalFilter} onValueChange={setProfessionalFilter}><SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger><SelectContent><SelectItem value="todos">Todos</SelectItem>{professionals.map(pro => <SelectItem key={pro.id} value={pro.id}>{pro.fullName}</SelectItem>)}</SelectContent></Select></div>
-                  <div className="space-y-2"><Label htmlFor="status">Status</Label><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger><SelectContent><SelectItem value="todos">Todos</SelectItem><SelectItem value="agendado">Agendado</SelectItem><SelectItem value="em_atendimento">Em Atendimento</SelectItem><SelectItem value="finalizado">Finalizado</SelectItem><SelectItem value="nao_compareceu">Não compareceu</SelectItem><SelectItem value="cancelado">Cancelado</SelectItem></SelectContent></Select></div>
+                  <div className="space-y-2"><Label htmlFor="professional">Profissional</Label><Select value={professionalFilter} onValueChange={setProfessionalFilter}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent><SelectItem value="todos">Todos</SelectItem>{professionals.map(pro => <SelectItem key={pro.id} value={pro.id}>{pro.fullName}</SelectItem>)}</SelectContent></Select></div>
+                  <div className="space-y-2"><Label htmlFor="status">Status</Label><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent><SelectItem value="todos">Todos</SelectItem><SelectItem value="agendado">Agendado</SelectItem><SelectItem value="em_atendimento">Em Atendimento</SelectItem><SelectItem value="finalizado">Finalizado</SelectItem><SelectItem value="nao_compareceu">Não compareceu</SelectItem><SelectItem value="cancelado">Cancelado</SelectItem></SelectContent></Select></div>
               </div>
           </CardContent>
         </Card>
@@ -198,6 +255,12 @@ export function AgendamentosClientPage() {
         </Tabs>
       </div>
 
+      <ReportModal 
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        onGenerate={handleGenerateReport}
+        professionals={professionals}
+      />
       <EditAppointmentModal 
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
