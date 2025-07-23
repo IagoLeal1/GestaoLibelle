@@ -10,8 +10,10 @@ import {
   getDoc,
   addDoc,
   updateDoc,
-  deleteDoc
+  deleteDoc,
+  writeBatch // Importamos o writeBatch para operações em lote
 } from 'firebase/firestore';
+import { addWeeks } from 'date-fns'; // Importamos o helper para adicionar semanas
 import { startOfDay, endOfDay } from 'date-fns';
 
 // --- Interfaces ---
@@ -32,6 +34,8 @@ export interface Appointment {
   observacoes?: string;
   patientName?: string;
   professionalName?: string;
+  blockId?: string; // Campo para agrupar agendamentos em lote
+  isLastInBlock?: boolean; // Campo para identificar o último do lote
 }
 
 export interface AppointmentFormData {
@@ -44,6 +48,19 @@ export interface AppointmentFormData {
   convenio?: string;
   observacoes?: string;
   statusSecundario?: string;
+}
+
+// NOVO: Interface para o formulário de agendamento em lote
+export interface AppointmentBlockFormData {
+  patientId: string;
+  professionalId: string;
+  data: string; // Data da primeira consulta
+  hora: string; // Horário das consultas
+  sessions: number; // Número de agendamentos a criar (ex: 4)
+  tipo: string;
+  sala?: string;
+  convenio?: string;
+  observacoes?: string;
 }
 
 // --- Funções do Serviço ---
@@ -170,6 +187,54 @@ export const createAppointment = async (data: AppointmentFormData) => {
   } catch (error) {
     console.error("Erro ao criar agendamento:", error);
     return { success: false, error: "Falha ao criar agendamento." };
+  }
+};
+
+// NOVO: Função para criar agendamentos em lote
+export const createAppointmentBlock = async (data: AppointmentBlockFormData) => {
+  try {
+    const { patientId, professionalId, data: startDateStr, hora, sessions, ...restData } = data;
+    const [year, month, day] = startDateStr.split('-').map(Number);
+    const [hour, minute] = hora.split(':').map(Number);
+    
+    const firstAppointmentDate = new Date(year, month - 1, day, hour, minute);
+
+    const patientDoc = await getDoc(doc(db, 'patients', patientId));
+    const professionalDoc = await getDoc(doc(db, 'professionals', professionalId));
+
+    if (!patientDoc.exists() || !professionalDoc.exists()) {
+      throw new Error("Paciente ou profissional não encontrado.");
+    }
+    const title = `${patientDoc.data().fullName} - ${professionalDoc.data().fullName}`;
+
+    const batch = writeBatch(db);
+    const blockId = doc(collection(db, 'idGenerator')).id; // Gera um ID único para o bloco
+
+    for (let i = 0; i < sessions; i++) {
+      const sessionDate = addWeeks(firstAppointmentDate, i);
+      const sessionEndDate = new Date(sessionDate.getTime() + 50 * 60000);
+      const newAppointmentRef = doc(collection(db, "appointments"));
+      
+      batch.set(newAppointmentRef, {
+        ...restData,
+        title,
+        patientId,
+        professionalId,
+        start: Timestamp.fromDate(sessionDate),
+        end: Timestamp.fromDate(sessionEndDate),
+        status: 'agendado',
+        statusSecundario: 'pendente_confirmacao',
+        blockId: blockId,
+        isLastInBlock: (i === sessions - 1)
+      });
+    }
+
+    await batch.commit();
+    return { success: true };
+
+  } catch (error) {
+    console.error("Erro ao criar agendamentos em lote:", error);
+    return { success: false, error: "Falha ao criar o bloco de agendamentos." };
   }
 };
 
