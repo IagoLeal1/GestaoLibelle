@@ -17,6 +17,7 @@ import { getProfessionals, Professional } from "@/services/professionalService"
 import { getPatients, Patient } from "@/services/patientService"
 import { ReportModal } from "@/components/modals/report-modal"
 import { EditAppointmentModal } from "@/components/modals/edit-appointment-modal"
+import { RenewalNotice } from "@/components/features/RenewalNotice"
 import Link from "next/link"
 
 // --- Funções de Ajuda (Helpers) ---
@@ -25,7 +26,7 @@ const getStatusBadge = (status: string) => {
   const config = statusConfig[status] || { label: status, className: 'bg-gray-100' };
   return <Badge variant="outline" className={`font-semibold ${config.className}`}>{config.label}</Badge>;
 };
-const getStatusSecundarioBadge = (statusSecundario: string) => {
+const getStatusSecundarioBadge = (statusSecundario?: string) => {
   if (!statusSecundario) return null;
   const statusConfig: { [key: string]: { label: string; className: string } } = { confirmado: { label: "Confirmado", className: "text-green-800" }, pendente_confirmacao: { label: "Pendente", className: "text-orange-800 animate-pulse" }, pago: { label: "Pago", className: "text-green-800" }, sem_justificativa: { label: "S/ Justificativa", className: "text-red-800" }, reagendado: { label: "Reagendado", className: "text-blue-800" }, em_sala: { label: "Em Sala", className: "text-orange-800" } };
   const config = statusConfig[statusSecundario] || { label: statusSecundario, className: 'text-gray-800' };
@@ -85,7 +86,7 @@ export function AgendamentosClientPage() {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData, searchParams]);
+  }, [fetchData]);
 
   const handleOpenEditModal = (appointment: Appointment) => {
     setSelectedAppointment(appointment);
@@ -144,7 +145,7 @@ export function AgendamentosClientPage() {
   };
 
   const appointmentsFiltrados = appointments.filter((appointment) => {
-    const matchesSearch = (appointment.patientName || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = appointment.patientName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "todos" || appointment.status === statusFilter;
     const matchesProfessional = professionalFilter === "todos" || appointment.professionalId === professionalFilter;
     return !!(matchesSearch && matchesStatus && matchesProfessional);
@@ -186,7 +187,7 @@ export function AgendamentosClientPage() {
               <TableCell>{appointment.start.toDate().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</TableCell>
               <TableCell><Badge variant="outline">{appointment.sala}</Badge></TableCell>
               <TableCell>{getStatusBadge(appointment.status)}</TableCell>
-              <TableCell>{getStatusSecundarioBadge(appointment.statusSecundario || '')}</TableCell>
+              <TableCell>{getStatusSecundarioBadge(appointment.statusSecundario)}</TableCell>
               <TableCell className="text-right"><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent><DropdownMenuItem onClick={() => handleOpenEditModal(appointment)}>Editar / Status</DropdownMenuItem></DropdownMenuContent></DropdownMenu></TableCell>
             </TableRow>
           )) : <TableRow><TableCell colSpan={8} className="text-center h-24">Nenhum agendamento encontrado.</TableCell></TableRow>}
@@ -220,7 +221,10 @@ export function AgendamentosClientPage() {
           </div>
         </div>
         
+        <RenewalNotice onActionCompleted={fetchData} />
+        
         <BlocoDeEstatisticas agendamentos={appointments} />
+
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5" />Filtros</CardTitle></CardHeader>
           <CardContent>
@@ -232,6 +236,7 @@ export function AgendamentosClientPage() {
               </div>
           </CardContent>
         </Card>
+        
         <Tabs value={periodoAtivo} onValueChange={setPeriodoAtivo} className="w-full">
           <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4">
               <TabsTrigger value="todos">Todos ({appointmentsFiltrados.length})</TabsTrigger>

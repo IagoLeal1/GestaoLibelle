@@ -54,7 +54,7 @@ const formatDate = (date: Timestamp | undefined) => {
 
 // --- Componente Principal ---
 export function ProfessionalsClientPage() {
-  const { user, userProfile } = useAuth();
+const { user, firestoreUser: userProfile } = useAuth();
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");

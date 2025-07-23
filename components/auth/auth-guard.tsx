@@ -8,18 +8,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, firestoreUser, loading } = useAuth();
   const router = useRouter();
 
-  // --- O ESPIÃO FINAL E DEFINITIVO ---
-  console.log("%c--- Checagem do AuthGuard ---", "color: blue; font-weight: bold;");
-  console.log("Estado de Loading:", loading);
-  console.log("Usuário do Auth Existe?", !!user);
-  console.log("Perfil do Firestore Existe?", !!firestoreUser);
-  if (firestoreUser) {
-    console.log("Status do Perfil:", firestoreUser.profile?.status);
-    console.log("Condição Final (deve ser true):", (!!user && firestoreUser?.profile?.status === 'aprovado'));
-  }
-  console.log("----------------------------");
-  // --- FIM DO ESPIÃO ---
-
   useEffect(() => {
     // Apenas redireciona quando o carregamento inicial terminar
     if (!loading) {
