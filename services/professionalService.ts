@@ -8,14 +8,15 @@ import {
   addDoc, 
   doc, 
   updateDoc,
-  getDoc
+  getDoc,
+  where // <-- Importe o 'where' para a consulta
 } from "firebase/firestore";
 
 // --- Interfaces ---
 
 export interface Professional {
   id: string;
-  userId: string;
+  userId?: string; // userId pode ser opcional se o admin cadastra antes do profissional ter uma conta
   fullName: string;
   email: string;
   status: 'ativo' | 'inativo' | 'licenca';
@@ -75,8 +76,19 @@ export const getProfessionalById = async (id: string): Promise<Professional | nu
   }
 };
 
-export const createProfessional = async (data: ProfessionalFormData) => {
+// --- FUNÇÃO ATUALIZADA ---
+export const createProfessional = async (data: ProfessionalFormData): Promise<{success: boolean, error?: string}> => {
   try {
+    // 1. VERIFICAÇÃO DE DUPLICIDADE PELO CPF
+    const q = query(collection(db, "professionals"), where("cpf", "==", data.cpf));
+    const querySnapshot = await getDocs(q);
+
+    // 2. SE A CONSULTA RETORNAR DOCUMENTOS, O CPF JÁ EXISTE
+    if (!querySnapshot.empty) {
+      return { success: false, error: "Já existe um profissional cadastrado com este CPF." };
+    }
+
+    // 3. SE O CPF FOR ÚNICO, PROSSEGUE COM A CRIAÇÃO
     const { percentualRepasse, valorConsulta, ...restData } = data;
     await addDoc(collection(db, 'professionals'), {
       ...restData,
@@ -112,7 +124,6 @@ export const updateProfessional = async (id: string, data: ProfessionalFormData)
   }
 };
 
-// >>> A FUNÇÃO QUE ESTAVA FALTANDO <<<
 export const updateProfessionalStatus = async (id: string, newStatus: 'ativo' | 'inativo' | 'licenca') => {
   try {
     const docRef = doc(db, 'professionals', id);

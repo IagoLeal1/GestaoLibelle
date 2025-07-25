@@ -59,6 +59,7 @@ export default function SignUpPage() {
   };
   
   const handleSubmit = async (e: React.FormEvent) => {
+
     e.preventDefault();
     setIsLoading(true);
     setError(null);
@@ -85,6 +86,10 @@ export default function SignUpPage() {
     } else {
       setError(result?.error || "Ocorreu um erro no cadastro.");
     }
+
+    // --- ADICIONE O ESPIÃO 1 AQUI ---
+    console.log("DEBUG 1 (CLIENTE): Enviando estes dados para o serviço:", submissionData);
+    // -------------
   };
 
   if (isSuccess) {

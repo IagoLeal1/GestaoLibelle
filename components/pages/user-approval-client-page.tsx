@@ -5,18 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Check, X, Search, UserPlus, Mail, Phone, AlertCircle } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Check, X, Search, UserPlus, Mail, Phone, AlertCircle, Trash2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
     getPendingUsers, 
     getProcessedUsers, 
-    approveUserAndCreateProfile, 
+    approveUser, 
     rejectUser,
+    hideUserFromHistory,
     UserForApproval
 } from "@/services/adminService";
 
 // --- Funções de Ajuda (Helpers) ---
-// CORREÇÃO: Implementação completa das funções que faltavam
 const getStatusBadge = (status: string) => {
   const statusConfig: { [key: string]: { label: string; className: string } } = {
     pendente: { label: "Pendente", className: "bg-yellow-100 text-yellow-800" },
@@ -50,7 +51,12 @@ export function UserApprovalClientPage() {
         setLoading(true);
         const [pending, processed] = await Promise.all([getPendingUsers(), getProcessedUsers()]);
         setPendingUsers(pending);
-        setProcessedUsers(processed.sort((a,b) => b.profile.createdAt.seconds - a.profile.createdAt.seconds));
+        const sortedProcessed = processed.sort((a, b) => {
+            const timeA = a.profile.createdAt?.seconds || 0;
+            const timeB = b.profile.createdAt?.seconds || 0;
+            return timeB - timeA;
+        });
+        setProcessedUsers(sortedProcessed);
         setLoading(false);
     };
 
@@ -64,7 +70,7 @@ export function UserApprovalClientPage() {
     };
 
     const handleAprovar = async (userToApprove: UserForApproval) => {
-        const result = await approveUserAndCreateProfile(userToApprove);
+        const result = await approveUser(userToApprove.id);
         if (result.success) {
             showNotification("success", `Acesso aprovado para ${userToApprove.displayName}`);
             fetchData();
@@ -81,6 +87,18 @@ export function UserApprovalClientPage() {
                 fetchData();
             } else {
                 showNotification("error", result.error || "Falha ao rejeitar o usuário.");
+            }
+        }
+    };
+
+    const handleHideFromHistory = async (userToHide: UserForApproval) => {
+        if (window.confirm(`Tem certeza que deseja remover "${userToHide.displayName}" do histórico? A conta do usuário não será apagada.`)) {
+            const result = await hideUserFromHistory(userToHide.id);
+            if (result.success) {
+                showNotification("success", `${userToHide.displayName} foi removido do histórico.`);
+                setProcessedUsers(prev => prev.filter(u => u.id !== userToHide.id));
+            } else {
+                showNotification("error", result.error || "Falha ao remover do histórico.");
             }
         }
     };
@@ -163,25 +181,47 @@ export function UserApprovalClientPage() {
             <Card>
               <CardHeader><CardTitle>Histórico de Solicitações ({filteredProcessedUsers.length})</CardTitle></CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {filteredProcessedUsers.map((solicitacao) => (
-                    <div key={solicitacao.id} className="border rounded-lg p-4 bg-gray-50/50">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="flex-1">
-                          <h3 className="font-medium">{solicitacao.displayName}</h3>
-                          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                            <span>{solicitacao.email}</span>
-                            {solicitacao.cpf && <><span>•</span><span>CPF: {solicitacao.cpf}</span></>}
+                {filteredProcessedUsers.length === 0 ? (
+                     <p className="text-center text-muted-foreground py-8">O histórico de solicitações está vazio.</p>
+                ) : (
+                    <div className="space-y-4">
+                      {filteredProcessedUsers.map((solicitacao) => (
+                        <div key={solicitacao.id} className="border rounded-lg p-4 bg-gray-50/50">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="flex-1">
+                              <h3 className="font-medium">{solicitacao.displayName}</h3>
+                              <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                                <span>{solicitacao.email}</span>
+                                {solicitacao.cpf && <><span>•</span><span>CPF: {solicitacao.cpf}</span></>}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {getTipoBadge(solicitacao.profile.role)}
+                              {getStatusBadge(solicitacao.profile.status)}
+                              
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-8 w-8 text-muted-foreground hover:text-red-600"
+                                      onClick={() => handleHideFromHistory(solicitacao)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Remover do histórico</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {getTipoBadge(solicitacao.profile.role)}
-                          {getStatusBadge(solicitacao.profile.status)}
-                        </div>
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                )}
               </CardContent>
             </Card>
         </div>

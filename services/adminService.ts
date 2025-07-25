@@ -7,13 +7,12 @@ import {
   updateDoc, 
   where, 
   runTransaction, 
-  Timestamp,
-  getDoc
+  Timestamp
 } from 'firebase/firestore';
 
-// Interface para o objeto de usuário que a página de admin vai manipular
+// Interface para o objeto de usuário
 export interface UserForApproval {
-    id: string;
+    id: string; // ID do documento (que é o uid do usuário)
     displayName: string;
     email: string;
     cpf?: string;
@@ -21,11 +20,8 @@ export interface UserForApproval {
     profile: {
         role: 'familiar' | 'profissional' | 'funcionario' | 'admin';
         status: 'pendente' | 'aprovado' | 'rejeitado';
-        createdAt: Timestamp;
-        vinculo?: string;
-        especialidade?: string;
-        conselho?: string;
-        numeroConselho?: string;
+        createdAt?: Timestamp;
+        historyHidden?: boolean; // <-- Novo campo opcional
         [key: string]: any;
     };
     [key: string]: any;
@@ -47,12 +43,19 @@ export const getPendingUsers = async (): Promise<UserForApproval[]> => {
 };
 
 /**
- * Busca todos os usuários que já foram processados (aprovados ou rejeitados).
+ * --- FUNÇÃO MODIFICADA ---
+ * Busca todos os usuários que já foram processados E NÃO ESTÃO ESCONDIDOS no histórico.
  */
 export const getProcessedUsers = async (): Promise<UserForApproval[]> => {
   try {
     const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('profile.status', 'in', ['aprovado', 'rejeitado']));
+    // Usamos '==' em vez de '!=' porque agora garantimos que o campo existe.
+    // Esta consulta é muito mais eficiente.
+    const q = query(
+        usersRef, 
+        where('profile.status', 'in', ['aprovado', 'rejeitado']),
+        where('profile.historyHidden', '==', false) // <-- A CONSULTA EFICIENTE
+    );
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserForApproval));
   } catch (error) {
@@ -76,52 +79,37 @@ export const rejectUser = async (userId: string) => {
 };
 
 /**
- * Aprova um usuário. Se for um profissional, também cria um perfil para ele na coleção 'professionals'.
+ * --- NOVA FUNÇÃO ---
+ * Marca um usuário para que ele não apareça mais no histórico de aprovações.
+ * Esta é uma operação "soft delete", não apaga o usuário.
  */
-export const approveUserAndCreateProfile = async (userData: UserForApproval) => {
-  const userDocRef = doc(db, 'users', userData.id);
+export const hideUserFromHistory = async (userId: string) => {
+    try {
+        const userDocRef = doc(db, 'users', userId);
+        await updateDoc(userDocRef, {
+            'profile.historyHidden': true
+        });
+        return { success: true };
+    } catch (error) {
+        console.error("Erro ao arquivar usuário do histórico:", error);
+        return { success: false, error: "Falha ao arquivar a solicitação." };
+    }
+};
 
+/**
+ * Aprova um usuário, alterando seu status para 'aprovado'.
+ */
+export const approveUser = async (userId: string) => {
+  const userDocRef = doc(db, 'users', userId);
   try {
-    // Usamos uma transação para garantir que todas as operações aconteçam juntas.
     await runTransaction(db, async (transaction) => {
       const userDoc = await transaction.get(userDocRef);
       if (!userDoc.exists() || userDoc.data().profile.status !== 'pendente') {
         throw "O usuário não está mais pendente ou não foi encontrado.";
       }
-      
-      let finalProfileUpdate: any = { 'profile.status': 'aprovado' };
-
-      // Se o usuário for um profissional, cria o perfil profissional base
-      if (userData.profile?.role === 'profissional') {
-        const newProfessionalRef = doc(collection(db, "professionals"));
-        
-        transaction.set(newProfessionalRef, {
-          userId: userData.id,
-          fullName: userData.displayName,
-          email: userData.email,
-          cpf: userData.cpf || "",
-          celular: userData.phone || "",
-          status: 'ativo',
-          especialidade: userData.profile.especialidade || "A Definir",
-          conselho: userData.profile.conselho || "",
-          numeroConselho: userData.profile.numeroConselho || "",
-          diasAtendimento: ["segunda", "terca", "quarta", "quinta", "sexta"],
-          horarioInicio: "09:00",
-          horarioFim: "18:00",
-          dataContratacao: Timestamp.now(),
-          financeiro: { percentualRepasse: 60, valorConsulta: 100 }
-        });
-        
-        // Adiciona o ID do novo perfil profissional ao perfil do usuário
-        finalProfileUpdate['profile.professionalId'] = newProfessionalRef.id;
-      }
-      
-      // Atualiza o documento do usuário com as novas informações
-      transaction.update(userDocRef, finalProfileUpdate);
+      transaction.update(userDocRef, { 'profile.status': 'aprovado' });
     });
-
     return { success: true };
-
   } catch (error) {
     console.error("Erro na transação de aprovação:", error);
     return { success: false, error: "Falha ao aprovar usuário." };
