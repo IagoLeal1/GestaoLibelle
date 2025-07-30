@@ -11,18 +11,30 @@ import {
   updateDoc 
 } from "firebase/firestore";
 
-// Interface principal, representa um documento no Firestore.
-// Todos os campos que existem no seu formulário estão aqui.
+// --- INTERFACES REESTRUTURADAS ---
+
+// Interface para os dados do Responsável (como são salvos no DB)
+interface Responsavel {
+    nome: string;
+    celular: string;
+    telefone?: string;
+    email?: string;
+    profissao?: string;
+    estadoCivil?: string;
+}
+
+// Interface principal do Paciente, com o Responsável como um objeto aninhado
 export interface Patient {
   id: string;
   fullName: string;
   dataNascimento: Timestamp;
-  sexo: string;
+  sexo?: string;
   cpf: string;
   rg?: string;
-  telefone?: string;
-  celular: string;
-  email?: string;
+  convenio?: string;
+  
+  responsavel: Responsavel; // Objeto aninhado para o responsável
+
   endereco?: string;
   numero?: string;
   complemento?: string;
@@ -30,26 +42,36 @@ export interface Patient {
   cidade?: string;
   cep?: string;
   estado?: string;
-  profissao?: string;
-  estadoCivil?: string;
+  
   observacoes?: string;
   status: 'ativo' | 'inativo' | 'suspenso';
   dataCadastro: Timestamp;
-  responsibleUserIds: string[];
-  [key: string]: any; 
+  responsibleUserIds?: string[];
 }
 
-// Interface para os dados que vêm do formulário.
-// É igual à Patient, mas a data vem como string do input.
-export type PatientFormData = {
+// --- INTERFACES PARA O FORMULÁRIO ---
+
+// Interface para o formulário do responsável, com campos opcionais.
+interface ResponsavelFormData {
+    nome?: string;
+    celular?: string;
+    telefone?: string;
+    email?: string;
+    profissao?: string;
+    estadoCivil?: string;
+}
+
+// Interface para os dados que vêm do formulário, usando a interface flexível para o responsável.
+export interface PatientFormData {
   fullName: string;
   dataNascimento: string;
-  sexo: string;
   cpf: string;
+  sexo?: string;
   rg?: string;
-  telefone?: string;
-  celular: string;
-  email?: string;
+  convenio?: string;
+  
+  responsavel: ResponsavelFormData;
+
   endereco?: string;
   numero?: string;
   complemento?: string;
@@ -57,26 +79,17 @@ export type PatientFormData = {
   cidade?: string;
   cep?: string;
   estado?: string;
-  profissao?: string;
-  estadoCivil?: string;
+
   observacoes?: string;
-};
+}
 
 // --- Funções do Serviço ---
 
 export const getPatients = async (): Promise<Patient[]> => {
   try {
-    const patientsRef = collection(db, 'patients');
-    const q = query(patientsRef, orderBy('fullName'));
-    
-    const querySnapshot = await getDocs(q);
-    
-    const patients = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as Patient));
-
-    return patients;
+    const q = query(collection(db, 'patients'), orderBy('fullName'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Patient));
   } catch (error) {
     console.error("Erro ao buscar pacientes:", error);
     return [];
@@ -85,15 +98,9 @@ export const getPatients = async (): Promise<Patient[]> => {
 
 export const getPatientById = async (id: string): Promise<Patient | null> => {
   try {
-    const patientDocRef = doc(db, 'patients', id);
-    const patientDoc = await getDoc(patientDocRef);
-
-    if (!patientDoc.exists()) {
-      console.error("Nenhum paciente encontrado com este ID.");
-      return null;
-    }
-    
-    return { id: patientDoc.id, ...patientDoc.data() } as Patient;
+    const docRef = doc(db, 'patients', id);
+    const docSnap = await getDoc(docRef);
+    return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as Patient : null;
   } catch (error) {
     console.error("Erro ao buscar paciente por ID:", error);
     return null;
@@ -102,18 +109,15 @@ export const getPatientById = async (id: string): Promise<Patient | null> => {
 
 export const createPatient = async (patientData: PatientFormData) => {
   try {
-    // Separa a data (string) do resto dos dados
     const { dataNascimento, ...restData } = patientData;
-    // Converte a data para o formato do Firebase
+    // Converte a data string para Timestamp do Firebase
     const birthDateTimestamp = Timestamp.fromDate(new Date(dataNascimento));
 
-    // Adiciona o novo documento na coleção 'patients'
     await addDoc(collection(db, 'patients'), {
-      ...restData, // Salva todos os outros campos
-      birthDate: birthDateTimestamp, // Salva a data convertida
+      ...restData,
+      dataNascimento: birthDateTimestamp, // Nome do campo padronizado
       dataCadastro: Timestamp.now(),
       status: 'ativo',
-      responsibleUserIds: [],
     });
     return { success: true };
   } catch (error) {
@@ -122,29 +126,31 @@ export const createPatient = async (patientData: PatientFormData) => {
   }
 };
 
-export const updatePatient = async (id: string, patientData: PatientFormData) => {
+export const updatePatient = async (id: string, patientData: Partial<PatientFormData>) => {
   try {
     const patientDocRef = doc(db, 'patients', id);
     const { dataNascimento, ...restData } = patientData;
-    const birthDateTimestamp = Timestamp.fromDate(new Date(dataNascimento));
+    
+    // Cria um objeto para atualização para manipular a data
+    const dataToUpdate: { [key: string]: any } = { ...restData };
 
-    // Atualiza o documento existente
-    await updateDoc(patientDocRef, {
-      ...restData,
-      birthDate: birthDateTimestamp,
-    });
+    // Converte a data para Timestamp apenas se ela for fornecida na atualização
+    if (dataNascimento) {
+      dataToUpdate.dataNascimento = Timestamp.fromDate(new Date(dataNascimento));
+    }
+
+    await updateDoc(patientDocRef, dataToUpdate);
     return { success: true };
   } catch (error) {
     console.error("Erro ao atualizar paciente:", error);
     return { success: false, error: "Falha ao atualizar paciente." };
   }
 };
+
 export const updatePatientStatus = async (id: string, newStatus: 'ativo' | 'inativo' | 'suspenso') => {
   try {
-    const patientDocRef = doc(db, 'patients', id);
-    await updateDoc(patientDocRef, {
-      status: newStatus
-    });
+    const docRef = doc(db, 'patients', id);
+    await updateDoc(docRef, { status: newStatus });
     return { success: true };
   } catch (error) {
     console.error("Erro ao atualizar status do paciente:", error);
