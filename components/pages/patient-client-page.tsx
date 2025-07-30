@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Plus, Search, Filter, MoreHorizontal, User, Phone, Calendar, MapPin } from "lucide-react"
+import { Plus, Search, Filter, MoreHorizontal, User, Phone, MapPin } from "lucide-react"
 import { Timestamp } from "firebase/firestore"
 import { Patient, getPatients, updatePatientStatus } from "@/services/patientService"
 import { Button } from "@/components/ui/button"
@@ -37,24 +37,21 @@ const getSexoBadge = (sexo?: string) => {
   return <Badge variant="outline" className={className}>{sexo.charAt(0).toUpperCase() + sexo.slice(1)}</Badge>
 };
 
-// --- NOVA FUNÇÃO PARA OS CONVÊNIOS ---
 const getConvenioBadge = (convenio?: string) => {
     if (!convenio || convenio.trim() === "") return <Badge variant="secondary">N/A</Badge>;
-
     const lowerConvenio = convenio.toLowerCase();
-    let className = "bg-gray-100 text-gray-800"; // Padrão
-
+    let className = "bg-gray-100 text-gray-800";
     if (lowerConvenio.includes("unimed leste")) className = "bg-green-100 text-green-800";
     else if (lowerConvenio.includes("unimed ferj")) className = "bg-green-200 text-green-900";
+    else if (lowerConvenio.includes("unimed")) className = "bg-green-100 text-green-800";
     else if (lowerConvenio.includes("amil")) className = "bg-blue-100 text-blue-800";
     else if (lowerConvenio.includes("bradesco")) className = "bg-red-100 text-red-800";
-    else if (lowerConvenio.includes("sulamerica")) className = "bg-orange-100 text-orange-800";
+    else if (lowerConvenio.includes("sulamerica") || lowerConvenio.includes("sul américa")) className = "bg-orange-100 text-orange-800";
     else if (lowerConvenio.includes("particular")) className = "bg-pink-100 text-pink-800";
-
     return <Badge variant="outline" className={`font-medium ${className}`}>{convenio}</Badge>
 }
 
-const calcularIdade = (dataNascimento: Timestamp) => {
+const calcularIdade = (dataNascimento?: Timestamp) => {
   if (!dataNascimento?.toDate) return 0;
   const hoje = new Date();
   const nascimento = dataNascimento.toDate();
@@ -66,7 +63,7 @@ const calcularIdade = (dataNascimento: Timestamp) => {
   return idade;
 };
 
-const formatDate = (date: Timestamp | undefined) => {
+const formatDate = (date?: Timestamp) => {
     if (!date?.toDate) return "Não informado";
     return date.toDate().toLocaleDateString("pt-BR");
 };
@@ -109,19 +106,18 @@ export function PatientClientPage() {
     }
   };
 
-  // --- LÓGICA DE FILTRO CORRIGIDA ---
+  // --- LÓGICA DE FILTRO CORRIGIDA E APRIMORADA ---
   const pacientesFiltrados = pacientes.filter((paciente) => {
     const search = searchTerm.toLowerCase();
     const matchesSearch =
       paciente.fullName.toLowerCase().includes(search) ||
-      (paciente.responsavel?.nome?.toLowerCase().includes(search)) || // Busca pelo nome do responsável
-      (paciente.cpf && paciente.cpf.includes(searchTerm)); // Busca pelo CPF
+      (paciente.responsavel?.nome?.toLowerCase().includes(search)) || // Busca segura pelo nome do responsável
+      (paciente.cpf && paciente.cpf.includes(searchTerm)); // Busca pelo CPF do paciente
     const matchesSexo = sexoFilter === "todos" || paciente.sexo === sexoFilter;
     const matchesStatus = statusFilter === "todos" || paciente.status === statusFilter;
     return matchesSearch && matchesSexo && matchesStatus;
   });
 
-  // --- ESTATÍSTICAS CORRIGIDAS ---
   const estatisticas = {
     total: pacientes.length,
     ativos: pacientes.filter((p) => p.status === "ativo").length,
@@ -134,7 +130,6 @@ export function PatientClientPage() {
   return (
     <>
       <div className="space-y-6">
-        {/* Bloco de estatísticas e filtros (sem alterações na estrutura) */}
         <div className="grid gap-4 md:grid-cols-4">
             <Card><CardContent className="p-4"><div className="text-center"><p className="text-2xl font-bold">{estatisticas.total}</p><p className="text-xs font-medium text-muted-foreground">Total</p></div></CardContent></Card>
             <Card><CardContent className="p-4"><div className="text-center"><p className="text-2xl font-bold text-green-600">{estatisticas.ativos}</p><p className="text-xs font-medium text-green-600">Ativos</p></div></CardContent></Card>
@@ -161,7 +156,6 @@ export function PatientClientPage() {
           </CardContent>
         </Card>
 
-        {/* --- TABELA ATUALIZADA --- */}
         <Card>
           <CardHeader><CardTitle>Lista de Pacientes ({pacientesFiltrados.length})</CardTitle></CardHeader>
           <CardContent>
@@ -204,7 +198,6 @@ export function PatientClientPage() {
         </Card>
       </div>
 
-      {/* --- MODAL DE DETALHES COMPLETO --- */}
       <Dialog open={modalAberto} onOpenChange={setModalAberto}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle className="flex items-center gap-2"><User /> Detalhes do Paciente</DialogTitle></DialogHeader>
@@ -224,9 +217,10 @@ export function PatientClientPage() {
                 <Card>
                     <CardHeader><CardTitle className="flex items-center gap-2"><Phone /> Contato do Responsável</CardTitle></CardHeader>
                     <CardContent><div className="grid gap-4 md:grid-cols-3">
-                        <div className="md:col-span-2"><Label className="text-sm font-medium text-gray-500">Nome</Label><p>{pacienteSelecionado.responsavel?.nome}</p></div>
-                        <div><Label className="text-sm font-medium text-gray-500">Celular</Label><p>{pacienteSelecionado.responsavel?.celular}</p></div>
-                        <div><Label className="text-sm font-medium text-gray-500">Telefone</Label><p>{pacienteSelecionado.responsavel?.telefone || "Não informado"}</p></div>
+                        <div className="md:col-span-2"><Label className="text-sm font-medium text-gray-500">Nome</Label><p>{pacienteSelecionado.responsavel?.nome || "Não informado"}</p></div>
+                        {/* --- CAMPO CORRIGIDO --- */}
+                        <div><Label className="text-sm font-medium text-gray-500">CPF do Responsável</Label><p>{pacienteSelecionado.responsavel?.cpf || "Não informado"}</p></div>
+                        <div><Label className="text-sm font-medium text-gray-500">Celular</Label><p>{pacienteSelecionado.responsavel?.celular || "Não informado"}</p></div>
                         <div><Label className="text-sm font-medium text-gray-500">Email</Label><p>{pacienteSelecionado.responsavel?.email || "Não informado"}</p></div>
                     </div></CardContent>
                 </Card>

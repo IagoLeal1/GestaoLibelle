@@ -45,8 +45,8 @@ export default function EditPatientPage() {
           
           responsavel: {
             nome: patient.responsavel?.nome,
+            cpf: patient.responsavel?.cpf, // <-- CAMPO CORRIGIDO
             celular: patient.responsavel?.celular,
-            telefone: patient.responsavel?.telefone,
             email: patient.responsavel?.email,
             profissao: patient.responsavel?.profissao,
             estadoCivil: patient.responsavel?.estadoCivil,
@@ -73,10 +73,10 @@ export default function EditPatientPage() {
   // Handler de input aprimorado que lida com campos aninhados e aplica máscaras
   const handleInputChange = (field: keyof PatientFormData | keyof NonNullable<PatientFormData['responsavel']>, value: string, parentField?: 'responsavel') => {
     let formattedValue = value;
-    const phoneFields = ['celular', 'telefone'];
-    if (field === 'cpf') {
+    
+    if (field === 'cpf') { // Aplica máscara para CPF do paciente E do responsável
         formattedValue = value.replace(/\D/g, '').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})/, '$1-$2').substring(0, 14);
-    } else if (phoneFields.includes(field)) {
+    } else if (field === 'celular') {
         formattedValue = value.replace(/\D/g, '').replace(/^(\d{2})(\d)/g, '($1) $2').replace(/(\d{5})(\d)/, '$1-$2').substring(0, 15);
     } else if (field === 'cep') {
         formattedValue = value.replace(/\D/g, '').replace(/^(\d{5})(\d)/, '$1-$2').substring(0, 9);
@@ -161,7 +161,7 @@ export default function EditPatientPage() {
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-2 md:col-span-2"><Label htmlFor="responsavelNome">Nome Completo do Responsável *</Label><Input id="responsavelNome" value={formData.responsavel?.nome || ''} onChange={(e) => handleInputChange("nome", e.target.value, "responsavel")} required /></div>
-              <div className="space-y-2"><Label htmlFor="responsavelTelefone">Telefone</Label><Input id="responsavelTelefone" value={formData.responsavel?.telefone || ''} onChange={(e) => handleInputChange("telefone", e.target.value, "responsavel")} /></div>
+              <div className="space-y-2"><Label htmlFor="responsavelCpf">CPF do Responsável</Label><Input id="responsavelCpf" value={formData.responsavel?.cpf || ''} onChange={(e) => handleInputChange("cpf", e.target.value, "responsavel")} /></div>
               <div className="space-y-2"><Label htmlFor="responsavelCelular">Celular *</Label><Input id="responsavelCelular" value={formData.responsavel?.celular || ''} onChange={(e) => handleInputChange("celular", e.target.value, "responsavel")} required /></div>
               <div className="space-y-2"><Label htmlFor="responsavelProfissao">Profissão</Label><Input id="responsavelProfissao" value={formData.responsavel?.profissao || ''} onChange={(e) => handleInputChange("profissao", e.target.value, "responsavel")} /></div>
               <div className="space-y-2"><Label htmlFor="responsavelEmail">E-mail</Label><Input id="responsavelEmail" type="email" value={formData.responsavel?.email || ''} onChange={(e) => handleInputChange("email", e.target.value, "responsavel")} /></div>
@@ -175,23 +175,23 @@ export default function EditPatientPage() {
           <CardHeader><CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5" /> Endereço</CardTitle></CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <div className="space-y-2"><Label htmlFor="cep">CEP</Label><Input id="cep" value={formData.cep || ''} onChange={(e) => handleInputChange("cep", e.target.value)} /></div>
-              <div className="space-y-2 lg:col-span-2"><Label htmlFor="endereco">Endereço</Label><Input id="endereco" value={formData.endereco || ''} onChange={(e) => handleInputChange("endereco", e.target.value)} /></div>
-              <div className="space-y-2"><Label htmlFor="numero">Número</Label><Input id="numero" value={formData.numero || ''} onChange={(e) => handleInputChange("numero", e.target.value)} /></div>
-              <div className="space-y-2"><Label htmlFor="complemento">Complemento</Label><Input id="complemento" value={formData.complemento || ''} onChange={(e) => handleInputChange("complemento", e.target.value)} /></div>
-              <div className="space-y-2"><Label htmlFor="bairro">Bairro</Label><Input id="bairro" value={formData.bairro || ''} onChange={(e) => handleInputChange("bairro", e.target.value)} /></div>
-              <div className="space-y-2"><Label htmlFor="cidade">Cidade</Label><Input id="cidade" value={formData.cidade || ''} onChange={(e) => handleInputChange("cidade", e.target.value)} /></div>
-              <div className="space-y-2"><Label htmlFor="estado">Estado</Label><Select value={formData.estado} onValueChange={(value) => handleInputChange("estado", value)}><SelectTrigger><SelectValue placeholder="UF" /></SelectTrigger><SelectContent>
-                  <SelectItem value="AC">AC</SelectItem><SelectItem value="AL">AL</SelectItem><SelectItem value="AP">AP</SelectItem>
-                  <SelectItem value="AM">AM</SelectItem><SelectItem value="BA">BA</SelectItem><SelectItem value="CE">CE</SelectItem>
-                  <SelectItem value="DF">DF</SelectItem><SelectItem value="ES">ES</SelectItem><SelectItem value="GO">GO</SelectItem>
-                  <SelectItem value="MA">MA</SelectItem><SelectItem value="MT">MT</SelectItem><SelectItem value="MS">MS</SelectItem>
-                  <SelectItem value="MG">MG</SelectItem><SelectItem value="PA">PA</SelectItem><SelectItem value="PB">PB</SelectItem>
-                  <SelectItem value="PR">PR</SelectItem><SelectItem value="PE">PE</SelectItem><SelectItem value="PI">PI</SelectItem>
-                  <SelectItem value="RJ">RJ</SelectItem><SelectItem value="RN">RN</SelectItem><SelectItem value="RS">RS</SelectItem>
-                  <SelectItem value="RO">RO</SelectItem><SelectItem value="RR">RR</SelectItem><SelectItem value="SC">SC</SelectItem>
-                  <SelectItem value="SP">SP</SelectItem><SelectItem value="SE">SE</SelectItem><SelectItem value="TO">TO</SelectItem>
-              </SelectContent></Select></div>
+                <div className="space-y-2"><Label htmlFor="cep">CEP</Label><Input id="cep" value={formData.cep || ''} onChange={(e) => handleInputChange("cep", e.target.value)} /></div>
+                <div className="space-y-2 lg:col-span-2"><Label htmlFor="endereco">Endereço</Label><Input id="endereco" value={formData.endereco || ''} onChange={(e) => handleInputChange("endereco", e.target.value)} /></div>
+                <div className="space-y-2"><Label htmlFor="numero">Número</Label><Input id="numero" value={formData.numero || ''} onChange={(e) => handleInputChange("numero", e.target.value)} /></div>
+                <div className="space-y-2"><Label htmlFor="complemento">Complemento</Label><Input id="complemento" value={formData.complemento || ''} onChange={(e) => handleInputChange("complemento", e.target.value)} /></div>
+                <div className="space-y-2"><Label htmlFor="bairro">Bairro</Label><Input id="bairro" value={formData.bairro || ''} onChange={(e) => handleInputChange("bairro", e.target.value)} /></div>
+                <div className="space-y-2"><Label htmlFor="cidade">Cidade</Label><Input id="cidade" value={formData.cidade || ''} onChange={(e) => handleInputChange("cidade", e.target.value)} /></div>
+                <div className="space-y-2"><Label htmlFor="estado">Estado</Label><Select value={formData.estado} onValueChange={(value) => handleInputChange("estado", value)}><SelectTrigger><SelectValue placeholder="UF" /></SelectTrigger><SelectContent>
+                    <SelectItem value="AC">AC</SelectItem><SelectItem value="AL">AL</SelectItem><SelectItem value="AP">AP</SelectItem>
+                    <SelectItem value="AM">AM</SelectItem><SelectItem value="BA">BA</SelectItem><SelectItem value="CE">CE</SelectItem>
+                    <SelectItem value="DF">DF</SelectItem><SelectItem value="ES">ES</SelectItem><SelectItem value="GO">GO</SelectItem>
+                    <SelectItem value="MA">MA</SelectItem><SelectItem value="MT">MT</SelectItem><SelectItem value="MS">MS</SelectItem>
+                    <SelectItem value="MG">MG</SelectItem><SelectItem value="PA">PA</SelectItem><SelectItem value="PB">PB</SelectItem>
+                    <SelectItem value="PR">PR</SelectItem><SelectItem value="PE">PE</SelectItem><SelectItem value="PI">PI</SelectItem>
+                    <SelectItem value="RJ">RJ</SelectItem><SelectItem value="RN">RN</SelectItem><SelectItem value="RS">RS</SelectItem>
+                    <SelectItem value="RO">RO</SelectItem><SelectItem value="RR">RR</SelectItem><SelectItem value="SC">SC</SelectItem>
+                    <SelectItem value="SP">SP</SelectItem><SelectItem value="SE">SE</SelectItem><SelectItem value="TO">TO</SelectItem>
+                </SelectContent></Select></div>
             </div>
           </CardContent>
         </Card>
@@ -204,7 +204,6 @@ export default function EditPatientPage() {
           </CardContent>
         </Card>
 
-        {/* Botões de Ação */}
         <div className="flex justify-end gap-4">
           <Button type="button" variant="outline" onClick={() => router.push('/pacientes')}>Cancelar</Button>
           <Button type="submit" disabled={loading}>

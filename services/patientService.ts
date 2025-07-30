@@ -17,7 +17,7 @@ import {
 interface Responsavel {
     nome: string;
     celular: string;
-    telefone?: string;
+    cpf?: string; // <-- O CAMPO DE CPF DO RESPONSÁVEL
     email?: string;
     profissao?: string;
     estadoCivil?: string;
@@ -55,7 +55,7 @@ export interface Patient {
 interface ResponsavelFormData {
     nome?: string;
     celular?: string;
-    telefone?: string;
+    cpf?: string; // <-- O CAMPO DE CPF DO RESPONSÁVEL
     email?: string;
     profissao?: string;
     estadoCivil?: string;
