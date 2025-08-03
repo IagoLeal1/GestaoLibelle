@@ -2,7 +2,7 @@
 
 import {
   Calendar, DollarSign, FileText, Home, MessageSquare, Users, UserCheck,
-  CheckCircle, UserPlus, MessageCircle, MapPin
+  CheckCircle, UserPlus, MessageCircle, MapPin, BadgeDollarSign
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -18,8 +18,10 @@ import {
 const menuItems = [
   { title: "Dashboard", url: "/", icon: Home, roles: ['admin', 'profissional', 'funcionario', 'familiar'] },
   { title: "Agendamentos", url: "/agendamentos", icon: Calendar, roles: ['admin', 'profissional', 'funcionario'] },
+  { title: "Mapeamento de Salas", url: "/mapeamento-salas", icon: MapPin, roles: ['admin', 'funcionario'] },
   { title: "Pacientes", url: "/pacientes", icon: Users, roles: ['admin', 'profissional', 'funcionario'] },
   { title: "Profissionais", url: "/profissionais", icon: UserCheck, roles: ['admin', 'funcionario'] },
+  { title: "Especialidades", url: "/especialidades", icon: BadgeDollarSign, roles: ['admin'] },
   // { title: "Financeiro", url: "/financeiro", icon: DollarSign, roles: ['admin', 'funcionario'] },
   // { title: "Relatórios", url: "/relatorios", icon: FileText, roles: ['admin', 'funcionario'] },
   // { title: "Avisos", url: "/avisos", icon: MessageSquare, roles: ['admin', 'profissional', 'funcionario', 'familiar'] },
@@ -27,7 +29,6 @@ const menuItems = [
   { title: "Aprovação de Acesso", url: "/admin/usuarios", icon: UserPlus, roles: ['admin'] },
   { title: "Comunicação", url: "/comunicacao", icon: MessageCircle, roles: ['admin', 'profissional', 'funcionario', 'familiar'] },
   // { title: "Plano Evolutivo", url: "/plano-evolutivo", icon: FileText, roles: ['profissional'] },
-  // { title: "Mapeamento de Salas", url: "/mapeamento-salas", icon: MapPin, roles: ['admin', 'funcionario'] },
 ]
 
 export function AppSidebar() {

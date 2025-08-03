@@ -35,6 +35,7 @@ export interface Appointment {
   observacoes?: string;
   blockId?: string;
   isLastInBlock?: boolean;
+  valorConsulta?: number; 
 }
 
 export interface AppointmentFormData {
@@ -47,6 +48,7 @@ export interface AppointmentFormData {
   convenio?: string;
   observacoes?: string;
   statusSecundario?: string;
+  valorConsulta?: number; 
 }
 
 export interface AppointmentBlockFormData {
@@ -59,6 +61,7 @@ export interface AppointmentBlockFormData {
   sala?: string;
   convenio?: string;
   observacoes?: string;
+  valorConsulta?: number; 
 }
 
 // --- Funções Otimizadas ---
@@ -338,5 +341,43 @@ export const getAppointmentsByProfessional = async (professionalId: string, date
   } catch (error) {
     console.error("Erro ao buscar agendamentos do profissional:", error);
     return [];
+  }
+};
+/**
+ * --- NOVA FUNÇÃO ---
+ * Busca os IDs das salas que já possuem agendamentos em um determinado intervalo de tempo.
+ * Essencial para a funcionalidade de "select de salas inteligente".
+ * @param startTime A data e hora de início do agendamento desejado.
+ * @param endTime A data e hora de fim do agendamento desejado.
+ * @returns Uma promessa que resolve para um array de strings com os IDs das salas ocupadas.
+ */
+export const getOccupiedRoomIdsByTime = async (startTime: Date, endTime: Date): Promise<string[]> => {
+  try {
+    const appointmentsRef = collection(db, 'appointments');
+    
+    // A query para encontrar agendamentos que se sobrepõem no tempo.
+    // Condição: (startA < endB) && (endA > startB)
+    const q = query(
+      appointmentsRef,
+      where('status', '==', 'agendado'), // Apenas agendamentos ativos
+      where('start', '<', Timestamp.fromDate(endTime)),
+      where('end', '>', Timestamp.fromDate(startTime))
+    );
+
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      return []; // Nenhuma sala ocupada
+    }
+
+    // Extrai e retorna apenas os IDs das salas dos agendamentos encontrados
+    const occupiedRoomIds = snapshot.docs.map(doc => doc.data().sala).filter(Boolean); // .filter(Boolean) remove valores nulos/undefined
+    
+    // Retorna uma lista de IDs únicos
+    return [...new Set(occupiedRoomIds)];
+
+  } catch (error) {
+    console.error("Erro ao verificar salas ocupadas:", error);
+    return []; // Retorna vazio em caso de erro para não quebrar a UI
   }
 };

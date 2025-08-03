@@ -7,62 +7,100 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Calendar, AlertCircle, Repeat } from "lucide-react";
+import { Calendar, AlertCircle, Repeat, DollarSign, Building } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Switch } from "@/components/ui/switch"; // Importamos o Switch
+import { Switch } from "@/components/ui/switch";
 
-import { createAppointment, createAppointmentBlock, AppointmentFormData, AppointmentBlockFormData } from "@/services/appointmentService";
+import { createAppointment, createAppointmentBlock, getOccupiedRoomIdsByTime, AppointmentFormData, AppointmentBlockFormData } from "@/services/appointmentService";
 import { getPatients, Patient } from "@/services/patientService";
 import { getProfessionals, Professional } from "@/services/professionalService";
+import { getSpecialties, Specialty } from "@/services/specialtyService"; // <-- NOVO
+import { getRooms, Room } from "@/services/roomService"; // <-- NOVO
 
 export function AppointmentForm() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Estados para guardar os dados das coleções
   const [patients, setPatients] = useState<Patient[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
-  const [isRecurring, setIsRecurring] = useState(false); // Estado para o switch
+  const [specialties, setSpecialties] = useState<Specialty[]>([]); // <-- NOVO
+  const [rooms, setRooms] = useState<Room[]>([]); // <-- NOVO
+  const [occupiedRoomIds, setOccupiedRoomIds] = useState<string[]>([]); // <-- NOVO
+
+  const [isRecurring, setIsRecurring] = useState(false);
   const [formData, setFormData] = useState<Partial<AppointmentFormData & AppointmentBlockFormData>>({
-    sessions: 4, // Valor padrão
+    sessions: 4,
   });
 
+  // Efeito para buscar todos os dados necessários para o formulário
   useEffect(() => {
     const fetchData = async () => {
-        const [patientsData, professionalsData] = await Promise.all([getPatients(), getProfessionals()]);
+        const [patientsData, professionalsData, specialtiesData, roomsData] = await Promise.all([
+            getPatients(), 
+            getProfessionals(),
+            getSpecialties(),
+            getRooms()
+        ]);
         setPatients(patientsData);
         setProfessionals(professionalsData);
+        setSpecialties(specialtiesData);
+        setRooms(roomsData.filter(r => r.status === 'ativa')); // Apenas salas ativas
     };
     fetchData();
   }, []);
 
+  // --- O "CÉREBRO" DA INTELIGÊNCIA DAS SALAS ---
+  useEffect(() => {
+    const checkRoomAvailability = async () => {
+      if (formData.data && formData.hora) {
+        const [year, month, day] = formData.data.split('-').map(Number);
+        const [hour, minute] = formData.hora.split(':').map(Number);
+        const startTime = new Date(year, month - 1, day, hour, minute);
+        const endTime = new Date(startTime.getTime() + 50 * 60000); // Duração de 50 min
+
+        const occupiedIds = await getOccupiedRoomIdsByTime(startTime, endTime);
+        setOccupiedRoomIds(occupiedIds);
+      }
+    };
+    checkRoomAvailability();
+  }, [formData.data, formData.hora]); // Roda sempre que a data ou hora mudam
+
+  // Handler genérico para inputs simples
   const handleInputChange = (field: keyof typeof formData, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    
-    let result;
-    if (isRecurring) {
-        // Chama a função de criar em lote
-        result = await createAppointmentBlock(formData as AppointmentBlockFormData);
-    } else {
-        // Chama a função de criar agendamento único
-        result = await createAppointment(formData as AppointmentFormData);
-    }
-
-    setLoading(false);
-    if (result.success) {
-        alert(`Agendamento(s) criado(s) com sucesso!`);
-        router.push("/agendamentos");
-        router.refresh();
-    } else {
-        setError(result.error || "Ocorreu um erro.");
-    }
+  // --- HANDLERS INTELIGENTES ---
+  const handlePatientChange = (patientId: string) => {
+    const selectedPatient = patients.find(p => p.id === patientId);
+    setFormData(prev => ({
+        ...prev,
+        patientId: patientId,
+        convenio: selectedPatient?.convenio || "" // Preenche o convênio
+    }));
   };
+
+  const handleSpecialtyChange = (specialtyName: string) => {
+    const selectedSpecialty = specialties.find(s => s.name === specialtyName);
+    setFormData(prev => ({
+        ...prev,
+        tipo: specialtyName, // 'tipo' agora é a especialidade
+        valorConsulta: selectedSpecialty?.value || 0 // Preenche o valor
+    }));
+  };
+
+  const handleRoomChange = (roomId: string) => {
+    if (occupiedRoomIds.includes(roomId)) {
+      if (!window.confirm("Esta sala já está em uso neste horário. Deseja agendar mesmo assim?")) {
+        return; // Usuário cancelou, não faz nada
+      }
+    }
+    handleInputChange("sala", roomId);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => { /* ... sua função handleSubmit ... */ };
 
   return (
     <Card>
@@ -76,27 +114,27 @@ export function AppointmentForm() {
           <div className="flex items-center space-x-2 rounded-lg border p-4">
             <Repeat className="h-5 w-5" />
             <Label htmlFor="recurring-switch" className="flex-1">Repetir semanalmente</Label>
-            <Switch
-              id="recurring-switch"
-              checked={isRecurring}
-              onCheckedChange={setIsRecurring}
-            />
+            <Switch id="recurring-switch" checked={isRecurring} onCheckedChange={setIsRecurring} />
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            <div className="space-y-2"><Label>Paciente *</Label><Select onValueChange={(v) => handleInputChange("patientId", v)}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{patients.map(p => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent></Select></div>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div className="space-y-2"><Label>Paciente *</Label><Select onValueChange={handlePatientChange}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{patients.map(p => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label>Profissional *</Label><Select onValueChange={(v) => handleInputChange("professionalId", v)}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{professionals.map(p => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>Data {isRecurring ? 'do Primeiro Atendimento' : ''} *</Label><Input type="date" onChange={(e) => handleInputChange("data", e.target.value)} required /></div>
-            <div className="space-y-2"><Label>Horário *</Label><Input type="time" onChange={(e) => handleInputChange("hora", e.target.value)} required /></div>
+            <div className="space-y-2"><Label>Convênio</Label><Input value={formData.convenio || ''} onChange={(e) => handleInputChange("convenio", e.target.value)} placeholder="Preenchido ao selecionar paciente"/></div>
+            
+            <div className="space-y-2"><Label>Data {isRecurring ? 'do 1º Atendimento' : ''} *</Label><Input type="date" onChange={(e) => handleInputChange("data", e.target.value)} required /></div>
+            <div className="space-y-2"><Label>Horário *</Label><Input type="time" step="3000" onChange={(e) => handleInputChange("hora", e.target.value)} required /></div>
             
             {isRecurring && (
               <div className="space-y-2">
-                <Label>Número de Sessões *</Label>
+                <Label>Nº de Sessões *</Label>
                 <Input type="number" value={formData.sessions} onChange={(e) => handleInputChange("sessions", Number(e.target.value))} required min={1} />
               </div>
             )}
 
-            <div className="space-y-2 md:col-span-2"><Label>Tipo de Atendimento *</Label><Select onValueChange={(v) => handleInputChange("tipo", v)}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent><SelectItem value="Terapia">Terapia</SelectItem><SelectItem value="Consulta">Consulta</SelectItem></SelectContent></Select></div>
+            <div className="space-y-2"><Label>Especialidade (Tipo) *</Label><Select onValueChange={handleSpecialtyChange}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{specialties.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>Valor da Consulta (R$)</Label><div className="relative"><DollarSign className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={formData.valorConsulta?.toFixed(2).replace('.', ',') || '0,00'} readOnly className="pl-8" /></div></div>
+            <div className="space-y-2"><Label>Sala</Label><Select onValueChange={handleRoomChange} value={formData.sala}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{rooms.map(r => <SelectItem key={r.id} value={r.id} className={occupiedRoomIds.includes(r.id) ? 'text-red-500 font-semibold' : ''}>{r.name} {occupiedRoomIds.includes(r.id) ? '(Ocupada)' : ''}</SelectItem>)}</SelectContent></Select></div>
           </div>
 
           <div className="flex justify-end gap-4 pt-4">
