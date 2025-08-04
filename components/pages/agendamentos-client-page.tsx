@@ -15,6 +15,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { getAppointmentsByDate, getAppointmentsForReport, Appointment, updateAppointment, deleteAppointment, AppointmentStatus, AppointmentFormData } from "@/services/appointmentService"
 import { getProfessionals, Professional } from "@/services/professionalService"
 import { getPatients, Patient } from "@/services/patientService"
+import { getRooms, Room } from "@/services/roomService" // <-- Importação adicionada
 import { ReportModal } from "@/components/modals/report-modal"
 import { EditAppointmentModal } from "@/components/modals/edit-appointment-modal"
 import { RenewalNotice } from "@/components/features/RenewalNotice"
@@ -54,6 +55,7 @@ export function AgendamentosClientPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]); // <-- Estado adicionado
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -65,18 +67,27 @@ export function AgendamentosClientPage() {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
+  // --- Função de "Tradução" adicionada ---
+  const getRoomNameById = (roomId?: string): string => {
+    if (!roomId) return "N/A";
+    const room = rooms.find(r => r.id === roomId);
+    return room ? room.name : "Sala Excluída";
+  };
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [appointmentsData, professionalsData, patientsData] = await Promise.all([ 
+      const [appointmentsData, professionalsData, patientsData, roomsData] = await Promise.all([ 
         getAppointmentsByDate(selectedDate), 
         getProfessionals(),
-        getPatients()
+        getPatients(),
+        getRooms() // <-- Busca adicionada
       ]);
       setAppointments(appointmentsData);
       setProfessionals(professionalsData);
       setPatients(patientsData);
+      setRooms(roomsData); // <-- Estado atualizado
     } catch (err) {
       setError("Falha ao carregar dados.");
     } finally {
@@ -129,7 +140,7 @@ export function AgendamentosClientPage() {
       ...appointmentsToExport.map(apt => [
         apt.start.toDate().toLocaleDateString('pt-BR'),
         apt.start.toDate().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        `"${apt.patientName}"`, apt.status, apt.tipo, apt.sala, apt.convenio || 'N/A'
+        `"${apt.patientName}"`, apt.status, apt.tipo, getRoomNameById(apt.sala), apt.convenio || 'N/A' // <-- Sala traduzida no relatório
       ].join(';'))
     ].join('\n');
     const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -185,7 +196,7 @@ export function AgendamentosClientPage() {
               <TableCell className="font-medium">{appointment.patientName}</TableCell>
               <TableCell>{appointment.professionalName}</TableCell>
               <TableCell>{appointment.start.toDate().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</TableCell>
-              <TableCell><Badge variant="outline">{appointment.sala}</Badge></TableCell>
+              <TableCell><Badge variant="outline">{getRoomNameById(appointment.sala)}</Badge></TableCell>
               <TableCell>{getStatusBadge(appointment.status)}</TableCell>
               <TableCell>{getStatusSecundarioBadge(appointment.statusSecundario)}</TableCell>
               <TableCell className="text-right"><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent><DropdownMenuItem onClick={() => handleOpenEditModal(appointment)}>Editar / Status</DropdownMenuItem></DropdownMenuContent></DropdownMenu></TableCell>
