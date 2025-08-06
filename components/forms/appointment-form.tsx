@@ -3,10 +3,11 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { Calendar, AlertCircle, Repeat, DollarSign } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
@@ -17,20 +18,16 @@ import { getProfessionals, Professional } from "@/services/professionalService";
 import { getSpecialties, Specialty } from "@/services/specialtyService";
 import { getRooms, Room } from "@/services/roomService";
 
-// --- NOVA LISTA DE HORÁRIOS ---
-const timeSlots = [
-    '07:20', '08:10', '09:00', '09:50', '10:40', '11:30', '12:20',
-    '13:20', '14:10', '15:00', '15:50', '16:40', '17:30'
-];
-
 export function AppointmentForm() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // Estados para guardar os dados das coleções
   const [patients, setPatients] = useState<Patient[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
+  const [availableSpecialties, setAvailableSpecialties] = useState<Specialty[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [occupiedRoomIds, setOccupiedRoomIds] = useState<string[]>([]);
 
@@ -57,19 +54,25 @@ export function AppointmentForm() {
 
   useEffect(() => {
     const checkRoomAvailability = async () => {
-      // A verificação agora é mais segura, pois 'hora' sempre será um valor completo
-      if (formData.data && formData.hora) {
+      if (formData.data && formData.horaInicio && formData.horaFim) {
         const [year, month, day] = formData.data.split('-').map(Number);
-        const [hour, minute] = formData.hora.split(':').map(Number);
-        const startTime = new Date(year, month - 1, day, hour, minute);
-        const endTime = new Date(startTime.getTime() + 50 * 60000);
+        const [startHour, startMinute] = formData.horaInicio.split(':').map(Number);
+        const [endHour, endMinute] = formData.horaFim.split(':').map(Number);
+        
+        const startTime = new Date(year, month - 1, day, startHour, startMinute);
+        const endTime = new Date(year, month - 1, day, endHour, endMinute);
+
+        if (endTime <= startTime) {
+            setOccupiedRoomIds([]);
+            return;
+        }
 
         const occupiedIds = await getOccupiedRoomIdsByTime(startTime, endTime);
         setOccupiedRoomIds(occupiedIds);
       }
     };
     checkRoomAvailability();
-  }, [formData.data, formData.hora]);
+  }, [formData.data, formData.horaInicio, formData.horaFim]);
 
   const handleInputChange = (field: keyof typeof formData, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -77,10 +80,28 @@ export function AppointmentForm() {
 
   const handlePatientChange = (patientId: string) => {
     const selectedPatient = patients.find(p => p.id === patientId);
+    if (!selectedPatient) return;
+
+    const patientConvenio = (selectedPatient.convenio || 'particular').toLowerCase();
+    
+    const filteredSpecialties = specialties.filter(spec => {
+        const specNameLower = spec.name.toLowerCase();
+        
+        if (patientConvenio === 'particular') {
+            return !['unimed', 'bradesco', 'amil', 'sulamerica'].some(conv => specNameLower.includes(conv));
+        }
+        
+        return specNameLower.includes(patientConvenio);
+    });
+
+    setAvailableSpecialties(filteredSpecialties);
+
     setFormData(prev => ({
         ...prev,
         patientId: patientId,
-        convenio: selectedPatient?.convenio || ""
+        convenio: selectedPatient.convenio || "",
+        tipo: '',
+        valorConsulta: 0,
     }));
   };
 
@@ -107,6 +128,13 @@ export function AppointmentForm() {
     setLoading(true);
     setError(null);
     
+    // Validação
+    if (!formData.patientId || !formData.professionalId || !formData.data || !formData.horaInicio || !formData.horaFim || !formData.tipo) {
+        setError("Todos os campos marcados com * são obrigatórios.");
+        setLoading(false);
+        return;
+    }
+
     let result;
     if (isRecurring) {
         result = await createAppointmentBlock(formData as AppointmentBlockFormData);
@@ -120,52 +148,70 @@ export function AppointmentForm() {
         router.push("/agendamentos");
         router.refresh();
     } else {
-        setError(result.error || "Ocorreu um erro.");
+        setError(result.error || "Ocorreu um erro desconhecido.");
     }
   };
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2"><Calendar className="h-5 w-5" />Informações do Agendamento</CardTitle>
+        <CardTitle>Novo Agendamento</CardTitle>
+        <CardDescription>Preencha os detalhes abaixo para criar um novo agendamento.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
           {error && (<Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Erro</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>)}
           
-          <div className="flex items-center space-x-2 rounded-lg border p-4">
-            <Repeat className="h-5 w-5" />
-            <Label htmlFor="recurring-switch" className="flex-1">Repetir semanalmente</Label>
-            <Switch id="recurring-switch" checked={isRecurring} onCheckedChange={setIsRecurring} />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+                <Label>Paciente *</Label>
+                <Select onValueChange={handlePatientChange} required>
+                    <SelectTrigger><SelectValue placeholder="Selecione o paciente" /></SelectTrigger>
+                    <SelectContent>{patients.map(p => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent>
+                </Select>
+            </div>
+            <div className="space-y-2"><Label>Profissional *</Label><Select onValueChange={(v) => handleInputChange("professionalId", v)} required><SelectTrigger><SelectValue placeholder="Selecione o profissional" /></SelectTrigger><SelectContent>{professionals.map(p => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent></Select></div>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            <div className="space-y-2"><Label>Paciente *</Label><Select onValueChange={handlePatientChange}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{patients.map(p => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>Profissional *</Label><Select onValueChange={(v) => handleInputChange("professionalId", v)}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{professionals.map(p => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>Convênio</Label><Input value={formData.convenio || ''} onChange={(e) => handleInputChange("convenio", e.target.value)} placeholder="Preenchido ao selecionar paciente"/></div>
-            
-            <div className="space-y-2"><Label>Data {isRecurring ? 'do 1º Atendimento' : ''} *</Label><Input type="date" onChange={(e) => handleInputChange("data", e.target.value)} required /></div>
-            
-            {/* --- INPUT DE HORA TROCADO POR SELECT --- */}
-            <div className="space-y-2"><Label>Horário *</Label>
-                <Select onValueChange={(v) => handleInputChange("hora", v)}>
-                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-2">
+                <Label>Especialidade *</Label>
+                <Select onValueChange={handleSpecialtyChange} value={formData.tipo} disabled={!formData.patientId} required>
+                    <SelectTrigger>
+                        <SelectValue placeholder={!formData.patientId ? "Selecione um paciente" : "Selecione a especialidade"} />
+                    </SelectTrigger>
                     <SelectContent>
-                        {timeSlots.map(time => <SelectItem key={time} value={time}>{time}</SelectItem>)}
+                        {availableSpecialties.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
                     </SelectContent>
                 </Select>
             </div>
-            
+            <div className="space-y-2"><Label>Data *</Label><Input type="date" onChange={(e) => handleInputChange("data", e.target.value)} required /></div>
+            <div className="space-y-2"><Label>Horário Inicial *</Label><Input type="time" onChange={(e) => handleInputChange("horaInicio", e.target.value)} required /></div>
+            <div className="space-y-2"><Label>Horário Final *</Label><Input type="time" onChange={(e) => handleInputChange("horaFim", e.target.value)} required /></div>
+          </div>
+          
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+             <div className="space-y-2"><Label>Sala</Label><Select onValueChange={handleRoomChange} value={formData.sala}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{rooms.map(r => <SelectItem key={r.id} value={r.id} className={occupiedRoomIds.includes(r.id) ? 'text-red-500 font-semibold' : ''}>{r.name} {occupiedRoomIds.includes(r.id) ? '(Ocupada)' : ''}</SelectItem>)}</SelectContent></Select></div>
+             <div className="space-y-2"><Label>Convênio</Label><Input value={formData.convenio || ''} readOnly placeholder="Automático"/></div>
+             <div className="space-y-2"><Label>Valor da Consulta (R$)</Label><div className="relative"><DollarSign className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={formData.valorConsulta?.toFixed(2).replace('.', ',') || '0,00'} readOnly className="pl-8" /></div></div>
+          </div>
+          
+          <div className="space-y-4 rounded-lg border p-4">
+            <div className="flex items-center space-x-2">
+                <Switch id="recurring-switch" checked={isRecurring} onCheckedChange={setIsRecurring} />
+                <Label htmlFor="recurring-switch" className="cursor-pointer">Repetir Semanalmente</Label>
+            </div>
             {isRecurring && (
-              <div className="space-y-2">
-                <Label>Nº de Sessões *</Label>
+              <div className="space-y-2 pt-4 border-t mt-4">
+                <Label>Número de Sessões *</Label>
                 <Input type="number" value={formData.sessions} onChange={(e) => handleInputChange("sessions", Number(e.target.value))} required min={1} />
               </div>
             )}
-
-            <div className="space-y-2"><Label>Especialidade (Tipo) *</Label><Select onValueChange={handleSpecialtyChange}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{specialties.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>Valor da Consulta (R$)</Label><div className="relative"><DollarSign className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={formData.valorConsulta?.toFixed(2).replace('.', ',') || '0,00'} readOnly className="pl-8" /></div></div>
-            <div className="space-y-2"><Label>Sala</Label><Select onValueChange={handleRoomChange} value={formData.sala}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{rooms.map(r => <SelectItem key={r.id} value={r.id} className={occupiedRoomIds.includes(r.id) ? 'text-red-500 font-semibold' : ''}>{r.name} {occupiedRoomIds.includes(r.id) ? '(Ocupada)' : ''}</SelectItem>)}</SelectContent></Select></div>
+          </div>
+          
+          <div className="space-y-2">
+            <Label>Observações</Label>
+            <Textarea placeholder="Adicione observações sobre o agendamento..." onChange={(e) => handleInputChange("observacoes", e.target.value)} />
           </div>
 
           <div className="flex justify-end gap-4 pt-4">

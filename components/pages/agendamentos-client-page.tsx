@@ -1,12 +1,10 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { useSearchParams } from 'next/navigation'
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -15,11 +13,13 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { getAppointmentsByDate, getAppointmentsForReport, Appointment, updateAppointment, deleteAppointment, AppointmentStatus, AppointmentFormData } from "@/services/appointmentService"
 import { getProfessionals, Professional } from "@/services/professionalService"
 import { getPatients, Patient } from "@/services/patientService"
-import { getRooms, Room } from "@/services/roomService" // <-- Importação adicionada
+import { getRooms, Room } from "@/services/roomService"
 import { ReportModal } from "@/components/modals/report-modal"
 import { EditAppointmentModal } from "@/components/modals/edit-appointment-modal"
 import { RenewalNotice } from "@/components/features/RenewalNotice"
+import { MultiSelectFilter, MultiSelectOption } from "@/components/ui/multi-select-filter"
 import Link from "next/link"
+import { format } from "date-fns"
 
 // --- Funções de Ajuda (Helpers) ---
 const getStatusBadge = (status: string) => {
@@ -51,23 +51,21 @@ const getAppointmentStats = (appointments: Appointment[]) => ({
 });
 
 export function AgendamentosClientPage() {
-  const searchParams = useSearchParams();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
-  const [rooms, setRooms] = useState<Room[]>([]); // <-- Estado adicionado
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("todos");
-  const [professionalFilter, setProfessionalFilter] = useState("todos");
+  const [professionalFilter, setProfessionalFilter] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [periodoAtivo, setPeriodoAtivo] = useState("todos");
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  // --- Função de "Tradução" adicionada ---
   const getRoomNameById = (roomId?: string): string => {
     if (!roomId) return "N/A";
     const room = rooms.find(r => r.id === roomId);
@@ -82,12 +80,12 @@ export function AgendamentosClientPage() {
         getAppointmentsByDate(selectedDate), 
         getProfessionals(),
         getPatients(),
-        getRooms() // <-- Busca adicionada
+        getRooms()
       ]);
       setAppointments(appointmentsData);
       setProfessionals(professionalsData);
       setPatients(patientsData);
-      setRooms(roomsData); // <-- Estado atualizado
+      setRooms(roomsData);
     } catch (err) {
       setError("Falha ao carregar dados.");
     } finally {
@@ -103,6 +101,7 @@ export function AgendamentosClientPage() {
     setSelectedAppointment(appointment);
     setIsEditModalOpen(true);
   };
+  
   const handleUpdateAppointment = async (formData: Partial<AppointmentFormData & { status: AppointmentStatus }>) => {
     if (!selectedAppointment) return;
     const result = await updateAppointment(selectedAppointment.id, formData);
@@ -114,6 +113,7 @@ export function AgendamentosClientPage() {
       alert(result.error);
     }
   };
+  
   const handleDeleteAppointment = async () => {
     if (!selectedAppointment) return;
     const result = await deleteAppointment(selectedAppointment.id);
@@ -125,7 +125,7 @@ export function AgendamentosClientPage() {
       alert(result.error);
     }
   };
-
+  
   const handleGenerateReport = async (professionalId: string, startDateStr: string, endDateStr: string) => {
     const startDate = new Date(startDateStr);
     const endDate = new Date(endDateStr);
@@ -140,7 +140,7 @@ export function AgendamentosClientPage() {
       ...appointmentsToExport.map(apt => [
         apt.start.toDate().toLocaleDateString('pt-BR'),
         apt.start.toDate().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        `"${apt.patientName}"`, apt.status, apt.tipo, getRoomNameById(apt.sala), apt.convenio || 'N/A' // <-- Sala traduzida no relatório
+        `"${apt.patientName}"`, apt.status, apt.tipo, getRoomNameById(apt.sala), apt.convenio || 'N/A'
       ].join(';'))
     ].join('\n');
     const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -155,30 +155,40 @@ export function AgendamentosClientPage() {
     document.body.removeChild(link);
   };
 
-  const appointmentsFiltrados = appointments.filter((appointment) => {
+  const appointmentsFiltrados = useMemo(() => appointments.filter((appointment) => {
     const matchesSearch = appointment.patientName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "todos" || appointment.status === statusFilter;
-    const matchesProfessional = professionalFilter === "todos" || appointment.professionalId === professionalFilter;
-    return !!(matchesSearch && matchesStatus && matchesProfessional);
-  });
+    const matchesStatus = statusFilter.length === 0 || statusFilter.includes(appointment.status);
+    const matchesProfessional = professionalFilter.length === 0 || professionalFilter.includes(appointment.professionalId);
+    return matchesSearch && matchesStatus && matchesProfessional;
+  }), [appointments, searchTerm, professionalFilter, statusFilter]);
+
   const appointmentsPorPeriodo = {
     manha: appointmentsFiltrados.filter(a => getPeriodoFromDate(a.start.toDate()) === 'manha'),
     tarde: appointmentsFiltrados.filter(a => getPeriodoFromDate(a.start.toDate()) === 'tarde'),
     noite: appointmentsFiltrados.filter(a => getPeriodoFromDate(a.start.toDate()) === 'noite'),
   };
   
+  const professionalOptions: MultiSelectOption[] = useMemo(() => professionals.map(p => ({ value: p.id, label: p.fullName })), [professionals]);
+  const statusOptions: MultiSelectOption[] = [
+      { value: "agendado", label: "Agendado" },
+      { value: "em_atendimento", label: "Em Atendimento" },
+      { value: "finalizado", label: "Finalizado" },
+      { value: "nao_compareceu", label: "Não Compareceu" },
+      { value: "cancelado", label: "Cancelado" },
+  ];
+
   const BlocoDeEstatisticas = ({ agendamentos }: { agendamentos: Appointment[] }) => {
-      const stats = getAppointmentStats(agendamentos);
-      return (
-        <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
-            <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold">{stats.total}</p><p className="text-xs text-muted-foreground">Total</p></CardContent></Card>
-            <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-blue-600">{stats.agendados}</p><p className="text-xs text-blue-600">Agendados</p></CardContent></Card>
-            <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-orange-500">{stats.emAtendimento}</p><p className="text-xs text-orange-500">Em Atend.</p></CardContent></Card>
-            <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-green-600">{stats.finalizados}</p><p className="text-xs text-green-600">Finalizados</p></CardContent></Card>
-            <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-purple-600">{stats.cancelados}</p><p className="text-xs text-purple-600">Cancelados</p></CardContent></Card>
-            <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-red-600">{stats.naoCompareceu}</p><p className="text-xs text-red-600">Faltas</p></CardContent></Card>
-        </div>
-      )
+    const stats = getAppointmentStats(agendamentos);
+    return (
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+          <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold">{stats.total}</p><p className="text-xs text-muted-foreground">Total</p></CardContent></Card>
+          <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-blue-600">{stats.agendados}</p><p className="text-xs text-blue-600">Agendados</p></CardContent></Card>
+          <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-orange-500">{stats.emAtendimento}</p><p className="text-xs text-orange-500">Em Atend.</p></CardContent></Card>
+          <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-green-600">{stats.finalizados}</p><p className="text-xs text-green-600">Finalizados</p></CardContent></Card>
+          <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-purple-600">{stats.cancelados}</p><p className="text-xs text-purple-600">Cancelados</p></CardContent></Card>
+          <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-red-600">{stats.naoCompareceu}</p><p className="text-xs text-red-600">Faltas</p></CardContent></Card>
+      </div>
+    )
   };
 
   const TabelaDeAgendamentos = ({ agendamentos }: { agendamentos: Appointment[] }) => (
@@ -186,7 +196,7 @@ export function AgendamentosClientPage() {
       <Table>
         <TableHeader><TableRow>
           <TableHead>Período</TableHead><TableHead>Paciente</TableHead><TableHead>Profissional</TableHead>
-          <TableHead>Hora</TableHead><TableHead>Sala</TableHead><TableHead>Status</TableHead>
+          <TableHead>Horário</TableHead><TableHead>Sala</TableHead><TableHead>Status</TableHead>
           <TableHead>Status Sec.</TableHead><TableHead className="text-right">Ações</TableHead>
         </TableRow></TableHeader>
         <TableBody>
@@ -195,7 +205,7 @@ export function AgendamentosClientPage() {
               <TableCell><div className="flex items-center gap-1 text-xs">{getPeriodoIcon(getPeriodoFromDate(appointment.start.toDate()))} <span>{getPeriodoLabel(getPeriodoFromDate(appointment.start.toDate()))}</span></div></TableCell>
               <TableCell className="font-medium">{appointment.patientName}</TableCell>
               <TableCell>{appointment.professionalName}</TableCell>
-              <TableCell>{appointment.start.toDate().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</TableCell>
+              <TableCell>{format(appointment.start.toDate(), 'HH:mm')} - {format(appointment.end.toDate(), 'HH:mm')}</TableCell>
               <TableCell><Badge variant="outline">{getRoomNameById(appointment.sala)}</Badge></TableCell>
               <TableCell>{getStatusBadge(appointment.status)}</TableCell>
               <TableCell>{getStatusSecundarioBadge(appointment.statusSecundario)}</TableCell>
@@ -239,11 +249,11 @@ export function AgendamentosClientPage() {
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5" />Filtros</CardTitle></CardHeader>
           <CardContent>
-              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="space-y-2"><Label htmlFor="search">Buscar paciente</Label><div className="relative"><Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input id="search" placeholder="Nome do paciente..." className="pl-8" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div></div>
-                  <div className="space-y-2"><Label htmlFor="date">Data</Label><Input id="date" type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} /></div>
-                  <div className="space-y-2"><Label htmlFor="professional">Profissional</Label><Select value={professionalFilter} onValueChange={setProfessionalFilter}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent><SelectItem value="todos">Todos</SelectItem>{professionals.map(pro => <SelectItem key={pro.id} value={pro.id}>{pro.fullName}</SelectItem>)}</SelectContent></Select></div>
-                  <div className="space-y-2"><Label htmlFor="status">Status</Label><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent><SelectItem value="todos">Todos</SelectItem><SelectItem value="agendado">Agendado</SelectItem><SelectItem value="em_atendimento">Em Atendimento</SelectItem><SelectItem value="finalizado">Finalizado</SelectItem><SelectItem value="nao_compareceu">Não compareceu</SelectItem><SelectItem value="cancelado">Cancelado</SelectItem></SelectContent></Select></div>
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-4 items-end">
+                  <div className="space-y-2"><Label>Buscar por Nome do Paciente</Label><div className="relative"><Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Nome do paciente..." className="pl-8" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div></div>
+                  <div className="space-y-2"><Label>Data</Label><Input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} /></div>
+                  <div className="space-y-2"><Label>Profissional(is)</Label><MultiSelectFilter options={professionalOptions} selectedValues={professionalFilter} onSelectionChange={setProfessionalFilter} placeholder="Todos os Profissionais" /></div>
+                  <div className="space-y-2"><Label>Status</Label><MultiSelectFilter options={statusOptions} selectedValues={statusFilter} onSelectionChange={setStatusFilter} placeholder="Todos os Status" /></div>
               </div>
           </CardContent>
         </Card>
