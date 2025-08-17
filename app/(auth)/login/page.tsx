@@ -65,7 +65,7 @@ function LoginForm() {
       <CardHeader className="space-y-4 text-center">
         <div className="flex justify-center">
           <div className="relative h-20 w-32">
-            <Image src="/images/logotipo-azul.jpg" alt="Casa Libelle" fill className="object-contain" />
+            <Image src="/images/logotipo-azul.png" alt="Casa Libelle" fill className="object-contain" />
           </div>
         </div>
         <div>

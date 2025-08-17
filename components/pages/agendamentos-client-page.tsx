@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, Filter, MoreHorizontal, Sun, Sunset, Moon, Download, Plus, AlertCircle } from "lucide-react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { getAppointmentsByDate, getAppointmentsForReport, Appointment, updateAppointment, deleteAppointment, AppointmentStatus, AppointmentFormData } from "@/services/appointmentService"
 import { getProfessionals, Professional } from "@/services/professionalService"
 import { getPatients, Patient } from "@/services/patientService"
@@ -20,6 +20,7 @@ import { RenewalNotice } from "@/components/features/RenewalNotice"
 import { MultiSelectFilter, MultiSelectOption } from "@/components/ui/multi-select-filter"
 import Link from "next/link"
 import { format } from "date-fns"
+import { toast } from "sonner"
 
 // --- Funções de Ajuda (Helpers) ---
 const getStatusBadge = (status: string) => {
@@ -29,7 +30,7 @@ const getStatusBadge = (status: string) => {
 };
 const getStatusSecundarioBadge = (statusSecundario?: string) => {
   if (!statusSecundario) return null;
-  const statusConfig: { [key: string]: { label: string; className: string } } = { confirmado: { label: "Confirmado", className: "text-green-800" }, pendente_confirmacao: { label: "Pendente", className: "text-orange-800 animate-pulse" }, pago: { label: "Pago", className: "text-green-800" }, sem_justificativa: { label: "S/ Justificativa", className: "text-red-800" }, reagendado: { label: "Reagendado", className: "text-blue-800" }, em_sala: { label: "Em Sala", className: "text-orange-800" } };
+  const statusConfig: { [key: string]: { label: string; className: string } } = { confirmado: { label: "Confirmado", className: "text-green-800" }, pendente_confirmacao: { label: "Pendente", className: "text-orange-800" }, pago: { label: "Pago", className: "text-green-800" }, sem_justificativa: { label: "S/ Justificativa", className: "text-red-800" }, reagendado: { label: "Reagendado", className: "text-blue-800" }, em_sala: { label: "Em Sala", className: "text-orange-800" }, fnj_paciente: { label: "FNJ Paciente", className: "text-red-800" }, f_terapeuta: { label: "F Terapeuta", className: "text-red-800" }, fj_paciente: { label: "FJ Paciente", className: "text-yellow-800" }, f_dupla: { label: "F Dupla", className: "text-red-800" }, suspenso_plano: { label: "Suspenso", className: "text-purple-800" } };
   const config = statusConfig[statusSecundario] || { label: statusSecundario, className: 'text-gray-800' };
   return <Badge variant="secondary" className={`text-xs ${config.className}`}>{config.label}</Badge>;
 };
@@ -49,6 +50,20 @@ const getAppointmentStats = (appointments: Appointment[]) => ({
     naoCompareceu: appointments.filter((a) => a.status === "nao_compareceu").length,
     emAtendimento: appointments.filter((a) => a.status === "em_atendimento").length,
 });
+const secondaryStatusOptions = [
+    { value: "confirmado", label: "Confirmado" },
+    { value: "pendente_confirmacao", label: "Pendente" },
+    { value: "pago", label: "Pago" },
+    { value: "sem_justificativa", label: "S/ Justificativa" },
+    { value: "reagendado", label: "Reagendado" },
+    { value: "em_sala", label: "Em Sala" },
+    { value: "fnj_paciente", label: "FNJ Paciente" },
+    { value: "f_terapeuta", label: "F Terapeuta" },
+    { value: "fj_paciente", label: "FJ Paciente" },
+    { value: "f_dupla", label: "F Dupla" },
+    { value: "suspenso_plano", label: "Suspenso pelo Plano" },
+    { value: "nenhum", label: "Nenhum" },
+];
 
 export function AgendamentosClientPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -106,11 +121,11 @@ export function AgendamentosClientPage() {
     if (!selectedAppointment) return;
     const result = await updateAppointment(selectedAppointment.id, formData);
     if (result.success) {
-      alert("Agendamento atualizado!");
+      toast.success("Agendamento atualizado com sucesso!");
       setIsEditModalOpen(false);
       fetchData();
     } else {
-      alert(result.error);
+      toast.error(result.error || "Falha ao atualizar o agendamento.");
     }
   };
   
@@ -118,11 +133,27 @@ export function AgendamentosClientPage() {
     if (!selectedAppointment) return;
     const result = await deleteAppointment(selectedAppointment.id);
     if (result.success) {
-      alert("Agendamento excluído!");
+      toast.success("Agendamento excluído com sucesso!");
       setIsEditModalOpen(false);
       fetchData();
     } else {
-      alert(result.error);
+      toast.error(result.error || "Falha ao excluir o agendamento.");
+    }
+  };
+
+  const handleStatusSecundarioChange = async (appointmentId: string, newStatus: string) => {
+    const statusToSave = newStatus === 'nenhum' ? '' : newStatus;
+    const result = await updateAppointment(appointmentId, { statusSecundario: statusToSave });
+
+    if (result.success) {
+      toast.success("Status do agendamento atualizado!");
+      setAppointments(prev => 
+        prev.map(app => 
+          app.id === appointmentId ? { ...app, statusSecundario: statusToSave } : app
+        )
+      );
+    } else {
+      toast.error("Falha ao atualizar o status.");
     }
   };
   
@@ -201,15 +232,48 @@ export function AgendamentosClientPage() {
         </TableRow></TableHeader>
         <TableBody>
           {agendamentos.length > 0 ? agendamentos.map((appointment) => (
-            <TableRow key={appointment.id}>
+            <TableRow 
+              key={appointment.id} 
+              onClick={() => handleOpenEditModal(appointment)}
+              className="cursor-pointer hover:bg-muted/50"
+            >
               <TableCell><div className="flex items-center gap-1 text-xs">{getPeriodoIcon(getPeriodoFromDate(appointment.start.toDate()))} <span>{getPeriodoLabel(getPeriodoFromDate(appointment.start.toDate()))}</span></div></TableCell>
               <TableCell className="font-medium">{appointment.patientName}</TableCell>
               <TableCell>{appointment.professionalName}</TableCell>
               <TableCell>{format(appointment.start.toDate(), 'HH:mm')} - {format(appointment.end.toDate(), 'HH:mm')}</TableCell>
               <TableCell><Badge variant="outline">{getRoomNameById(appointment.sala)}</Badge></TableCell>
               <TableCell>{getStatusBadge(appointment.status)}</TableCell>
-              <TableCell>{getStatusSecundarioBadge(appointment.statusSecundario)}</TableCell>
-              <TableCell className="text-right"><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent><DropdownMenuItem onClick={() => handleOpenEditModal(appointment)}>Editar / Status</DropdownMenuItem></DropdownMenuContent></DropdownMenu></TableCell>
+              <TableCell onClick={(e) => e.stopPropagation()}>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="h-auto p-0 justify-start font-normal text-xs hover:bg-gray-200">
+                      {getStatusSecundarioBadge(appointment.statusSecundario) || <Badge variant="outline">Nenhum</Badge>}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuLabel>Alterar Status</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {secondaryStatusOptions.map(option => (
+                      <DropdownMenuItem 
+                        key={option.value}
+                        onSelect={() => handleStatusSecundarioChange(appointment.id, option.value)}
+                      >
+                        {option.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TableCell>
+              <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenEditModal(appointment); }}>
+                      Editar / Detalhes
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TableCell>
             </TableRow>
           )) : <TableRow><TableCell colSpan={8} className="text-center h-24">Nenhum agendamento encontrado.</TableCell></TableRow>}
         </TableBody>
@@ -243,9 +307,7 @@ export function AgendamentosClientPage() {
         </div>
         
         <RenewalNotice onActionCompleted={fetchData} />
-        
         <BlocoDeEstatisticas agendamentos={appointments} />
-
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5" />Filtros</CardTitle></CardHeader>
           <CardContent>

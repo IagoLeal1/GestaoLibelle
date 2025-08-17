@@ -20,9 +20,9 @@ export default function DashboardPage() {
     case 'admin':
       return <AdminDashboard />;
     case 'profissional':
-      return <ProfessionalDashboard />; // Você criará este componente no futuro
+      return <ProfessionalDashboard />; 
     case 'familiar':
-      return <FamilyDashboard />; // Você criará este componente no futuro
+      return <FamilyDashboard />; 
     case 'funcionario':
       return <div>Painel do Funcionário em construção.</div>;
     default:

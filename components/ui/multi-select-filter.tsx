@@ -73,8 +73,8 @@ export function MultiSelectFilter({
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
         <Command>
           <CommandInput placeholder="Buscar..." />
-          <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
-          <CommandGroup>
+          <CommandGroup className="max-h-64 overflow-y-auto">
+            <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
             {selectedValues.length > 0 && (
                 <div className="flex justify-end p-1 border-b">
                     <Button variant="link" size="sm" onClick={handleClear}>Limpar Seleção</Button>

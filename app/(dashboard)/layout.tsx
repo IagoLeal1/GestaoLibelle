@@ -16,7 +16,7 @@ export default function DashboardLayout({
         <AppSidebar />
         <SidebarInset>
           <Header />
-          <main className="p-4 sm:p-6 bg-gray-50 min-h-screen">
+          <main className="p-4 sm:p-6 bg-support-light-gray min-h-screen">
             {children}
           </main>
         </SidebarInset>

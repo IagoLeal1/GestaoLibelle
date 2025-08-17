@@ -49,7 +49,7 @@ export function AppSidebar() {
     <Sidebar className="border-r">
       <SidebarHeader className="p-6 flex justify-center">
         <div className="relative h-16 w-24">
-          <Image src="/images/logotipo-azul.jpg" alt="Casa Libelle" fill className="object-contain" />
+          <Image src="/images/logotipo-azul.png" alt="Casa Libelle" fill className="object-contain" />
         </div>
       </SidebarHeader>
       <SidebarContent>

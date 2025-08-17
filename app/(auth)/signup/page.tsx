@@ -116,7 +116,7 @@ export default function SignUpPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <Card className="w-full max-w-3xl">
         <CardHeader className="text-center">
-            <Image src="/images/logotipo-azul.jpg" alt="Casa Libelle" width={128} height={64} className="mx-auto object-contain" />
+            <Image src="/images/logotipo-azul.png" alt="Casa Libelle" width={128} height={64} className="mx-auto object-contain" />
             <CardTitle className="text-2xl pt-4">Solicitar Acesso</CardTitle>
             <CardDescription>Preencha os dados para solicitar seu cadastro no sistema.</CardDescription>
         </CardHeader>

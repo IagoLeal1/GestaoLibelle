@@ -23,7 +23,6 @@ export function AppointmentForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Estados para guardar os dados das coleções
   const [patients, setPatients] = useState<Patient[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
@@ -128,7 +127,6 @@ export function AppointmentForm() {
     setLoading(true);
     setError(null);
     
-    // Validação
     if (!formData.patientId || !formData.professionalId || !formData.data || !formData.horaInicio || !formData.horaFim || !formData.tipo) {
         setError("Todos os campos marcados com * são obrigatórios.");
         setLoading(false);
@@ -162,38 +160,56 @@ export function AppointmentForm() {
         <form onSubmit={handleSubmit} className="space-y-6">
           {error && (<Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Erro</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>)}
           
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
+          <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-6">
+            
+            <div className="space-y-2 lg:col-span-3">
                 <Label>Paciente *</Label>
                 <Select onValueChange={handlePatientChange} required>
                     <SelectTrigger><SelectValue placeholder="Selecione o paciente" /></SelectTrigger>
                     <SelectContent>{patients.map(p => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent>
                 </Select>
             </div>
-            <div className="space-y-2"><Label>Profissional *</Label><Select onValueChange={(v) => handleInputChange("professionalId", v)} required><SelectTrigger><SelectValue placeholder="Selecione o profissional" /></SelectTrigger><SelectContent>{professionals.map(p => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent></Select></div>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-2">
-                <Label>Especialidade *</Label>
-                <Select onValueChange={handleSpecialtyChange} value={formData.tipo} disabled={!formData.patientId} required>
-                    <SelectTrigger>
-                        <SelectValue placeholder={!formData.patientId ? "Selecione um paciente" : "Selecione a especialidade"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {availableSpecialties.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                    </SelectContent>
+            <div className="space-y-2 lg:col-span-3">
+                <Label>Profissional *</Label>
+                <Select onValueChange={(v) => handleInputChange("professionalId", v)} required>
+                    <SelectTrigger><SelectValue placeholder="Selecione o profissional" /></SelectTrigger>
+                    <SelectContent>{professionals.map(p => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent>
                 </Select>
             </div>
-            <div className="space-y-2"><Label>Data *</Label><Input type="date" onChange={(e) => handleInputChange("data", e.target.value)} required /></div>
-            <div className="space-y-2"><Label>Horário Inicial *</Label><Input type="time" onChange={(e) => handleInputChange("horaInicio", e.target.value)} required /></div>
-            <div className="space-y-2"><Label>Horário Final *</Label><Input type="time" onChange={(e) => handleInputChange("horaFim", e.target.value)} required /></div>
-          </div>
-          
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-             <div className="space-y-2"><Label>Sala</Label><Select onValueChange={handleRoomChange} value={formData.sala}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{rooms.map(r => <SelectItem key={r.id} value={r.id} className={occupiedRoomIds.includes(r.id) ? 'text-red-500 font-semibold' : ''}>{r.name} {occupiedRoomIds.includes(r.id) ? '(Ocupada)' : ''}</SelectItem>)}</SelectContent></Select></div>
-             <div className="space-y-2"><Label>Convênio</Label><Input value={formData.convenio || ''} readOnly placeholder="Automático"/></div>
-             <div className="space-y-2"><Label>Valor da Consulta (R$)</Label><div className="relative"><DollarSign className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={formData.valorConsulta?.toFixed(2).replace('.', ',') || '0,00'} readOnly className="pl-8" /></div></div>
+
+            <div className="space-y-2 lg:col-span-2">
+                <Label>Especialidade *</Label>
+                <Select onValueChange={handleSpecialtyChange} value={formData.tipo} disabled={!formData.patientId} required>
+                    <SelectTrigger><SelectValue placeholder={!formData.patientId ? "Selecione um paciente" : "Selecione..."} /></SelectTrigger>
+                    <SelectContent>{availableSpecialties.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
+                </Select>
+            </div>
+            <div className="space-y-2 lg:col-span-2">
+                <Label>Data *</Label>
+                <Input type="date" onChange={(e) => handleInputChange("data", e.target.value)} required />
+            </div>
+            <div className="space-y-2 lg:col-span-1">
+                <Label>Horário Inicial *</Label>
+                <Input type="time" onChange={(e) => handleInputChange("horaInicio", e.target.value)} required />
+            </div>
+            <div className="space-y-2 lg:col-span-1">
+                <Label>Horário Final *</Label>
+                <Input type="time" onChange={(e) => handleInputChange("horaFim", e.target.value)} required />
+            </div>
+
+            <div className="space-y-2 lg:col-span-2">
+                <Label>Sala</Label>
+                <Select onValueChange={handleRoomChange} value={formData.sala}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{rooms.map(r => <SelectItem key={r.id} value={r.id} className={occupiedRoomIds.includes(r.id) ? 'text-red-500 font-semibold' : ''}>{r.name} {occupiedRoomIds.includes(r.id) ? '(Ocupada)' : ''}</SelectItem>)}</SelectContent></Select>
+            </div>
+            <div className="space-y-2 lg:col-span-2">
+                <Label>Convênio</Label>
+                <Input value={formData.convenio || ''} readOnly placeholder="Automático"/>
+            </div>
+            <div className="space-y-2 lg:col-span-2">
+                <Label>Valor da Consulta (R$)</Label>
+                <div className="relative"><DollarSign className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={formData.valorConsulta?.toFixed(2).replace('.', ',') || '0,00'} readOnly className="pl-8" /></div>
+            </div>
+
           </div>
           
           <div className="space-y-4 rounded-lg border p-4">
