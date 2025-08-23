@@ -13,7 +13,7 @@ import {
   deleteDoc,
   writeBatch
 } from 'firebase/firestore';
-import { addWeeks, startOfDay, endOfDay, differenceInMinutes } from 'date-fns';
+import { addWeeks, startOfDay, endOfDay, differenceInMinutes, addDays } from 'date-fns';
 
 // --- Interfaces ---
 export type AppointmentStatus = 'agendado' | 'finalizado' | 'nao_compareceu' | 'cancelado' | 'em_atendimento';
@@ -104,23 +104,29 @@ export const getAppointmentsByProfessional = async (professionalId: string, date
     }
 };
 
-export const getAppointmentsForReport = async (professionalId: string, startDate: Date, endDate: Date): Promise<Appointment[]> => {
+export const getAppointmentsForReport = async (options: { professionalId?: string, patientId?: string, startDate: Date, endDate: Date }): Promise<Appointment[]> => {
     try {
-      const q = query(
-        collection(db, 'appointments'),
-        where('professionalId', '==', professionalId),
-        where('start', '>=', Timestamp.fromDate(startOfDay(startDate))),
-        where('start', '<=', Timestamp.fromDate(endOfDay(endDate))),
-        orderBy('start')
-      );
-  
-      const snapshot = await getDocs(q);
-      if (snapshot.empty) return [];
-  
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
+        const appointmentsRef = collection(db, 'appointments');
+        let q = query(
+          appointmentsRef,
+          where('start', '>=', Timestamp.fromDate(startOfDay(options.startDate))),
+          where('start', '<=', Timestamp.fromDate(endOfDay(options.endDate))),
+          orderBy('start')
+        );
+
+        if (options.professionalId) {
+            q = query(q, where('professionalId', '==', options.professionalId));
+        }
+        if (options.patientId) {
+            q = query(q, where('patientId', '==', options.patientId));
+        }
+
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) return [];
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
     } catch (error) {
-      console.error("Erro ao buscar agendamentos para relatório:", error);
-      return [];
+        console.error("Erro ao buscar agendamentos para relatório:", error);
+        return [];
     }
 };
 
@@ -223,7 +229,6 @@ export const updateAppointment = async (id: string, data: Partial<AppointmentFor
     const docRef = doc(db, 'appointments', id);
     const dataToUpdate: { [key: string]: any } = { ...data };
 
-    // Converte o valor 'nenhum' do formulário para uma string vazia no banco
     if (dataToUpdate.statusSecundario === 'nenhum') {
       dataToUpdate.statusSecundario = '';
     }
@@ -262,15 +267,19 @@ export const deleteAppointment = async (id: string) => {
   }
 };
 
-// --- Funções de Renovação ---
+// --- Funções de Renovação e Blocos ---
 
 export const getRenewableAppointments = async (): Promise<Appointment[]> => {
   try {
+    const today = startOfDay(new Date());
+    const sevenDaysFromNow = endOfDay(addDays(today, 7));
+
     const q = query(
       collection(db, 'appointments'),
       where('isLastInBlock', '==', true),
       where('status', '==', 'agendado'),
-      orderBy('start')
+      where('start', '>=', Timestamp.fromDate(today)),
+      where('start', '<=', Timestamp.fromDate(sevenDaysFromNow))
     );
     const snapshot = await getDocs(q);
     if (snapshot.empty) return [];
@@ -287,9 +296,7 @@ export const renewAppointmentBlock = async (lastAppointment: Appointment, sessio
     if (!sessionsToRenew || sessionsToRenew <= 0) {
       return { success: false, error: "O número de sessões para renovação deve ser maior que zero." };
     }
-
     const durationInMinutes = differenceInMinutes(lastAppointment.end.toDate(), lastAppointment.start.toDate());
-
     const batch = writeBatch(db);
     const newBlockId = doc(collection(db, 'idGenerator')).id;
     const firstNewDate = addWeeks(lastAppointment.start.toDate(), 1);
@@ -338,6 +345,31 @@ export const dismissRenewal = async (appointmentId: string) => {
   } catch (error) {
     console.error("Erro ao dispensar renovação:", error);
     return { success: false, error: "Falha ao dispensar o aviso de renovação." };
+  }
+};
+
+export const deleteFutureAppointmentsInBlock = async (appointment: Appointment) => {
+  try {
+    if (!appointment.blockId) {
+      return { success: false, error: "Este agendamento não faz parte de um bloco." };
+    }
+    const appointmentsRef = collection(db, 'appointments');
+    const q = query(
+      appointmentsRef,
+      where('blockId', '==', appointment.blockId),
+      where('start', '>=', appointment.start)
+    );
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return { success: true };
+    const batch = writeBatch(db);
+    snapshot.docs.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+    await batch.commit();
+    return { success: true };
+  } catch (error) {
+    console.error("Erro ao deletar agendamentos em lote:", error);
+    return { success: false, error: "Falha ao excluir o bloco de agendamentos." };
   }
 };
 

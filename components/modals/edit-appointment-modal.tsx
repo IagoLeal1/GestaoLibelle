@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Appointment, AppointmentFormData, AppointmentStatus } from "@/services/appointmentService";
+import { Appointment, AppointmentFormData, AppointmentStatus, deleteAppointment, deleteFutureAppointmentsInBlock } from "@/services/appointmentService";
 import { Patient } from "@/services/patientService";
 import { Professional } from "@/services/professionalService";
 import { getSpecialties, Specialty } from "@/services/specialtyService";
@@ -15,16 +15,34 @@ import { getRooms, Room } from "@/services/roomService";
 import { getOccupiedRoomIdsByTime } from "@/services/appointmentService";
 import { format } from "date-fns";
 import { DollarSign } from "lucide-react";
+import { toast } from "sonner";
 
 interface EditAppointmentModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (formData: Partial<AppointmentFormData & { status: AppointmentStatus }>) => void;
-  onDelete: () => void;
+  onDelete: (isBlockDeletion: boolean) => void;
   appointment: Appointment | null;
   patients: Patient[];
   professionals: Professional[];
 }
+
+// --- CONSTANTE ADICIONADA AQUI ---
+const secondaryStatusOptions = [
+    { value: "confirmado", label: "Confirmado" },
+    { value: "pendente_confirmacao", label: "Pendente" },
+    { value: "pago", label: "Pago" },
+    { value: "sem_justificativa", label: "S/ Justificativa" },
+    { value: "reagendado", label: "Reagendado" },
+    { value: "em_sala", label: "Em Sala" },
+    { value: "fnj_paciente", label: "FNJ Paciente" },
+    { value: "f_terapeuta", label: "F Terapeuta" },
+    { value: "fj_paciente", label: "FJ Paciente" },
+    { value: "f_dupla", label: "F Dupla" },
+    { value: "suspenso_plano", label: "Suspenso pelo Plano" },
+    { value: "nenhum", label: "Nenhum" },
+];
+// ------------------------------------
 
 export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appointment, patients, professionals }: EditAppointmentModalProps) {
   const [formData, setFormData] = useState<Partial<AppointmentFormData & { status: AppointmentStatus }>>({});
@@ -33,9 +51,10 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
   const [availableSpecialties, setAvailableSpecialties] = useState<Specialty[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [occupiedRoomIds, setOccupiedRoomIds] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (isOpen) { // Só busca os dados quando o modal for aberto, para economizar recursos
+    if (isOpen) {
         const fetchDropdownData = async () => {
             const [specialtiesData, roomsData] = await Promise.all([
                 getSpecialties(),
@@ -49,7 +68,7 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
   }, [isOpen]);
 
   useEffect(() => {
-    if (appointment && specialties.length > 0) { // Garante que as especialidades já foram carregadas
+    if (appointment && specialties.length > 0) {
       const startDate = appointment.start.toDate();
       const endDate = appointment.end.toDate();
 
@@ -81,7 +100,7 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
       });
       setAvailableSpecialties(filteredSpecialties);
     }
-  }, [appointment, patients, specialties, isOpen]); // Roda quando o modal abre e os dados chegam
+  }, [appointment, patients, specialties, isOpen]);
 
   useEffect(() => {
     const checkRoomAvailability = async () => {
@@ -133,8 +152,39 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
     handleInputChange("sala", roomId);
   };
 
-  const handleSave = () => onSave(formData);
-  const handleDelete = () => { if (window.confirm("Tem certeza que deseja excluir este agendamento?")) { onDelete(); } };
+  const handleSave = async () => {
+    setIsSubmitting(true);
+    await onSave(formData); // Espera a função onSave (que é async) terminar
+    setIsSubmitting(false);
+  };
+  
+  const handleDelete = async () => {
+    if (!appointment) return;
+    setIsSubmitting(true);
+
+    if (appointment.blockId) {
+      const userChoice = confirm(
+        `Este agendamento faz parte de uma sequência.\n\nClique em 'OK' para apagar este e todos os futuros agendamentos da sequência.\n\nClique em 'Cancelar' para apagar APENAS o agendamento de ${format(appointment.start.toDate(), 'dd/MM/yyyy')}.`
+      );
+
+      if (userChoice) {
+        await deleteFutureAppointmentsInBlock(appointment);
+        onDelete(true); 
+      } else {
+        const singleDeleteChoice = confirm("Confirmar a exclusão APENAS deste agendamento?");
+        if (singleDeleteChoice) {
+            await deleteAppointment(appointment.id);
+            onDelete(false);
+        }
+      }
+    } else {
+      if (window.confirm("Tem certeza que deseja excluir este agendamento?")) {
+        await deleteAppointment(appointment.id);
+        onDelete(false);
+      }
+    }
+    setIsSubmitting(false);
+  };
 
   if (!appointment) return null;
 
@@ -164,7 +214,6 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
                 <div className="space-y-2"><Label>Valor (R$)</Label><div className="relative"><DollarSign className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={formData.valorConsulta?.toFixed(2).replace('.', ',') || '0,00'} readOnly className="pl-8" /></div></div>
             </div>
 
-            {/* --- CAMPOS DE STATUS ADICIONADOS/CORRIGIDOS --- */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                   <Label>Status Principal</Label>
@@ -181,15 +230,12 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
               </div>
               <div className="space-y-2">
                   <Label>Status Secundário</Label>
-                  <Select value={formData.statusSecundario || ''} onValueChange={(v) => handleInputChange("statusSecundario", v)}>
+                  <Select value={formData.statusSecundario || 'nenhum'} onValueChange={(v) => handleInputChange("statusSecundario", v)}>
                       <SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger>
                       <SelectContent>
-                          <SelectItem value="fnj_paciente">FNJ paciente</SelectItem>
-                          <SelectItem value="f_terapeuta">F terapeuta</SelectItem>
-                          <SelectItem value="fj_paciente">FJ paciente</SelectItem>
-                          <SelectItem value="f_dupla">F dupla</SelectItem>
-                          <SelectItem value="suspenso_plano">Suspenso pelo plano</SelectItem>
-                          <SelectItem value="nenhum">Nenhum</SelectItem>
+                          {secondaryStatusOptions.map(option => (
+                              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                          ))}
                       </SelectContent>
                   </Select>
               </div>
@@ -198,10 +244,12 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
             <div className="space-y-2"><Label>Observações</Label><Textarea value={formData.observacoes || ''} onChange={(e) => handleInputChange("observacoes", e.target.value)} /></div>
         </div>
         <DialogFooter className="justify-between sm:justify-between">
-            <Button variant="destructive" onClick={handleDelete}>Excluir Agendamento</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={isSubmitting}>Excluir Agendamento</Button>
             <div className="flex gap-2">
                 <Button variant="outline" onClick={onClose}>Cancelar</Button>
-                <Button onClick={handleSave}>Salvar Alterações</Button>
+                <Button onClick={handleSave} disabled={isSubmitting}>
+                    {isSubmitting ? "Salvando..." : "Salvar Alterações"}
+                </Button>
             </div>
         </DialogFooter>
       </DialogContent>

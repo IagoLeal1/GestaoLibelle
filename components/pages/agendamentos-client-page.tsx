@@ -50,14 +50,6 @@ const getAppointmentStats = (appointments: Appointment[]) => ({
     naoCompareceu: appointments.filter((a) => a.status === "nao_compareceu").length,
     emAtendimento: appointments.filter((a) => a.status === "em_atendimento").length,
 });
-
-const primaryStatusOptions: { value: AppointmentStatus; label: string }[] = [
-    { value: "agendado", label: "Agendado" },
-    { value: "em_atendimento", label: "Em Atendimento" },
-    { value: "finalizado", label: "Finalizado" },
-    { value: "nao_compareceu", label: "Não Compareceu" },
-    { value: "cancelado", label: "Cancelado" },
-];
 const secondaryStatusOptions = [
     { value: "confirmado", label: "Confirmado" },
     { value: "pendente_confirmacao", label: "Pendente" },
@@ -71,6 +63,13 @@ const secondaryStatusOptions = [
     { value: "f_dupla", label: "F Dupla" },
     { value: "suspenso_plano", label: "Suspenso pelo Plano" },
     { value: "nenhum", label: "Nenhum" },
+];
+const primaryStatusOptions: { value: AppointmentStatus; label: string }[] = [
+    { value: "agendado", label: "Agendado" },
+    { value: "em_atendimento", label: "Em Atendimento" },
+    { value: "finalizado", label: "Finalizado" },
+    { value: "nao_compareceu", label: "Não Compareceu" },
+    { value: "cancelado", label: "Cancelado" },
 ];
 
 export function AgendamentosClientPage() {
@@ -137,27 +136,19 @@ export function AgendamentosClientPage() {
     }
   };
   
-  const handleDeleteAppointment = async () => {
-    if (!selectedAppointment) return;
-    const result = await deleteAppointment(selectedAppointment.id);
-    if (result.success) {
-      toast.success("Agendamento excluído com sucesso!");
-      setIsEditModalOpen(false);
-      fetchData();
-    } else {
-      toast.error(result.error || "Falha ao excluir o agendamento.");
-    }
+  const handleDeleteAppointment = (isBlock: boolean) => {
+    // A lógica de exclusão agora está dentro do modal, 
+    // esta função apenas fecha o modal e recarrega os dados.
+    toast.success("Operação de exclusão concluída.");
+    setIsEditModalOpen(false);
+    fetchData();
   };
-
+  
   const handleStatusChange = async (appointmentId: string, newStatus: AppointmentStatus) => {
     const result = await updateAppointment(appointmentId, { status: newStatus });
     if (result.success) {
       toast.success("Status atualizado!");
-      setAppointments(prev => 
-        prev.map(app => 
-          app.id === appointmentId ? { ...app, status: newStatus } : app
-        )
-      );
+      setAppointments(prev => prev.map(app => app.id === appointmentId ? { ...app, status: newStatus } : app));
     } else {
       toast.error("Falha ao atualizar o status.");
     }
@@ -166,21 +157,55 @@ export function AgendamentosClientPage() {
   const handleStatusSecundarioChange = async (appointmentId: string, newStatus: string) => {
     const statusToSave = newStatus === 'nenhum' ? '' : newStatus;
     const result = await updateAppointment(appointmentId, { statusSecundario: statusToSave });
-
     if (result.success) {
       toast.success("Status atualizado!");
-      setAppointments(prev => 
-        prev.map(app => 
-          app.id === appointmentId ? { ...app, statusSecundario: statusToSave } : app
-        )
-      );
+      setAppointments(prev => prev.map(app => app.id === appointmentId ? { ...app, statusSecundario: statusToSave } : app));
     } else {
       toast.error("Falha ao atualizar o status.");
     }
   };
   
-  const handleGenerateReport = async (professionalId: string, startDateStr: string, endDateStr: string) => {
-    // Implementação completa da geração de relatório
+  const handleGenerateReport = async (professionalId: string | undefined, patientId: string | undefined, startDateStr: string, endDateStr: string) => {
+    const startDate = new Date(startDateStr);
+    const endDate = new Date(endDateStr);
+    const appointmentsToExport = await getAppointmentsForReport({ professionalId, patientId, startDate, endDate });
+    if (appointmentsToExport.length === 0) {
+      alert("Nenhum agendamento encontrado para os filtros selecionados.");
+      return;
+    }
+    const headers = ["Data", "Hora Inicio", "Hora Fim", "Paciente", "Profissional", "Status", "Tipo", "Sala", "Convenio"];
+    const csvContent = [
+      headers.join(';'),
+      ...appointmentsToExport.map(apt => [
+        format(apt.start.toDate(), 'dd/MM/yyyy'),
+        format(apt.start.toDate(), 'HH:mm'),
+        format(apt.end.toDate(), 'HH:mm'),
+        `"${apt.patientName}"`,
+        `"${apt.professionalName}"`,
+        apt.status, apt.tipo, getRoomNameById(apt.sala), apt.convenio || 'N/A'
+      ].join(';'))
+    ].join('\n');
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    
+    let fileName = 'relatorio_agendamentos';
+    if(professionalId) {
+        const professional = professionals.find(p => p.id === professionalId);
+        fileName = `relatorio_${professional?.fullName.replace(/\s+/g, '_')}`;
+    }
+    if(patientId) {
+        const patient = patients.find(p => p.id === patientId);
+        fileName += `_${patient?.fullName.replace(/\s+/g, '_')}`;
+    }
+    fileName += `_${startDateStr}_a_${endDateStr}.csv`;
+    
+    link.setAttribute("href", url);
+    link.setAttribute("download", fileName);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const appointmentsFiltrados = useMemo(() => appointments.filter((appointment) => {
@@ -352,6 +377,7 @@ export function AgendamentosClientPage() {
         isOpen={isReportModalOpen}
         onClose={() => setIsReportModalOpen(false)}
         onGenerate={handleGenerateReport}
+        patients={patients}
         professionals={professionals}
       />
       <EditAppointmentModal 
