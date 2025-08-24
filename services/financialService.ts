@@ -73,6 +73,13 @@ export interface BankAccount {
     initialBalance: number;
 }
 
+// --- NOVA INTERFACE PARA O ORÇAMENTO ---
+export interface Budget {
+  id: string; // Será no formato "AAAA-MM"
+  receitaPrevista: number;
+  despesaPrevista: number;
+}
+
 // Funções para Transações
 export const getTransactionsByPeriod = async (startDate: Date, endDate: Date): Promise<Transaction[]> => {
     try {
@@ -310,5 +317,110 @@ export const deleteBankAccount = async (id: string) => {
         return { success: true };
     } catch (e) {
         return { success: false, error: "Falha ao excluir conta bancária." };
+    }
+};
+/**
+ * Busca transações para exportação com base em múltiplos filtros.
+ */
+export const getTransactionsForReport = async (options: { 
+    type?: 'receita' | 'despesa';
+    startDate: Date; 
+    endDate: Date 
+}): Promise<Transaction[]> => {
+    try {
+        const transactionsRef = collection(db, 'transactions');
+        let q = query(
+          transactionsRef,
+          where('date', '>=', Timestamp.fromDate(options.startDate)),
+          where('date', '<=', Timestamp.fromDate(options.endDate)),
+          orderBy('date', 'desc')
+        );
+
+        // Adiciona filtro de tipo (receita/despesa) se for especificado
+        if (options.type) {
+            q = query(q, where('type', '==', options.type));
+        }
+
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) return [];
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+    } catch (error) {
+        console.error("Erro ao buscar transações para relatório:", error);
+        return [];
+    }
+};
+/**
+ * Busca transações pendentes (a pagar ou a receber) para o relatório de inadimplência.
+ */
+export const getPendingTransactions = async (options: { 
+    type: 'receita' | 'despesa';
+    startDate: Date; 
+    endDate: Date 
+}): Promise<Transaction[]> => {
+    try {
+        const transactionsRef = collection(db, 'transactions');
+        const q = query(
+          transactionsRef,
+          where('status', '==', 'pendente'),
+          where('type', '==', options.type),
+          where('date', '>=', Timestamp.fromDate(options.startDate)),
+          where('date', '<=', Timestamp.fromDate(options.endDate)),
+          orderBy('date', 'asc') // Ordena por data para ver os mais antigos primeiro
+        );
+
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+    } catch (error) {
+        console.error(`Erro ao buscar contas a ${options.type === 'receita' ? 'receber' : 'pagar'}:`, error);
+        return [];
+    }
+};
+
+/**
+ * Busca e agrupa despesas por centro de custo.
+ */
+export const getExpensesByCostCenter = async (startDate: Date, endDate: Date) => {
+    try {
+        const despesas = await getTransactionsForReport({ type: 'despesa', startDate, endDate });
+
+        const expensesByCenter = despesas.reduce((acc, despesa) => {
+            const center = despesa.costCenter || 'Sem Centro de Custo';
+            if (!acc[center]) {
+                acc[center] = { total: 0, count: 0, transactions: [] };
+            }
+            acc[center].total += despesa.value;
+            acc[center].count += 1;
+            acc[center].transactions.push(despesa);
+            return acc;
+        }, {} as Record<string, { total: number, count: number, transactions: Transaction[] }>);
+
+        return expensesByCenter;
+    } catch (error) {
+        console.error("Erro ao agrupar despesas por centro de custo:", error);
+        return {};
+    }
+};
+/**
+ * Busca os orçamentos (dados previstos) para um determinado período.
+ * É otimizado para buscar documentos por IDs específicos (ex: ["2024-01", "2024-02"]).
+ * @param periodIds - Um array de IDs no formato "AAAA-MM".
+ */
+export const getBudgetsForPeriod = async (periodIds: string[]): Promise<Budget[]> => {
+    if (periodIds.length === 0) {
+        return [];
+    }
+    try {
+        const budgetsRef = collection(db, 'budgets');
+        // A consulta 'in' é eficiente para buscar até 30 documentos de uma só vez.
+        const q = query(budgetsRef, where('__name__', 'in', periodIds));
+        const snapshot = await getDocs(q);
+        
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        } as Budget));
+    } catch (error) {
+        console.error("Erro ao buscar orçamentos:", error);
+        return [];
     }
 };

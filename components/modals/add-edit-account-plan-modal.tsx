@@ -1,4 +1,4 @@
-// src/components/modals/add-edit-account-plan-modal.tsx
+// components/modals/add-edit-account-plan-modal.tsx
 "use client";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
     Select,
     SelectContent,
@@ -40,11 +39,12 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
+// --- INTERFACE CORRIGIDA AQUI ---
 interface AddEditAccountPlanModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSubmit: (data: FormValues) => Promise<void>;
-    accountPlan?: AccountPlan | null;
+    accountPlan?: Partial<AccountPlan> | null; // Agora aceita um objeto parcial
     isLoading: boolean;
 }
 
@@ -58,15 +58,17 @@ export function AddEditAccountPlanModal({ isOpen, onClose, onSubmit, accountPlan
         },
     });
 
+    // --- USEEFFECT CORRIGIDO AQUI ---
     useEffect(() => {
-        if (accountPlan) {
+        if (isOpen) {
+            // Se um plano (completo ou parcial) for passado, usamos seus dados. Senão, resetamos para o padrão.
             form.reset({
-                code: accountPlan.code,
-                name: accountPlan.name,
-                category: accountPlan.category,
+                code: accountPlan?.code || '',
+                name: accountPlan?.name || '',
+                category: accountPlan?.category || 'receita',
             });
         }
-    }, [accountPlan, form]);
+    }, [isOpen, accountPlan, form]);
 
     const isEditing = !!accountPlan?.id;
 
@@ -74,7 +76,6 @@ export function AddEditAccountPlanModal({ isOpen, onClose, onSubmit, accountPlan
         await onSubmit(data);
         if (!isLoading) {
             onClose();
-            form.reset();
         }
     };
 
@@ -121,7 +122,7 @@ export function AddEditAccountPlanModal({ isOpen, onClose, onSubmit, accountPlan
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Categoria</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isLoading}>
+                                    <Select onValueChange={field.onChange} value={field.value} disabled={isLoading}>
                                         <FormControl>
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Selecione a categoria" />

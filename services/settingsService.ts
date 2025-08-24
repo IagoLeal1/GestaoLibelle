@@ -70,3 +70,25 @@ export const getProfessionals = async (): Promise<Professional[]> => {
         return [];
     }
 };
+// Interface simplificada para o repasse
+export interface Professional {
+    id: string;
+    name: string;
+}
+
+// Nova função para buscar profissionais (focada no nome para o repasse)
+export const getProfessionalsForRepasse = async (): Promise<Professional[]> => {
+    try {
+        const q = query(collection(db, "professionals"), orderBy("fullName"));
+        const querySnapshot = await getDocs(q);
+        // Usamos 'fullName' para corresponder ao campo no seu Firestore
+        const professionals = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            name: doc.data().fullName 
+        } as Professional));
+        return professionals;
+    } catch (e) {
+        console.error("Erro ao buscar profissionais:", e);
+        return [];
+    }
+};
