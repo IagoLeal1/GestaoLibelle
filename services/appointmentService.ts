@@ -1,19 +1,22 @@
+// services/appointmentService.ts
 import { db } from "@/lib/firebaseConfig";
-import { 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  Timestamp, 
-  orderBy, 
-  doc, 
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  Timestamp,
+  orderBy,
+  doc,
   getDoc,
   addDoc,
   updateDoc,
   deleteDoc,
   writeBatch
 } from 'firebase/firestore';
-import { addWeeks, startOfDay, endOfDay, differenceInMinutes, addDays } from 'date-fns';
+import { addWeeks, startOfDay, endOfDay, differenceInMinutes, addDays, format } from 'date-fns';
+import { getProfessionalById } from "./professionalService"; // Importar
+import { addTransaction, deleteTransactionByAppointmentId, TransactionFormData } from "./financialService"; // Importar
 
 // --- Interfaces ---
 export type AppointmentStatus = 'agendado' | 'finalizado' | 'nao_compareceu' | 'cancelado' | 'em_atendimento';
@@ -59,6 +62,60 @@ export interface AppointmentBlockFormData extends Omit<AppointmentFormData, 'dat
   sessions: number;
 }
 
+
+// --- NOVA FUNÇÃO CENTRALIZADORA DE REPASSE ---
+/**
+ * Analisa um agendamento e decide se cria ou remove um lançamento de repasse.
+ * @param appointment O objeto completo do agendamento APÓS a atualização.
+ */
+const handleRepasseTransaction = async (appointment: Appointment) => {
+  // 1. Limpa qualquer repasse antigo ligado a este agendamento para evitar duplicatas
+  await deleteTransactionByAppointmentId(appointment.id);
+
+  // 2. Define as condições para GERAR um repasse
+  const shouldGenerateRepasse =
+    appointment.status === 'finalizado' ||
+    (appointment.status === 'nao_compareceu' && appointment.statusSecundario === 'fnj_paciente');
+
+  if (!shouldGenerateRepasse) {
+    // Se as condições não são atendidas, apenas saímos após a limpeza.
+    return { success: true, message: "Nenhum repasse gerado." };
+  }
+
+  // 3. Se as condições são atendidas, busca os dados do profissional
+  const professional = await getProfessionalById(appointment.professionalId);
+  if (!professional?.financeiro) {
+    console.error(`Dados financeiros não encontrados para o profissional ID: ${appointment.professionalId}`);
+    return { success: false, error: "Dados financeiros do profissional não encontrados." };
+  }
+
+  // 4. Calcula o valor do repasse
+  const valorConsulta = appointment.valorConsulta || 0;
+  const percentualRepasse = professional.financeiro.percentualRepasse || 0;
+  const valorRepasse = (valorConsulta * percentualRepasse) / 100;
+
+  if (valorRepasse <= 0) {
+    return { success: true, message: "Valor de repasse é zero, nenhuma transação criada." };
+  }
+
+  // 5. Cria a nova transação de despesa (repasse)
+  const transactionData: TransactionFormData = {
+    type: 'despesa',
+    description: `Repasse - ${appointment.patientName} - ${format(appointment.start.toDate(), 'dd/MM/yyyy')}`,
+    value: valorRepasse,
+    date: appointment.start.toDate(),
+    status: 'pendente',
+    category: 'Repasse de Profissional', // Categoria padrão
+    costCenter: 'Serviços Prestados', // Centro de custo padrão
+    professionalId: appointment.professionalId,
+    patientId: appointment.patientId,
+    appointmentId: appointment.id, // Vínculo forte com o agendamento!
+  };
+
+  return addTransaction(transactionData);
+};
+
+
 // --- Funções de Busca e Relatório ---
 
 export const getAppointmentsByDate = async (dateString: string): Promise<Appointment[]> => {
@@ -85,7 +142,7 @@ export const getAppointmentsByProfessional = async (professionalId: string, date
       const [year, month, day] = dateString.split('-').map(Number);
       const dayStart = new Date(year, month - 1, day, 0, 0, 0);
       const dayEnd = new Date(year, month - 1, day, 23, 59, 59);
-  
+
       const q = query(
         collection(db, 'appointments'),
         where('professionalId', '==', professionalId),
@@ -93,10 +150,10 @@ export const getAppointmentsByProfessional = async (professionalId: string, date
         where('start', '<=', Timestamp.fromDate(dayEnd)),
         orderBy('start')
       );
-  
+
       const snapshot = await getDocs(q);
       if (snapshot.empty) return [];
-  
+
       return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
     } catch (error) {
       console.error("Erro ao buscar agendamentos do profissional:", error);
@@ -137,7 +194,7 @@ export const createAppointment = async (data: AppointmentFormData) => {
     const patientDoc = await getDoc(doc(db, 'patients', data.patientId));
     const professionalDoc = await getDoc(doc(db, 'professionals', data.professionalId));
     if (!patientDoc.exists() || !professionalDoc.exists()) { throw new Error("Paciente ou Profissional não encontrado."); }
-    
+
     const patientName = patientDoc.data().fullName;
     const professionalName = professionalDoc.data().fullName;
 
@@ -175,7 +232,7 @@ export const createAppointment = async (data: AppointmentFormData) => {
 export const createAppointmentBlock = async (data: AppointmentBlockFormData) => {
   try {
     const { patientId, professionalId, data: startDateStr, horaInicio, horaFim, sessions, ...restData } = data;
-    
+
     const patientDoc = await getDoc(doc(db, 'patients', patientId));
     const professionalDoc = await getDoc(doc(db, 'professionals', professionalId));
     if (!patientDoc.exists() || !professionalDoc.exists()) { throw new Error("Paciente ou profissional não encontrado."); }
@@ -183,7 +240,7 @@ export const createAppointmentBlock = async (data: AppointmentBlockFormData) => 
     const patientName = patientDoc.data().fullName;
     const professionalName = professionalDoc.data().fullName;
     const title = `${patientName} - ${professionalName}`;
-    
+
     const [year, month, day] = startDateStr.split('-').map(Number);
     const [startHour, startMinute] = horaInicio.split(':').map(Number);
     const [endHour, endMinute] = horaFim.split(':').map(Number);
@@ -199,7 +256,7 @@ export const createAppointmentBlock = async (data: AppointmentBlockFormData) => 
       const sessionDate = addWeeks(firstAppointmentDate, i);
       const sessionEndDate = new Date(sessionDate.getTime() + durationInMinutes * 60000);
       const newAppointmentRef = doc(collection(db, "appointments"));
-      
+
       batch.set(newAppointmentRef, {
         ...restData,
         title,
@@ -237,10 +294,10 @@ export const updateAppointment = async (id: string, data: Partial<AppointmentFor
       const [year, month, day] = data.data.split('-').map(Number);
       const [startHour, startMinute] = data.horaInicio.split(':').map(Number);
       const [endHour, endMinute] = data.horaFim.split(':').map(Number);
-      
+
       const startDate = new Date(year, month - 1, day, startHour, startMinute);
       const endDate = new Date(year, month - 1, day, endHour, endMinute);
-      
+
       dataToUpdate.start = Timestamp.fromDate(startDate);
       dataToUpdate.end = Timestamp.fromDate(endDate);
 
@@ -249,6 +306,15 @@ export const updateAppointment = async (id: string, data: Partial<AppointmentFor
       delete dataToUpdate.horaFim;
     }
     await updateDoc(docRef, dataToUpdate);
+
+    // --- LÓGICA DE REPASSE ACIONADA AQUI ---
+    const updatedAppointmentDoc = await getDoc(docRef);
+    if (updatedAppointmentDoc.exists()) {
+        const updatedAppointment = { id: updatedAppointmentDoc.id, ...updatedAppointmentDoc.data() } as Appointment;
+        await handleRepasseTransaction(updatedAppointment);
+    }
+    // ------------------------------------
+
     return { success: true };
   } catch (error) {
     console.error("Erro ao atualizar agendamento:", error);
@@ -258,6 +324,10 @@ export const updateAppointment = async (id: string, data: Partial<AppointmentFor
 
 export const deleteAppointment = async (id: string) => {
   try {
+    // --- LÓGICA DE REPASSE ACIONADA AQUI (ANTES DE DELETAR) ---
+    await deleteTransactionByAppointmentId(id);
+    // --------------------------------------------------------
+    
     const docRef = doc(db, 'appointments', id);
     await deleteDoc(docRef);
     return { success: true };
@@ -361,10 +431,15 @@ export const deleteFutureAppointmentsInBlock = async (appointment: Appointment) 
     );
     const snapshot = await getDocs(q);
     if (snapshot.empty) return { success: true };
+
     const batch = writeBatch(db);
-    snapshot.docs.forEach(doc => {
-      batch.delete(doc.ref);
-    });
+    
+    // Usamos Promise.all para aguardar todas as exclusões de repasse
+    await Promise.all(snapshot.docs.map(docToDelete => {
+      batch.delete(docToDelete.ref);
+      return deleteTransactionByAppointmentId(docToDelete.id);
+    }));
+
     await batch.commit();
     return { success: true };
   } catch (error) {

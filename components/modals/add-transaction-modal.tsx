@@ -29,19 +29,23 @@ import {
     FormLabel,
     FormMessage,
 } from "@/components/ui/form";
+import { Switch } from "@/components/ui/switch"; // Importar o Switch
+import { Repeat } from "lucide-react"; // Opcional: ícone para o switch
 import { AccountPlan } from "@/services/financialService";
 import { CostCenter } from "@/services/settingsService";
-import { useEffect } from "react";
+import { useState, useEffect } from "react"; // Importar useState
 
+// Atualizar o schema para incluir o campo de repetições
 const formSchema = z.object({
     type: z.enum(["receita", "despesa"]),
     description: z.string().min(1, "A descrição é obrigatória."),
     value: z.coerce.number().min(0.01, "O valor deve ser maior que zero."),
-    date: z.string(), // Mantido como string para o campo de input
+    date: z.string(),
     status: z.enum(["pendente", "pago"]),
     category: z.string().min(1, "A categoria é obrigatória."),
     costCenter: z.string().min(1, "O centro de custo é obrigatório."),
     bankAccountId: z.string().optional(),
+    repetitions: z.coerce.number().optional(), // Campo opcional para repetições
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -49,13 +53,17 @@ type FormValues = z.infer<typeof formSchema>;
 interface AddTransactionModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSubmit: (data: any) => Promise<void>;
+    // A prop onSubmit agora pode lidar com os dois cenários
+    onSubmit: (data: FormValues, isBlock: boolean) => Promise<void>;
     accountPlans: { receitas: AccountPlan[]; despesas: AccountPlan[] };
     costCenters: CostCenter[];
     isLoading: boolean;
 }
 
 export function AddTransactionModal({ isOpen, onClose, onSubmit, accountPlans, costCenters, isLoading }: AddTransactionModalProps) {
+    // Estado para controlar o modo sequencial
+    const [isRecurring, setIsRecurring] = useState(false);
+
     const form = useForm<FormValues>({
         resolver: zodResolver(formSchema),
         defaultValues: {
@@ -67,6 +75,7 @@ export function AddTransactionModal({ isOpen, onClose, onSubmit, accountPlans, c
             category: "",
             costCenter: "",
             bankAccountId: "",
+            repetitions: 1, // Valor inicial
         },
     });
 
@@ -75,15 +84,18 @@ export function AddTransactionModal({ isOpen, onClose, onSubmit, accountPlans, c
     useEffect(() => {
         if (!isOpen) {
             form.reset();
+            setIsRecurring(false); // Garante que o switch resete ao fechar
         }
     }, [isOpen, form]);
 
     const handleFormSubmit = async (data: FormValues) => {
-        await onSubmit({ ...data, date: new Date(data.date) });
-        if (!isLoading) {
-            onClose();
-            form.reset();
+        // Validação extra para o modo sequencial
+        if (isRecurring && (!data.repetitions || data.repetitions < 1)) {
+            form.setError("repetitions", { message: "Deve ser no mínimo 1." });
+            return;
         }
+        // Chama a função onSubmit da página, passando os dados e se é um bloco ou não
+        await onSubmit(data, isRecurring);
     };
 
     return (
@@ -190,7 +202,7 @@ export function AddTransactionModal({ isOpen, onClose, onSubmit, accountPlans, c
                             name="date"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Data</FormLabel>
+                                    <FormLabel>Data da primeira parcela</FormLabel>
                                     <FormControl>
                                         <Input type="date" {...field} />
                                     </FormControl>
@@ -219,6 +231,37 @@ export function AddTransactionModal({ isOpen, onClose, onSubmit, accountPlans, c
                                 </FormItem>
                             )}
                         />
+                        
+                        <div className="space-y-4 rounded-lg border p-4">
+                            <div className="flex items-center space-x-2">
+                                <Switch
+                                    id="recurring-switch"
+                                    checked={isRecurring}
+                                    onCheckedChange={setIsRecurring}
+                                    disabled={isLoading}
+                                />
+                                <Label htmlFor="recurring-switch" className="cursor-pointer flex items-center gap-2">
+                                    <Repeat className="h-4 w-4" />
+                                    Lançamento Sequencial (Mensal)
+                                </Label>
+                            </div>
+                            {isRecurring && (
+                                <FormField
+                                    control={form.control}
+                                    name="repetitions"
+                                    render={({ field }) => (
+                                        <FormItem className="pt-4 border-t">
+                                            <FormLabel>Número de Parcelas/Repetições</FormLabel>
+                                            <FormControl>
+                                                <Input type="number" min={1} {...field} disabled={isLoading} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            )}
+                        </div>
+
                         <DialogFooter className="mt-4">
                             <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancelar</Button>
                             <Button type="submit" disabled={isLoading}>

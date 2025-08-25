@@ -16,7 +16,8 @@ import {
     deleteAccountPlan, getSuppliers, addSupplier, updateSupplier, deleteSupplier, Supplier,
     getCovenants, addCovenant, updateCovenant, deleteCovenant, Covenant,
     getBankAccounts, addBankAccount, updateBankAccount, deleteBankAccount, BankAccount,
-    getTransactionsForReport, getPendingTransactions, getExpensesByCostCenter
+    getTransactionsForReport, getPendingTransactions, getExpensesByCostCenter,
+    createTransactionBlock, TransactionBlockFormData
 } from "@/services/financialService";
 import { 
     getCostCenters, CostCenter, addCostCenter, updateCostCenter, deleteCostCenter, 
@@ -40,6 +41,21 @@ import { SettingsDashboard } from "@/components/financial/settings-dashboard";
 import { FinancialTable } from "@/components/financial/financial-table";
 import { ProfessionalRepasseDashboard } from "@/components/dashboards/professional-repasse-dashboard";
 import { FinancialReportsDashboard } from "@/components/financial/financial-reports-dashboard";
+
+// --- CORREÇÃO AQUI ---
+// Definimos um tipo para os dados que o formulário do modal envia.
+// Ele espelha o 'formSchema' do 'add-transaction-modal.tsx'.
+type AddTransactionFormValues = {
+    type: "receita" | "despesa";
+    description: string;
+    value: number;
+    date: string; // O formulário envia a data como string
+    status: "pendente" | "pago";
+    category: string;
+    costCenter: string;
+    bankAccountId?: string | undefined;
+    repetitions?: number | undefined;
+};
 
 export default function FinancialClientPage() {
     const [activeTab, setActiveTab] = useState("despesas");
@@ -168,8 +184,34 @@ export default function FinancialClientPage() {
         toast.success("Relatório gerado com sucesso!");
     };
     
-    // (O restante das suas funções 'handle' continua aqui...)
-    const handleAddTransaction = async (data: TransactionFormData) => { setIsSubmitting(true); const result = await addTransaction(data); if (result.success) { toast.success("Movimentação registrada!"); setIsAddTransactionModalOpen(false); fetchData(); } else { toast.error(result.error); } setIsSubmitting(false); };
+    // --- FUNÇÃO CORRIGIDA ---
+    const handleAddTransaction = async (data: AddTransactionFormValues, isBlock: boolean) => {
+        setIsSubmitting(true);
+        let result;
+        
+        // Converte a string de data do formulário para um objeto Date
+        const transactionDataWithDateObject = {
+            ...data,
+            date: new Date(data.date),
+        };
+        
+        if (isBlock) {
+            result = await createTransactionBlock(transactionDataWithDateObject as TransactionBlockFormData);
+        } else {
+            result = await addTransaction(transactionDataWithDateObject);
+        }
+
+        if (result.success) {
+            toast.success(`Movimentação ${isBlock ? 'sequencial registrada' : 'registrada'}!`);
+            setIsAddTransactionModalOpen(false);
+            fetchData();
+        } else {
+            toast.error(result.error);
+        }
+        
+        setIsSubmitting(false);
+    };
+
     const handleUpdateTransaction = async (data: Partial<TransactionFormData>) => { if (!selectedTransaction) return; setIsSubmitting(true); const result = await updateTransaction(selectedTransaction.id, data); if (result.success) { toast.success("Transação atualizada!"); setIsEditTransactionModalOpen(false); fetchData(); } else { toast.error(result.error); } setIsSubmitting(false); };
     const handleUpdateStatus = async (tx: Transaction) => { const newStatus = tx.status === 'pago' ? 'pendente' : 'pago'; const result = await updateTransactionStatus(tx.id, newStatus); if (result.success) { toast.success(`Status alterado.`); fetchData(); } else { toast.error(result.error); } };
     const handleDeleteTransaction = async (tx: Transaction) => { if (window.confirm(`Excluir "${tx.description}"?`)) { const result = await deleteTransaction(tx.id); if (result.success) { toast.success("Transação excluída!"); fetchData(); } else { toast.error(result.error); } } };
@@ -246,7 +288,14 @@ export default function FinancialClientPage() {
                 </Tabs>
             </div>
 
-            <AddTransactionModal isOpen={isAddTransactionModalOpen} onClose={() => setIsAddTransactionModalOpen(false)} onSubmit={handleAddTransaction} accountPlans={accountPlans} costCenters={costCenters} isLoading={isSubmitting} />
+            <AddTransactionModal
+                isOpen={isAddTransactionModalOpen}
+                onClose={() => setIsAddTransactionModalOpen(false)}
+                onSubmit={handleAddTransaction}
+                accountPlans={accountPlans}
+                costCenters={costCenters}
+                isLoading={isSubmitting}
+            />
             <EditTransactionModal isOpen={isEditTransactionModalOpen} onClose={() => setIsEditTransactionModalOpen(false)} onSubmit={handleUpdateTransaction} transaction={selectedTransaction} accountPlans={accountPlans} costCenters={costCenters} isLoading={isSubmitting} />
             <AddEditAccountPlanModal isOpen={isAccountPlanModalOpen} onClose={() => { setIsAccountPlanModalOpen(false); setSelectedAccountPlan(null); }} onSubmit={selectedAccountPlan?.id ? handleUpdateAccountPlan : handleAddAccountPlan} accountPlan={selectedAccountPlan} isLoading={isSubmitting} />
             <AddEditCostCenterModal isOpen={isCostCenterModalOpen} onClose={() => { setIsCostCenterModalOpen(false); setSelectedCostCenter(null); }} onSubmit={selectedCostCenter?.id ? handleUpdateCostCenter : handleAddCostCenter} costCenter={selectedCostCenter} isLoading={isSubmitting} />

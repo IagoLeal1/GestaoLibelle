@@ -1,8 +1,7 @@
 // src/services/financialService.ts
 import { db } from "@/lib/firebaseConfig";
-import { collection, addDoc, updateDoc, doc, deleteDoc, getDocs, query, orderBy, where } from "firebase/firestore";
-import { format } from "date-fns";
-import { Timestamp } from "firebase/firestore";
+import { collection, addDoc, updateDoc, doc, deleteDoc, getDocs, query, orderBy, where, writeBatch, Timestamp } from "firebase/firestore";
+import { format, addMonths } from "date-fns";
 
 // Interfaces de Dados
 export interface Transaction {
@@ -19,6 +18,7 @@ export interface Transaction {
     category: string;
     costCenter: string;
     bankAccountId?: string;
+    blockId?: string; // Para agrupar transações sequenciais
 }
 
 export interface TransactionFormData {
@@ -34,6 +34,11 @@ export interface TransactionFormData {
     category: string;
     costCenter: string;
     bankAccountId?: string;
+}
+
+// Nova interface para o formulário em lote
+export interface TransactionBlockFormData extends TransactionFormData {
+    repetitions: number;
 }
 
 export interface AccountPlan {
@@ -73,12 +78,68 @@ export interface BankAccount {
     initialBalance: number;
 }
 
-// --- NOVA INTERFACE PARA O ORÇAMENTO ---
 export interface Budget {
-  id: string; // Será no formato "AAAA-MM"
+  id: string;
   receitaPrevista: number;
   despesaPrevista: number;
 }
+
+/**
+ * Encontra e deleta uma transação de repasse baseada no ID do agendamento.
+ */
+export const deleteTransactionByAppointmentId = async (appointmentId: string) => {
+    const transactionsRef = collection(db, "transactions");
+    const q = query(transactionsRef, where("appointmentId", "==", appointmentId));
+    
+    try {
+        const querySnapshot = await getDocs(q);
+        if (querySnapshot.empty) {
+            return { success: true }; 
+        }
+
+        const batch = writeBatch(db);
+        querySnapshot.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+        await batch.commit();
+        
+        return { success: true };
+    } catch (e) {
+        console.error("Erro ao deletar transação por ID de agendamento: ", e);
+        return { success: false, error: "Falha ao remover repasse antigo." };
+    }
+};
+
+/**
+ * Cria múltiplas transações sequenciais (mês a mês).
+ */
+export const createTransactionBlock = async (data: TransactionBlockFormData) => {
+    try {
+        const { date, repetitions, description, ...rest } = data;
+        const batch = writeBatch(db);
+        const blockId = doc(collection(db, 'idGenerator')).id; // ID para agrupar as parcelas
+
+        for (let i = 0; i < repetitions; i++) {
+            const transactionDate = addMonths(new Date(date), i);
+            const newDocRef = doc(collection(db, "transactions"));
+
+            const transactionData = {
+                ...rest,
+                description: `${description} (${i + 1}/${repetitions})`, // Ex: "Conta de Luz (1/12)"
+                date: Timestamp.fromDate(transactionDate),
+                blockId: blockId, // Vincula todas as transações a um mesmo bloco
+            };
+
+            batch.set(newDocRef, transactionData);
+        }
+
+        await batch.commit();
+        return { success: true };
+    } catch (e) {
+        console.error("Erro ao criar transações em lote: ", e);
+        return { success: false, error: "Falha ao registrar movimentações sequenciais." };
+    }
+};
 
 // Funções para Transações
 export const getTransactionsByPeriod = async (startDate: Date, endDate: Date): Promise<Transaction[]> => {
@@ -319,9 +380,7 @@ export const deleteBankAccount = async (id: string) => {
         return { success: false, error: "Falha ao excluir conta bancária." };
     }
 };
-/**
- * Busca transações para exportação com base em múltiplos filtros.
- */
+
 export const getTransactionsForReport = async (options: { 
     type?: 'receita' | 'despesa';
     startDate: Date; 
@@ -336,7 +395,6 @@ export const getTransactionsForReport = async (options: {
           orderBy('date', 'desc')
         );
 
-        // Adiciona filtro de tipo (receita/despesa) se for especificado
         if (options.type) {
             q = query(q, where('type', '==', options.type));
         }
@@ -349,9 +407,7 @@ export const getTransactionsForReport = async (options: {
         return [];
     }
 };
-/**
- * Busca transações pendentes (a pagar ou a receber) para o relatório de inadimplência.
- */
+
 export const getPendingTransactions = async (options: { 
     type: 'receita' | 'despesa';
     startDate: Date; 
@@ -365,7 +421,7 @@ export const getPendingTransactions = async (options: {
           where('type', '==', options.type),
           where('date', '>=', Timestamp.fromDate(options.startDate)),
           where('date', '<=', Timestamp.fromDate(options.endDate)),
-          orderBy('date', 'asc') // Ordena por data para ver os mais antigos primeiro
+          orderBy('date', 'asc')
         );
 
         const snapshot = await getDocs(q);
@@ -376,9 +432,6 @@ export const getPendingTransactions = async (options: {
     }
 };
 
-/**
- * Busca e agrupa despesas por centro de custo.
- */
 export const getExpensesByCostCenter = async (startDate: Date, endDate: Date) => {
     try {
         const despesas = await getTransactionsForReport({ type: 'despesa', startDate, endDate });
@@ -400,18 +453,13 @@ export const getExpensesByCostCenter = async (startDate: Date, endDate: Date) =>
         return {};
     }
 };
-/**
- * Busca os orçamentos (dados previstos) para um determinado período.
- * É otimizado para buscar documentos por IDs específicos (ex: ["2024-01", "2024-02"]).
- * @param periodIds - Um array de IDs no formato "AAAA-MM".
- */
+
 export const getBudgetsForPeriod = async (periodIds: string[]): Promise<Budget[]> => {
     if (periodIds.length === 0) {
         return [];
     }
     try {
         const budgetsRef = collection(db, 'budgets');
-        // A consulta 'in' é eficiente para buscar até 30 documentos de uma só vez.
         const q = query(budgetsRef, where('__name__', 'in', periodIds));
         const snapshot = await getDocs(q);
         
