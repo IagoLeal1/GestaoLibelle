@@ -55,12 +55,12 @@ export function FinancialReportsDashboard({ onGenerateReport, onOpenVisualizer }
         <ReportCard 
           title="Contas Pagas" description="Relatório detalhado de todas as contas que foram pagas no período selecionado."
           icon={FileText} iconColor="text-primary-medium-green" actionText="Gerar Relatório" actionIcon={Download}
-          onClick={() => onGenerateReport('despesas')} // Reutiliza o tipo 'despesas' mas filtraremos por status 'pago'
+          onClick={() => onGenerateReport('contas_pagas')}
         />
         <ReportCard 
           title="Contas Recebidas" description="Relatório detalhado de todas as contas que foram recebidas no período selecionado."
           icon={FileText} iconColor="text-primary-teal" actionText="Gerar Relatório" actionIcon={Download}
-          onClick={() => onGenerateReport('receitas')} // Reutiliza o tipo 'receitas' mas filtraremos por status 'pago'
+          onClick={() => onGenerateReport('contas_recebidas')}
         />
         <ReportCard 
           title="Contas a Pagar" description="Relatório de contas pendentes de pagamento com vencimentos e valores."
@@ -80,13 +80,13 @@ export function FinancialReportsDashboard({ onGenerateReport, onOpenVisualizer }
         <ReportCard 
           title="Por Banco" description="Movimentações financeiras agrupadas por instituição bancária."
           icon={CreditCard} iconColor="text-purple-600" actionText="Gerar Relatório" actionIcon={Download}
-          onClick={() => alert("Funcionalidade em desenvolvimento.")} // Futuro
+          onClick={() => onGenerateReport('movimentacao_bancaria')}
         />
         <ReportCard 
           title="Controle de Inadimplência" description="Relatório de contas em atraso com alertas automáticos."
           icon={AlertTriangle} iconColor="text-secondary-red" actionText="Gerar Relatório" actionIcon={Download}
-          badgeText="3 contas vencidas" // Exemplo estático
-          onClick={() => alert("Funcionalidade em desenvolvimento.")} // Futuro
+          badgeText="3 contas vencidas"
+          onClick={() => alert("Funcionalidade em desenvolvimento.")}
         />
 
         {/* Relatórios de Visualização */}

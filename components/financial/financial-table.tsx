@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, MoreHorizontal } from "lucide-react";
 import { format } from "date-fns";
 import { Timestamp } from "firebase/firestore";
-import { Transaction } from "@/services/financialService";
+import { Transaction, BankAccount } from "@/services/financialService";
 
 interface FinancialTableProps {
     title: string;
@@ -20,21 +20,24 @@ interface FinancialTableProps {
     onEditTransaction: (transaction: Transaction) => void;
     onUpdateStatus: (transaction: Transaction) => void;
     onDeleteTransaction: (transaction: Transaction) => void;
+    bankAccounts: BankAccount[];
 }
 
-const TransactionRow = ({ tx, onEdit, onUpdateStatus, onDelete }: { 
+const TransactionRow = ({ tx, onEdit, onUpdateStatus, onDelete, getBankNameById }: { 
     tx: Transaction,
     onEdit: (tx: Transaction) => void;
     onUpdateStatus: (tx: Transaction) => void;
     onDelete: (tx: Transaction) => void;
+    getBankNameById: (id?: string) => string;
 }) => (
     <TableRow key={tx.id}>
         <TableCell className="font-medium text-sm">{tx.category}</TableCell>
         <TableCell>{tx.description}</TableCell>
         <TableCell><Badge variant="outline">{tx.costCenter || 'N/A'}</Badge></TableCell>
-        <TableCell>{/* Você pode adicionar o nome do banco aqui no futuro */}</TableCell>
+        <TableCell>{getBankNameById(tx.bankAccountId)}</TableCell>
         <TableCell className={`text-right font-medium ${tx.type === 'receita' ? 'text-green-600' : 'text-red-600'}`}>
-            {tx.type === 'despesa' && '- '}R$ {tx.value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+            {/* --- CORREÇÃO APLICADA AQUI --- */}
+            {tx.type === 'despesa' ? '- ' : ''}R$ {tx.value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
         </TableCell>
         <TableCell>{format(tx.date instanceof Timestamp ? tx.date.toDate() : new Date(tx.date as any), 'dd/MM/yyyy')}</TableCell>
         <TableCell>
@@ -55,7 +58,13 @@ const TransactionRow = ({ tx, onEdit, onUpdateStatus, onDelete }: {
     </TableRow>
 );
 
-export function FinancialTable({ title, data, type, loading, onAddTransaction, onEditTransaction, onUpdateStatus, onDeleteTransaction }: FinancialTableProps) {
+export function FinancialTable({ title, data, type, loading, onAddTransaction, onEditTransaction, onUpdateStatus, onDeleteTransaction, bankAccounts }: FinancialTableProps) {
+    const getBankNameById = (id?: string) => {
+        if (!id) return 'N/A';
+        const account = bankAccounts.find(acc => acc.id === id);
+        return account ? account.name : 'Banco Excluído';
+    };
+
     return (
         <Card>
             <CardHeader>
@@ -82,6 +91,7 @@ export function FinancialTable({ title, data, type, loading, onAddTransaction, o
                                             onEdit={onEditTransaction}
                                             onUpdateStatus={onUpdateStatus}
                                             onDelete={onDeleteTransaction}
+                                            getBankNameById={getBankNameById}
                                         />
                                     ))
                             }

@@ -11,21 +11,22 @@ import { Download } from "lucide-react";
 import { CostCenter } from "@/services/settingsService";
 import { BankAccount } from "@/services/financialService";
 
-// --- TIPO CORRIGIDO E EXPORTADO ---
-export type ReportType = 
-    | 'receitas' 
-    | 'despesas' 
-    | 'fluxo_caixa' 
-    | 'contas_a_pagar' 
-    | 'contas_a_receber' 
+// --- TIPO CORRIGIDO E ATUALIZADO ---
+export type ReportType =
+    | 'receitas'
+    | 'despesas'
+    | 'fluxo_caixa'
+    | 'contas_a_pagar'
+    | 'contas_a_receber'
     | 'despesas_por_centro_custo'
     | 'movimentacao_bancaria'
     | 'previsoes_futuras'
     | 'metas_financeiras'
     | 'analise_tendencias'
-    | 'comparativo_mensal';
+    | 'comparativo_mensal'
+    | 'contas_pagas'
+    | 'contas_recebidas';
 
-// --- INTERFACE CORRIGIDA E EXPORTADA ---
 export interface FinancialReportModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -35,14 +36,17 @@ export interface FinancialReportModalProps {
     bankAccounts: BankAccount[];
 }
 
+// --- TÍTULOS ATUALIZADOS ---
 const reportTitles: Record<ReportType, string> = {
-    receitas: "Relatório de Receitas",
-    despesas: "Relatório de Despesas",
+    receitas: "Relatório Geral de Receitas",
+    despesas: "Relatório Geral de Despesas",
     fluxo_caixa: "Relatório de Fluxo de Caixa",
     contas_a_pagar: "Relatório de Contas a Pagar",
     contas_a_receber: "Relatório de Contas a Receber",
     despesas_por_centro_custo: "Despesas por Centro de Custo",
     movimentacao_bancaria: "Movimentação por Conta Bancária",
+    contas_pagas: "Relatório de Contas Pagas",
+    contas_recebidas: "Relatório de Contas Recebidas",
     previsoes_futuras: "Previsões Futuras",
     metas_financeiras: "Metas Financeiras Anuais",
     analise_tendencias: "Análise de Tendências e Indicadores",
@@ -67,6 +71,10 @@ export function FinancialReportModal({ isOpen, onClose, onGenerate, reportType, 
     const handleGenerateClick = async () => {
         if (!params.startDate || !params.endDate) {
             alert("Por favor, selecione o período completo.");
+            return;
+        }
+        if (reportType === 'movimentacao_bancaria' && params.bankAccountId === 'todos') {
+            alert("Por favor, selecione uma conta bancária para gerar o relatório.");
             return;
         }
         setLoading(true);
@@ -104,6 +112,19 @@ export function FinancialReportModal({ isOpen, onClose, onGenerate, reportType, 
                                 <SelectContent>
                                     <SelectItem value="todos">Todos</SelectItem>
                                     {costCenters.map((c: CostCenter) => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+                    
+                    {reportType === 'movimentacao_bancaria' && (
+                        <div className="space-y-2">
+                            <Label>Conta Bancária *</Label>
+                            <Select onValueChange={(v) => setParams(p => ({...p, bankAccountId: v}))} value={params.bankAccountId}>
+                                <SelectTrigger><SelectValue placeholder="Selecione uma conta..." /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="todos" disabled>Selecione uma conta...</SelectItem>
+                                    {bankAccounts.map((account: BankAccount) => <SelectItem key={account.id} value={account.id}>{account.name} - {account.account}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>

@@ -1,7 +1,8 @@
 // src/services/financialService.ts
 import { db } from "@/lib/firebaseConfig";
-import { collection, addDoc, updateDoc, doc, deleteDoc, getDocs, query, orderBy, where, writeBatch, Timestamp } from "firebase/firestore";
+import { collection, addDoc, updateDoc, doc, deleteDoc, getDocs, query, orderBy, where, writeBatch } from "firebase/firestore";
 import { format, addMonths } from "date-fns";
+import { Timestamp } from "firebase/firestore";
 
 // Interfaces de Dados
 export interface Transaction {
@@ -18,7 +19,7 @@ export interface Transaction {
     category: string;
     costCenter: string;
     bankAccountId?: string;
-    blockId?: string; // Para agrupar transações sequenciais
+    blockId?: string;
 }
 
 export interface TransactionFormData {
@@ -36,7 +37,6 @@ export interface TransactionFormData {
     bankAccountId?: string;
 }
 
-// Nova interface para o formulário em lote
 export interface TransactionBlockFormData extends TransactionFormData {
     repetitions: number;
 }
@@ -117,7 +117,7 @@ export const createTransactionBlock = async (data: TransactionBlockFormData) => 
     try {
         const { date, repetitions, description, ...rest } = data;
         const batch = writeBatch(db);
-        const blockId = doc(collection(db, 'idGenerator')).id; // ID para agrupar as parcelas
+        const blockId = doc(collection(db, 'idGenerator')).id;
 
         for (let i = 0; i < repetitions; i++) {
             const transactionDate = addMonths(new Date(date), i);
@@ -125,9 +125,9 @@ export const createTransactionBlock = async (data: TransactionBlockFormData) => 
 
             const transactionData = {
                 ...rest,
-                description: `${description} (${i + 1}/${repetitions})`, // Ex: "Conta de Luz (1/12)"
+                description: `${description} (${i + 1}/${repetitions})`,
                 date: Timestamp.fromDate(transactionDate),
-                blockId: blockId, // Vincula todas as transações a um mesmo bloco
+                blockId: blockId,
             };
 
             batch.set(newDocRef, transactionData);
@@ -381,10 +381,18 @@ export const deleteBankAccount = async (id: string) => {
     }
 };
 
+/**
+ * Busca transações para exportação com base em múltiplos filtros.
+ */
+/**
+ * Busca transações para exportação com base em múltiplos filtros.
+ */
 export const getTransactionsForReport = async (options: { 
     type?: 'receita' | 'despesa';
     startDate: Date; 
-    endDate: Date 
+    endDate: Date;
+    bankAccountId?: string;
+    status?: 'pago' | 'pendente'; // <-- CAMPO ADICIONADO
 }): Promise<Transaction[]> => {
     try {
         const transactionsRef = collection(db, 'transactions');
@@ -397,6 +405,13 @@ export const getTransactionsForReport = async (options: {
 
         if (options.type) {
             q = query(q, where('type', '==', options.type));
+        }
+        if (options.bankAccountId) {
+             q = query(q, where('bankAccountId', '==', options.bankAccountId));
+        }
+        // --- LÓGICA DE FILTRO ADICIONADA ---
+        if (options.status) {
+             q = query(q, where('status', '==', options.status));
         }
 
         const snapshot = await getDocs(q);

@@ -19,13 +19,13 @@ import {
     getTransactionsForReport, getPendingTransactions, getExpensesByCostCenter,
     createTransactionBlock, TransactionBlockFormData
 } from "@/services/financialService";
-import { 
-    getCostCenters, CostCenter, addCostCenter, updateCostCenter, deleteCostCenter, 
+import {
+    getCostCenters, CostCenter, addCostCenter, updateCostCenter, deleteCostCenter,
     getProfessionalsForRepasse, Professional
 } from "@/services/settingsService";
 
 // Modals
-import { AddTransactionModal } from "@/components/modals/add-transaction-modal";
+import { AddTransactionModal, FormValues as AddTransactionFormValues } from "@/components/modals/add-transaction-modal";
 import { EditTransactionModal } from "@/components/modals/edit-transaction-modal";
 import { AddEditAccountPlanModal } from "@/components/modals/add-edit-account-plan-modal";
 import { AddEditCostCenterModal } from "@/components/modals/add-edit-cost-center-modal";
@@ -42,24 +42,10 @@ import { FinancialTable } from "@/components/financial/financial-table";
 import { ProfessionalRepasseDashboard } from "@/components/dashboards/professional-repasse-dashboard";
 import { FinancialReportsDashboard } from "@/components/financial/financial-reports-dashboard";
 
-// --- CORREÇÃO AQUI ---
-// Definimos um tipo para os dados que o formulário do modal envia.
-// Ele espelha o 'formSchema' do 'add-transaction-modal.tsx'.
-type AddTransactionFormValues = {
-    type: "receita" | "despesa";
-    description: string;
-    value: number;
-    date: string; // O formulário envia a data como string
-    status: "pendente" | "pago";
-    category: string;
-    costCenter: string;
-    bankAccountId?: string | undefined;
-    repetitions?: number | undefined;
-};
 
 export default function FinancialClientPage() {
     const [activeTab, setActiveTab] = useState("despesas");
-    
+
     // Estados de Dados
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [accountPlans, setAccountPlans] = useState<{ receitas: AccountPlan[], despesas: AccountPlan[] }>({ receitas: [], despesas: [] });
@@ -68,7 +54,7 @@ export default function FinancialClientPage() {
     const [covenants, setCovenants] = useState<Covenant[]>([]);
     const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
     const [professionals, setProfessionals] = useState<Professional[]>([]);
-    
+
     // Estados de Controle de UI
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -133,14 +119,38 @@ export default function FinancialClientPage() {
         let fileName = `${reportType}_${startDateStr}_a_${endDateStr}.csv`;
 
         switch (reportType) {
+            case 'contas_pagas':
+                headers = ["Data Pagamento", "Descricao", "Categoria", "Centro de Custo", "Valor Pago"];
+                const paidTransactions = await getTransactionsForReport({
+                    type: 'despesa',
+                    status: 'pago',
+                    startDate,
+                    endDate
+                });
+                dataToExport = paidTransactions.map(tx => [
+                    format(tx.date.toDate(), 'dd/MM/yyyy'), `"${tx.description}"`, tx.category, tx.costCenter, tx.value.toFixed(2).replace('.', ',')
+                ]);
+                break;
+            case 'contas_recebidas':
+                headers = ["Data Recebimento", "Descricao", "Categoria", "Centro de Custo", "Valor Recebido"];
+                const receivedTransactions = await getTransactionsForReport({
+                    type: 'receita',
+                    status: 'pago',
+                    startDate,
+                    endDate
+                });
+                dataToExport = receivedTransactions.map(tx => [
+                    format(tx.date.toDate(), 'dd/MM/yyyy'), `"${tx.description}"`, tx.category, tx.costCenter, tx.value.toFixed(2).replace('.', ',')
+                ]);
+                break;
             case 'receitas':
             case 'despesas':
             case 'fluxo_caixa':
                 headers = ["Data", "Tipo", "Categoria", "Descricao", "Centro de Custo", "Status", "Valor"];
-                const reportTransactions = await getTransactionsForReport({ 
+                const reportTransactions = await getTransactionsForReport({
                     type: reportType === 'fluxo_caixa' ? undefined : reportType,
-                    startDate, 
-                    endDate 
+                    startDate,
+                    endDate
                 });
                 dataToExport = reportTransactions.map(tx => [
                     format(tx.date.toDate(), 'dd/MM/yyyy'), tx.type, tx.category, `"${tx.description}"`, tx.costCenter, tx.status, tx.value.toFixed(2).replace('.', ',')
@@ -162,6 +172,24 @@ export default function FinancialClientPage() {
                     center, data.total.toFixed(2).replace('.', ','), data.count
                 ]);
                 break;
+            case 'movimentacao_bancaria':
+                headers = ["Data", "Tipo", "Descricao", "Categoria", "Status", "Valor"];
+                const bankTransactions = await getTransactionsForReport({
+                    startDate,
+                    endDate,
+                    bankAccountId: filters.bankAccountId,
+                });
+                dataToExport = bankTransactions.map(tx => [
+                    format(tx.date.toDate(), 'dd/MM/yyyy'),
+                    tx.type,
+                    `"${tx.description}"`,
+                    tx.category,
+                    tx.status,
+                    tx.value.toFixed(2).replace('.', ',')
+                ]);
+                const bank = bankAccounts.find(b => b.id === filters.bankAccountId);
+                fileName = `extrato_${bank?.name.replace(/\s+/g, '_') || 'banco'}_${startDateStr}_a_${endDateStr}.csv`;
+                break;
             default:
                 toast.error("Tipo de relatório não reconhecido.");
                 return;
@@ -171,7 +199,7 @@ export default function FinancialClientPage() {
             toast.info("Nenhum dado encontrado para os filtros selecionados.");
             return;
         }
-        
+
         const csvContent = [ headers.join(';'), ...dataToExport.map(row => row.join(';')) ].join('\n');
         const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
@@ -183,24 +211,16 @@ export default function FinancialClientPage() {
         document.body.removeChild(link);
         toast.success("Relatório gerado com sucesso!");
     };
-    
-    // --- FUNÇÃO CORRIGIDA ---
+
     const handleAddTransaction = async (data: AddTransactionFormValues, isBlock: boolean) => {
         setIsSubmitting(true);
         let result;
-        
-        // Converte a string de data do formulário para um objeto Date
-        const transactionDataWithDateObject = {
-            ...data,
-            date: new Date(data.date),
-        };
-        
+        const transactionDataWithDateObject = { ...data, date: new Date(data.date) };
         if (isBlock) {
             result = await createTransactionBlock(transactionDataWithDateObject as TransactionBlockFormData);
         } else {
             result = await addTransaction(transactionDataWithDateObject);
         }
-
         if (result.success) {
             toast.success(`Movimentação ${isBlock ? 'sequencial registrada' : 'registrada'}!`);
             setIsAddTransactionModalOpen(false);
@@ -208,7 +228,6 @@ export default function FinancialClientPage() {
         } else {
             toast.error(result.error);
         }
-        
         setIsSubmitting(false);
     };
 
@@ -254,10 +273,10 @@ export default function FinancialClientPage() {
                     </div>
 
                     <TabsContent value="despesas" className="mt-6">
-                        <FinancialTable title="Despesas" data={despesas} type="despesa" loading={loading} onAddTransaction={() => setIsAddTransactionModalOpen(true)} onEditTransaction={(tx) => { setSelectedTransaction(tx); setIsEditTransactionModalOpen(true); }} onUpdateStatus={handleUpdateStatus} onDeleteTransaction={handleDeleteTransaction} />
+                        <FinancialTable title="Despesas" data={despesas} type="despesa" loading={loading} onAddTransaction={() => setIsAddTransactionModalOpen(true)} onEditTransaction={(tx) => { setSelectedTransaction(tx); setIsEditTransactionModalOpen(true); }} onUpdateStatus={handleUpdateStatus} onDeleteTransaction={handleDeleteTransaction} bankAccounts={bankAccounts} />
                     </TabsContent>
                     <TabsContent value="receitas" className="mt-6">
-                        <FinancialTable title="Receitas" data={receitas} type="receita" loading={loading} onAddTransaction={() => setIsAddTransactionModalOpen(true)} onEditTransaction={(tx) => { setSelectedTransaction(tx); setIsEditTransactionModalOpen(true); }} onUpdateStatus={handleUpdateStatus} onDeleteTransaction={handleDeleteTransaction} />
+                        <FinancialTable title="Receitas" data={receitas} type="receita" loading={loading} onAddTransaction={() => setIsAddTransactionModalOpen(true)} onEditTransaction={(tx) => { setSelectedTransaction(tx); setIsEditTransactionModalOpen(true); }} onUpdateStatus={handleUpdateStatus} onDeleteTransaction={handleDeleteTransaction} bankAccounts={bankAccounts} />
                     </TabsContent>
                     <TabsContent value="repasses" className="mt-6">
                         <ProfessionalRepasseDashboard transactions={transactions} professionals={professionals} loading={loading} />
@@ -294,9 +313,19 @@ export default function FinancialClientPage() {
                 onSubmit={handleAddTransaction}
                 accountPlans={accountPlans}
                 costCenters={costCenters}
+                bankAccounts={bankAccounts}
                 isLoading={isSubmitting}
             />
-            <EditTransactionModal isOpen={isEditTransactionModalOpen} onClose={() => setIsEditTransactionModalOpen(false)} onSubmit={handleUpdateTransaction} transaction={selectedTransaction} accountPlans={accountPlans} costCenters={costCenters} isLoading={isSubmitting} />
+            <EditTransactionModal
+                isOpen={isEditTransactionModalOpen}
+                onClose={() => setIsEditTransactionModalOpen(false)}
+                onSubmit={handleUpdateTransaction}
+                transaction={selectedTransaction}
+                accountPlans={accountPlans}
+                costCenters={costCenters}
+                bankAccounts={bankAccounts}
+                isLoading={isSubmitting}
+            />
             <AddEditAccountPlanModal isOpen={isAccountPlanModalOpen} onClose={() => { setIsAccountPlanModalOpen(false); setSelectedAccountPlan(null); }} onSubmit={selectedAccountPlan?.id ? handleUpdateAccountPlan : handleAddAccountPlan} accountPlan={selectedAccountPlan} isLoading={isSubmitting} />
             <AddEditCostCenterModal isOpen={isCostCenterModalOpen} onClose={() => { setIsCostCenterModalOpen(false); setSelectedCostCenter(null); }} onSubmit={selectedCostCenter?.id ? handleUpdateCostCenter : handleAddCostCenter} costCenter={selectedCostCenter} isLoading={isSubmitting} />
             <AddEditSupplierModal isOpen={isSupplierModalOpen} onClose={() => { setIsSupplierModalOpen(false); setSelectedSupplier(null); }} onSubmit={selectedSupplier?.id ? handleUpdateSupplier : handleAddSupplier} supplier={selectedSupplier} isLoading={isSubmitting} />
