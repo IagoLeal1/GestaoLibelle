@@ -7,9 +7,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, TrendingDown, Calculator } from "lucide-react";
-import { getTransactionsForReport, getBudgetsForPeriod, Transaction, Budget } from "@/services/financialService";
+import { getTransactionsForReport, Transaction } from "@/services/financialService";
 import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { Skeleton } from "../ui/skeleton";
 
 interface FluxoDeCaixaModalProps {
   isOpen: boolean;
@@ -33,25 +34,21 @@ export function FluxoDeCaixaModal({ isOpen, onClose }: FluxoDeCaixaModalProps) {
 
     const fetchData = async () => {
       setLoading(true);
-      
+
       const hoje = new Date();
       const seisMesesAtras = startOfMonth(subMonths(hoje, 5));
       const fimDoMesAtual = endOfMonth(hoje);
 
-      // 1. Gerar os IDs dos meses que precisamos buscar (ex: "2024-08", "2024-07", etc.)
+      const todasTransacoes = await getTransactionsForReport({
+        startDate: seisMesesAtras,
+        endDate: fimDoMesAtual
+      });
+
       const periodIds = Array.from({ length: 6 }).map((_, i) => format(subMonths(hoje, i), 'yyyy-MM')).reverse();
-
-      // 2. Fazer as chamadas à base de dados em paralelo (otimizado)
-      const [transacoes, orcamentos] = await Promise.all([
-        getTransactionsForReport({ startDate: seisMesesAtras, endDate: fimDoMesAtual }),
-        getBudgetsForPeriod(periodIds)
-      ]);
-
-      // 3. Processar os dados no lado do cliente
       const monthlyDataMap: Record<string, MonthlyData> = {};
 
       periodIds.forEach(periodId => {
-        const date = new Date(`${periodId}-02`); // Dia 2 para evitar problemas de fuso horário
+        const date = new Date(`${periodId}-02`);
         monthlyDataMap[periodId] = {
           mes: format(date, 'MMMM', { locale: ptBR }),
           receitaPrevista: 0,
@@ -61,18 +58,21 @@ export function FluxoDeCaixaModal({ isOpen, onClose }: FluxoDeCaixaModalProps) {
         };
       });
 
-      orcamentos.forEach(orcamento => {
-        monthlyDataMap[orcamento.id].receitaPrevista = orcamento.receitaPrevista;
-        monthlyDataMap[orcamento.id].despesaPrevista = orcamento.despesaPrevista;
-      });
-
-      transacoes.forEach(tx => {
+      todasTransacoes.forEach(tx => {
         const periodId = format(tx.date.toDate(), 'yyyy-MM');
         if (monthlyDataMap[periodId]) {
-          if (tx.type === 'receita') {
-            monthlyDataMap[periodId].receitaRealizada += tx.value;
-          } else {
-            monthlyDataMap[periodId].despesaRealizada += tx.value;
+          if (tx.status === 'pago') {
+            if (tx.type === 'receita') {
+              monthlyDataMap[periodId].receitaRealizada += tx.value;
+            } else {
+              monthlyDataMap[periodId].despesaRealizada += tx.value;
+            }
+          } else if (tx.status === 'pendente') {
+            if (tx.type === 'receita') {
+              monthlyDataMap[periodId].receitaPrevista += tx.value;
+            } else {
+              monthlyDataMap[periodId].despesaPrevista += tx.value;
+            }
           }
         }
       });
@@ -92,21 +92,58 @@ export function FluxoDeCaixaModal({ isOpen, onClose }: FluxoDeCaixaModalProps) {
       return acc;
   }, { receitaPrevista: 0, receitaRealizada: 0, despesaPrevista: 0, despesaRealizada: 0 });
 
-  const saldoPrevistoTotal = totais.receitaPrevista - totais.despesaPrevista;
   const saldoRealizadoTotal = totais.receitaRealizada - totais.despesaRealizada;
+
+  const renderTableBody = () => {
+    if (loading) {
+      return (
+        <>
+          {Array.from({ length: 6 }).map((_, index) => (
+            <TableRow key={index}>
+              <TableCell className="font-medium"><Skeleton className="h-4 w-20" /></TableCell>
+              <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+              <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+              <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+              <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+              <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+              <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+            </TableRow>
+          ))}
+        </>
+      );
+    }
+    return data.map((mes, index) => {
+      const saldoPrevisto = mes.receitaPrevista - mes.despesaPrevista;
+      const saldoRealizado = mes.receitaRealizada - mes.despesaRealizada;
+      return (
+        <TableRow key={index}>
+          <TableCell className="font-medium capitalize">{mes.mes}</TableCell>
+          <TableCell className="text-primary-teal">R$ {mes.receitaPrevista.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</TableCell>
+          <TableCell className="font-semibold text-primary-teal">R$ {mes.receitaRealizada.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</TableCell>
+          <TableCell className="text-secondary-red">R$ {mes.despesaPrevista.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</TableCell>
+          <TableCell className="font-semibold text-secondary-red">R$ {mes.despesaRealizada.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</TableCell>
+          <TableCell className={`font-semibold ${saldoPrevisto >= 0 ? 'text-primary-medium-green' : 'text-secondary-red'}`}>R$ {saldoPrevisto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</TableCell>
+          <TableCell className={`font-semibold ${saldoRealizado >= 0 ? 'text-primary-medium-green' : 'text-secondary-red'}`}>R$ {saldoRealizado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</TableCell>
+        </TableRow>
+      );
+    });
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Fluxo de Caixa - Previsto x Realizado</DialogTitle>
-          <DialogDescription>Comparativo dos últimos 6 meses.</DialogDescription>
+          <DialogDescription>
+            {/* --- CORREÇÃO APLICADA AQUI: REMOÇÃO DAS TAGS <p> --- */}
+            Comparativo dos últimos 6 meses. O valor Previsto é baseado nas transações Pendentes e o Realizado nas transações Pagas.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-6 py-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card><CardContent className="p-4"><div className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-primary-teal" /><span className="text-sm font-medium">Receita Realizada</span></div><div className="text-2xl font-bold text-primary-teal mt-2">R$ {totais.receitaRealizada.toLocaleString("pt-BR")}</div></CardContent></Card>
-            <Card><CardContent className="p-4"><div className="flex items-center gap-2"><TrendingDown className="h-4 w-4 text-secondary-red" /><span className="text-sm font-medium">Despesa Realizada</span></div><div className="text-2xl font-bold text-secondary-red mt-2">R$ {totais.despesaRealizada.toLocaleString("pt-BR")}</div></CardContent></Card>
-            <Card><CardContent className="p-4"><div className="flex items-center gap-2"><Calculator className="h-4 w-4 text-primary-medium-green" /><span className="text-sm font-medium">Saldo Realizado</span></div><div className="text-2xl font-bold text-primary-medium-green mt-2">R$ {saldoRealizadoTotal.toLocaleString("pt-BR")}</div></CardContent></Card>
+            <Card><CardContent className="p-4"><div className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-primary-teal" /><span className="text-sm font-medium">Receita Realizada</span></div><div className="text-2xl font-bold text-primary-teal mt-2">{loading ? <Skeleton className="h-8 w-32" /> : `R$ ${totais.receitaRealizada.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}</div></CardContent></Card>
+            <Card><CardContent className="p-4"><div className="flex items-center gap-2"><TrendingDown className="h-4 w-4 text-secondary-red" /><span className="text-sm font-medium">Despesa Realizada</span></div><div className="text-2xl font-bold text-secondary-red mt-2">{loading ? <Skeleton className="h-8 w-32" /> : `R$ ${totais.despesaRealizada.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}</div></CardContent></Card>
+            <Card><CardContent className="p-4"><div className="flex items-center gap-2"><Calculator className="h-4 w-4 text-primary-medium-green" /><span className="text-sm font-medium">Saldo Realizado</span></div><div className="text-2xl font-bold text-primary-medium-green mt-2">{loading ? <Skeleton className="h-8 w-32" /> : `R$ ${saldoRealizadoTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}</div></CardContent></Card>
           </div>
 
           <div className="overflow-x-auto">
@@ -123,23 +160,7 @@ export function FluxoDeCaixaModal({ isOpen, onClose }: FluxoDeCaixaModalProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
-                    <TableRow><TableCell colSpan={7} className="text-center h-24">A carregar dados...</TableCell></TableRow>
-                ) : data.map((mes, index) => {
-                    const saldoPrevisto = mes.receitaPrevista - mes.despesaPrevista;
-                    const saldoRealizado = mes.receitaRealizada - mes.despesaRealizada;
-                    return (
-                        <TableRow key={index}>
-                            <TableCell className="font-medium capitalize">{mes.mes}</TableCell>
-                            <TableCell>R$ {mes.receitaPrevista.toLocaleString("pt-BR")}</TableCell>
-                            <TableCell className="font-semibold text-primary-teal">R$ {mes.receitaRealizada.toLocaleString("pt-BR")}</TableCell>
-                            <TableCell>R$ {mes.despesaPrevista.toLocaleString("pt-BR")}</TableCell>
-                            <TableCell className="font-semibold text-secondary-red">R$ {mes.despesaRealizada.toLocaleString("pt-BR")}</TableCell>
-                            <TableCell>R$ {saldoPrevisto.toLocaleString("pt-BR")}</TableCell>
-                            <TableCell className={`font-semibold ${saldoRealizado >= 0 ? 'text-primary-medium-green' : 'text-secondary-red'}`}>R$ {saldoRealizado.toLocaleString("pt-BR")}</TableCell>
-                        </TableRow>
-                    )
-                })}
+                {renderTableBody()}
               </TableBody>
             </Table>
           </div>

@@ -1,6 +1,6 @@
 // src/services/financialService.ts
 import { db } from "@/lib/firebaseConfig";
-import { collection, addDoc, updateDoc, doc, deleteDoc, getDocs, query, orderBy, where, writeBatch } from "firebase/firestore";
+import { collection, addDoc, updateDoc, doc, deleteDoc, getDocs, getDoc, query, orderBy, where, writeBatch, setDoc } from "firebase/firestore";
 import { format, addMonths } from "date-fns";
 import { Timestamp } from "firebase/firestore";
 
@@ -485,5 +485,41 @@ export const getBudgetsForPeriod = async (periodIds: string[]): Promise<Budget[]
     } catch (error) {
         console.error("Erro ao buscar orçamentos:", error);
         return [];
+    }
+};
+/**
+ * Busca o orçamento de um mês específico.
+ * @param monthId - O ID do mês no formato "AAAA-MM".
+ */
+export const getBudgetForMonth = async (monthId: string): Promise<Budget | null> => {
+    try {
+        const docRef = doc(db, 'budgets', monthId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { id: docSnap.id, ...docSnap.data() } as Budget;
+        }
+        return null; // Retorna nulo se não houver orçamento definido para o mês
+    } catch (error) {
+        console.error("Erro ao buscar orçamento do mês:", error);
+        return null;
+    }
+};
+
+/**
+ * Define ou atualiza o orçamento para um mês específico.
+ * Usa setDoc com merge: true para criar ou atualizar o documento.
+ * @param monthId - O ID do mês no formato "AAAA-MM".
+ * @param data - Os dados do orçamento a serem salvos.
+ */
+export const setBudgetForMonth = async (monthId: string, data: Partial<Omit<Budget, 'id'>>) => {
+    try {
+        const docRef = doc(db, 'budgets', monthId);
+        // setDoc com { merge: true } cria o documento se ele não existir,
+        // ou atualiza os campos especificados se ele já existir.
+        await setDoc(docRef, data, { merge: true });
+        return { success: true };
+    } catch (error) {
+        console.error("Erro ao salvar orçamento do mês:", error);
+        return { success: false, error: "Falha ao salvar a meta financeira." };
     }
 };

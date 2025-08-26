@@ -21,7 +21,8 @@ import {
 } from "@/services/financialService";
 import {
     getCostCenters, CostCenter, addCostCenter, updateCostCenter, deleteCostCenter,
-    getProfessionalsForRepasse, Professional
+    getProfessionalsForRepasse, Professional,
+    getCompanyData, updateCompanyData, CompanyData
 } from "@/services/settingsService";
 
 // Modals
@@ -33,6 +34,9 @@ import { AddEditSupplierModal } from "@/components/modals/add-edit-supplier-moda
 import { AddEditCovenantModal } from "@/components/modals/add-edit-covenant-modal";
 import { AddEditBankAccountModal } from "@/components/modals/add-edit-bank-account-modal";
 import { FinancialReportModal, ReportType } from "@/components/financial/financial-report-modal";
+import { FluxoDeCaixaModal } from "@/components/financial/fluxo-de-caixa-modal";
+import { FutureForecastsModal } from "@/components/financial/future-forecasts-modal";
+import { FinancialGoalsModal } from "@/components/financial/financial-goals-modal";
 
 // Componentes Refatorados
 import { FinancialSummaryCards } from "@/components/financial/financial-summary-cards";
@@ -54,6 +58,7 @@ export default function FinancialClientPage() {
     const [covenants, setCovenants] = useState<Covenant[]>([]);
     const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
     const [professionals, setProfessionals] = useState<Professional[]>([]);
+    const [companyData, setCompanyData] = useState<CompanyData | null>(null);
 
     // Estados de Controle de UI
     const [loading, setLoading] = useState(true);
@@ -63,6 +68,9 @@ export default function FinancialClientPage() {
     const [dateTo, setDateTo] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [reportType, setReportType] = useState<ReportType | null>(null);
+    const [isFluxoDeCaixaModalOpen, setIsFluxoDeCaixaModalOpen] = useState(false);
+    const [isFutureForecastsModalOpen, setIsFutureForecastsModalOpen] = useState(false);
+    const [isFinancialGoalsModalOpen, setIsFinancialGoalsModalOpen] = useState(false);
 
     // Estados para Modais de Transação
     const [isAddTransactionModalOpen, setIsAddTransactionModalOpen] = useState(false);
@@ -85,9 +93,9 @@ export default function FinancialClientPage() {
         setLoading(true);
         const startDate = startOfDay(new Date(dateFrom));
         const endDate = endOfDay(new Date(dateTo));
-        const [ transactionsData, plansData, centersData, suppliersData, covenantsData, bankAccountsData, professionalsData ] = await Promise.all([
+        const [ transactionsData, plansData, centersData, suppliersData, covenantsData, bankAccountsData, professionalsData, companyInfo ] = await Promise.all([
             getTransactionsByPeriod(startDate, endDate), getAccountPlans(), getCostCenters(),
-            getSuppliers(), getCovenants(), getBankAccounts(), getProfessionalsForRepasse()
+            getSuppliers(), getCovenants(), getBankAccounts(), getProfessionalsForRepasse(), getCompanyData()
         ]);
         setTransactions(transactionsData);
         setAccountPlans(plansData);
@@ -96,6 +104,7 @@ export default function FinancialClientPage() {
         setCovenants(covenantsData);
         setBankAccounts(bankAccountsData);
         setProfessionals(professionalsData);
+        setCompanyData(companyInfo);
         setLoading(false);
     }, [dateFrom, dateTo]);
 
@@ -104,6 +113,18 @@ export default function FinancialClientPage() {
     const handleOpenReportModal = (type: ReportType) => {
         setReportType(type);
         setIsReportModalOpen(true);
+    };
+
+    const handleOpenVisualizer = (type: ReportType) => {
+        if (type === 'fluxo_caixa') {
+            setIsFluxoDeCaixaModalOpen(true);
+        } else if (type === 'previsoes_futuras') {
+            setIsFutureForecastsModalOpen(true);
+        } else if (type === 'metas_financeiras') {
+            setIsFinancialGoalsModalOpen(true);
+        } else {
+            alert(`Visualizador para ${type} está em desenvolvimento.`);
+        }
     };
 
     const handleGenerateReport = async (params: any) => {
@@ -249,6 +270,17 @@ export default function FinancialClientPage() {
     const handleAddBankAccount = async (data: any) => { setIsSubmitting(true); const result = await addBankAccount(data); if (result.success) { toast.success("Conta adicionada!"); setIsBankAccountModalOpen(false); fetchData(); } else { toast.error(result.error); } setIsSubmitting(false); };
     const handleUpdateBankAccount = async (data: any) => { if (!selectedBankAccount) return; setIsSubmitting(true); const result = await updateBankAccount(selectedBankAccount.id, data); if (result.success) { toast.success("Conta atualizada!"); setIsBankAccountModalOpen(false); fetchData(); } else { toast.error(result.error); } setIsSubmitting(false); };
     const handleDeleteBankAccount = async (id: string) => { if(window.confirm("Excluir conta?")) { const result = await deleteBankAccount(id); if (result.success) { toast.success("Conta excluída!"); fetchData(); } else { toast.error(result.error); } } };
+    const handleUpdateCompanyData = async (data: CompanyData) => {
+        setIsSubmitting(true);
+        const result = await updateCompanyData(data);
+        if (result.success) {
+            toast.success("Dados da empresa atualizados com sucesso!");
+            fetchData();
+        } else {
+            toast.error(result.error || "Falha ao salvar os dados da empresa.");
+        }
+        setIsSubmitting(false);
+    };
 
     const filteredTransactions = useMemo(() => transactions.filter(mov => mov.description.toLowerCase().includes(searchTerm.toLowerCase())), [transactions, searchTerm]);
     const receitas = filteredTransactions.filter(t => t.type === 'receita');
@@ -282,11 +314,13 @@ export default function FinancialClientPage() {
                         <ProfessionalRepasseDashboard transactions={transactions} professionals={professionals} loading={loading} />
                     </TabsContent>
                     <TabsContent value="relatorios" className="mt-6">
-                        <FinancialReportsDashboard onGenerateReport={handleOpenReportModal} onOpenVisualizer={(type) => alert(`Visualizador para ${type} em desenvolvimento.`)} />
+                        <FinancialReportsDashboard onGenerateReport={handleOpenReportModal} onOpenVisualizer={handleOpenVisualizer} />
                     </TabsContent>
                     <TabsContent value="configuracoes" className="mt-6">
                         <SettingsDashboard
                             accountPlans={accountPlans} costCenters={costCenters} suppliers={suppliers} covenants={covenants} bankAccounts={bankAccounts} loading={loading}
+                            companyData={companyData}
+                            onUpdateCompanyData={handleUpdateCompanyData}
                             onAddAccountPlan={(category) => { setSelectedAccountPlan({ category }); setIsAccountPlanModalOpen(true); }}
                             onEditAccountPlan={(plan) => { setSelectedAccountPlan(plan); setIsAccountPlanModalOpen(true); }}
                             onDeleteAccountPlan={handleDeleteAccountPlan}
@@ -307,31 +341,20 @@ export default function FinancialClientPage() {
                 </Tabs>
             </div>
 
-            <AddTransactionModal
-                isOpen={isAddTransactionModalOpen}
-                onClose={() => setIsAddTransactionModalOpen(false)}
-                onSubmit={handleAddTransaction}
-                accountPlans={accountPlans}
-                costCenters={costCenters}
-                bankAccounts={bankAccounts}
-                isLoading={isSubmitting}
-            />
-            <EditTransactionModal
-                isOpen={isEditTransactionModalOpen}
-                onClose={() => setIsEditTransactionModalOpen(false)}
-                onSubmit={handleUpdateTransaction}
-                transaction={selectedTransaction}
-                accountPlans={accountPlans}
-                costCenters={costCenters}
-                bankAccounts={bankAccounts}
-                isLoading={isSubmitting}
-            />
+            <AddTransactionModal isOpen={isAddTransactionModalOpen} onClose={() => setIsAddTransactionModalOpen(false)} onSubmit={handleAddTransaction} accountPlans={accountPlans} costCenters={costCenters} bankAccounts={bankAccounts} isLoading={isSubmitting} />
+            <EditTransactionModal isOpen={isEditTransactionModalOpen} onClose={() => setIsEditTransactionModalOpen(false)} onSubmit={handleUpdateTransaction} transaction={selectedTransaction} accountPlans={accountPlans} costCenters={costCenters} bankAccounts={bankAccounts} isLoading={isSubmitting} />
             <AddEditAccountPlanModal isOpen={isAccountPlanModalOpen} onClose={() => { setIsAccountPlanModalOpen(false); setSelectedAccountPlan(null); }} onSubmit={selectedAccountPlan?.id ? handleUpdateAccountPlan : handleAddAccountPlan} accountPlan={selectedAccountPlan} isLoading={isSubmitting} />
             <AddEditCostCenterModal isOpen={isCostCenterModalOpen} onClose={() => { setIsCostCenterModalOpen(false); setSelectedCostCenter(null); }} onSubmit={selectedCostCenter?.id ? handleUpdateCostCenter : handleAddCostCenter} costCenter={selectedCostCenter} isLoading={isSubmitting} />
             <AddEditSupplierModal isOpen={isSupplierModalOpen} onClose={() => { setIsSupplierModalOpen(false); setSelectedSupplier(null); }} onSubmit={selectedSupplier?.id ? handleUpdateSupplier : handleAddSupplier} supplier={selectedSupplier} isLoading={isSubmitting} />
             <AddEditCovenantModal isOpen={isCovenantModalOpen} onClose={() => { setIsCovenantModalOpen(false); setSelectedCovenant(null); }} onSubmit={selectedCovenant?.id ? handleUpdateCovenant : handleAddCovenant} covenant={selectedCovenant} isLoading={isSubmitting} />
             <AddEditBankAccountModal isOpen={isBankAccountModalOpen} onClose={() => { setIsBankAccountModalOpen(false); setSelectedBankAccount(null); }} onSubmit={selectedBankAccount?.id ? handleUpdateBankAccount : handleAddBankAccount} bankAccount={selectedBankAccount} isLoading={isSubmitting} />
             <FinancialReportModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} onGenerate={handleGenerateReport} reportType={reportType} costCenters={costCenters} bankAccounts={bankAccounts} />
+            <FluxoDeCaixaModal isOpen={isFluxoDeCaixaModalOpen} onClose={() => setIsFluxoDeCaixaModalOpen(false)} />
+            <FutureForecastsModal isOpen={isFutureForecastsModalOpen} onClose={() => setIsFutureForecastsModalOpen(false)} />
+            <FinancialGoalsModal
+                isOpen={isFinancialGoalsModalOpen}
+                onClose={() => setIsFinancialGoalsModalOpen(false)}
+            />
         </>
     );
 }

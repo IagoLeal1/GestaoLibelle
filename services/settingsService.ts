@@ -1,6 +1,28 @@
 // src/services/settingsService.ts
 import { db } from "@/lib/firebaseConfig";
-import { collection, getDocs, addDoc, updateDoc, doc, deleteDoc, query, orderBy } from "firebase/firestore";
+import { 
+  collection, 
+  getDocs, 
+  addDoc, 
+  updateDoc, 
+  doc, 
+  deleteDoc, 
+  query, 
+  orderBy,
+  getDoc,
+  setDoc 
+} from "firebase/firestore";
+
+// --- NOVAS INTERFACES ---
+export interface CompanyData {
+    name?: string;
+    cnpj?: string;
+    address?: string;
+    city?: string;
+    zipCode?: string;
+    phone?: string;
+    email?: string;
+}
 
 export interface CostCenter {
     id: string;
@@ -10,8 +32,43 @@ export interface CostCenter {
 export interface Professional {
     id: string;
     name: string;
-    // Adicione aqui outros campos do seu profissional, se existirem (ex: especialidade, cpf)
 }
+
+// --- NOVAS FUNÇÕES ---
+/**
+ * Busca os dados da empresa.
+ * Os dados são armazenados num único documento para facilitar a gestão.
+ */
+export const getCompanyData = async (): Promise<CompanyData | null> => {
+    try {
+        const docRef = doc(db, "settings", "companyInfo");
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return docSnap.data() as CompanyData;
+        }
+        return null; // Retorna nulo se a empresa ainda não foi configurada
+    } catch (e) {
+        console.error("Erro ao buscar dados da empresa: ", e);
+        return null;
+    }
+};
+
+/**
+ * Cria ou atualiza os dados da empresa.
+ */
+export const updateCompanyData = async (data: CompanyData) => {
+    try {
+        const docRef = doc(db, "settings", "companyInfo");
+        // Usamos setDoc com { merge: true } para criar ou atualizar o documento
+        await setDoc(docRef, data, { merge: true });
+        return { success: true };
+    } catch (e) {
+        console.error("Erro ao atualizar dados da empresa: ", e);
+        return { success: false, error: "Falha ao salvar dados da empresa." };
+    }
+};
+
+// --- FUNÇÕES EXISTENTES ---
 
 export const getCostCenters = async (): Promise<CostCenter[]> => {
     try {
@@ -55,33 +112,10 @@ export const deleteCostCenter = async (id: string) => {
     }
 };
 
-// Nova função para buscar profissionais
-export const getProfessionals = async (): Promise<Professional[]> => {
-    try {
-        const q = query(collection(db, "professionals"), orderBy("name"));
-        const querySnapshot = await getDocs(q);
-        const professionals = querySnapshot.docs.map(doc => ({
-            id: doc.id,
-            name: doc.data().name
-        } as Professional));
-        return professionals;
-    } catch (e) {
-        console.error("Erro ao buscar profissionais: ", e);
-        return [];
-    }
-};
-// Interface simplificada para o repasse
-export interface Professional {
-    id: string;
-    name: string;
-}
-
-// Nova função para buscar profissionais (focada no nome para o repasse)
 export const getProfessionalsForRepasse = async (): Promise<Professional[]> => {
     try {
         const q = query(collection(db, "professionals"), orderBy("fullName"));
         const querySnapshot = await getDocs(q);
-        // Usamos 'fullName' para corresponder ao campo no seu Firestore
         const professionals = querySnapshot.docs.map(doc => ({
             id: doc.id,
             name: doc.data().fullName 
