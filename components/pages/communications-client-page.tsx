@@ -1,3 +1,4 @@
+// components/pages/communications-client-page.tsx
 "use client"
 
 import { useState, useEffect, useCallback } from "react";
@@ -9,6 +10,8 @@ import {
   createCommunication, 
   countUsersByRole, 
   deleteCommunication,
+  getUsersByRole,
+  UserDetails,
   CommunicationFormData 
 } from "@/services/communicationService";
 
@@ -22,106 +25,141 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, MessageSquare, Users, CheckCircle, Send, Trash2 } from "lucide-react";
+import { Plus, MessageSquare, Users, CheckCircle, Send, Trash2, AlertCircle } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { CommunicationDetailsModal } from "../modals/communication-details-modal";
+import { toast } from "sonner";
 
 // --- Componente Principal ---
 export function CommunicationsClientPage() {
-    const { firestoreUser } = useAuth();
+    const { firestoreUser, fetchUnreadCount } = useAuth();
     const [allComms, setAllComms] = useState<Communication[]>([]);
-    const [userCounts, setUserCounts] = useState({ profissional: 0, familiar: 0, funcionario: 0 });
+    const [allUsers, setAllUsers] = useState<{ profissionais: UserDetails[], familiares: UserDetails[], funcionarios: UserDetails[], admins: UserDetails[] }>({ profissionais: [], familiares: [], funcionarios: [], admins: [] });
     const [loading, setLoading] = useState(true);
+    
+    const [selectedComm, setSelectedComm] = useState<Communication | null>(null);
+    const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
     const fetchData = useCallback(async () => {
         if (firestoreUser?.profile.role) {
             setLoading(true);
-            const [commsData, profCount, famCount, funcCount] = await Promise.all([
+            const [commsData, profUsers, famUsers, funcUsers, adminUsers] = await Promise.all([
                 getCommunications(firestoreUser.profile.role),
-                countUsersByRole('profissional'),
-                countUsersByRole('familiar'),
-                countUsersByRole('funcionario')
+                getUsersByRole('profissional'),
+                getUsersByRole('familiar'),
+                getUsersByRole('funcionario'),
+                getUsersByRole('admin') 
             ]);
             setAllComms(commsData);
-            setUserCounts({ profissional: profCount, familiar: famCount, funcionario: funcCount });
+            setAllUsers({ profissionais: profUsers, familiares: famUsers, funcionarios: funcUsers, admins: adminUsers });
             setLoading(false);
+            fetchUnreadCount();
         }
-    }, [firestoreUser]);
+    }, [firestoreUser, fetchUnreadCount]);
 
     useEffect(() => {
         fetchData();
     }, [fetchData]);
 
-    const handleMarkAsRead = async (commId: string) => {
-        if (!firestoreUser) return;
-        const result = await markCommunicationAsRead(commId, firestoreUser.uid);
-        if (result.success) {
-            setAllComms(prev => prev.map(c => c.id === commId ? { ...c, readBy: { ...c.readBy, [firestoreUser.uid]: new Date() as any } } : c));
+    const handleOpenDetails = (comm: Communication) => {
+        setSelectedComm(comm);
+        setIsDetailsModalOpen(true);
+    };
+
+    const getTargetUsersForComm = (comm: Communication | null): UserDetails[] => {
+        if (!comm) return [];
+        let targets: UserDetails[] = [];
+    
+        if (comm.targetRole === 'familiar') {
+            targets = [...allUsers.familiares];
+        } else if (comm.targetRole === 'profissional') {
+            targets = [...allUsers.profissionais, ...allUsers.funcionarios];
         }
+        
+        const allTargets = [...targets, ...allUsers.admins];
+        return Array.from(new Map(allTargets.map(item => [item.uid, item])).values());
     };
-
-    const handleDelete = async (commId: string) => {
-        if (window.confirm("Tem certeza que deseja excluir este comunicado? Esta ação não pode ser desfeita.")) {
-            const result = await deleteCommunication(commId);
-            if (result.success) {
-                setAllComms(prev => prev.filter(c => c.id !== commId));
-                alert("Comunicado excluído com sucesso.");
-            } else {
-                alert(result.error);
-            }
-        }
-    };
-
-    const getProgressColor = (leituras: number, total: number) => {
-        const percentage = total > 0 ? (leituras / total) * 100 : 0;
-        if (percentage >= 80) return "bg-primary-medium-green";
-        if (percentage >= 50) return "bg-secondary-orange";
-        return "bg-secondary-red";
-    };
-
+    
     const avisosInternos = allComms.filter(c => c.targetRole === 'profissional' || c.targetRole === 'funcionario');
     const comunicadosFamiliares = allComms.filter(c => c.targetRole === 'familiar');
-    const totalInternos = userCounts.profissional + userCounts.funcionario;
-    const totalFamiliares = userCounts.familiar;
+    const canManage = firestoreUser?.profile.role === 'admin' || firestoreUser?.profile.role === 'funcionario';
 
-    const CommunicationCard = ({ comm, totalDestinatarios }: { comm: Communication, totalDestinatarios: number }) => {
+    // Sub-componente para o Card de Comunicação
+    const CommunicationCard = ({ comm }: { comm: Communication }) => {
+        const targetUsers = getTargetUsersForComm(comm);
+        const totalDestinatarios = targetUsers.length;
         const readCount = Object.keys(comm.readBy).length;
         const hasRead = firestoreUser && Object.keys(comm.readBy).includes(firestoreUser.uid);
-        const canManage = firestoreUser?.profile.role === 'admin' || firestoreUser?.profile.role === 'funcionario';
+
+        const handleCardClick = (e: React.MouseEvent) => {
+            if ((e.target as HTMLElement).closest('button')) {
+                return;
+            }
+            handleOpenDetails(comm);
+        };
+
+        const handleConfirmReadClick = async (e: React.MouseEvent) => {
+            e.stopPropagation();
+            if (!firestoreUser) return;
+            await markCommunicationAsRead(comm.id, firestoreUser.uid);
+            fetchData();
+        };
+
+        const getProgressColor = (leituras: number, total: number) => {
+            const percentage = total > 0 ? (leituras / total) * 100 : 0;
+            if (percentage >= 80) return "bg-primary-medium-green";
+            if (percentage >= 50) return "bg-secondary-orange";
+            return "bg-secondary-red";
+        };
 
         return (
-            <Card key={comm.id}>
+            <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={handleCardClick}>
                 <CardHeader>
                     <div className="flex justify-between items-start gap-2">
                         <div>
                             <CardTitle className="text-lg">{comm.title}</CardTitle>
-                            <p className="text-sm text-muted-foreground mt-1">Por: {comm.authorName} em {comm.createdAt.toDate().toLocaleDateString("pt-BR")}</p>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Por: {comm.authorName} em {comm.createdAt.toDate().toLocaleDateString("pt-BR")}
+                            </p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-shrink-0">
                             {canManage && <Badge>{readCount}/{totalDestinatarios} leram</Badge>}
-                            {canManage && (
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(comm.id)}>
-                                    <Trash2 className="h-4 w-4 text-red-500" />
-                                </Button>
-                            )}
                         </div>
                     </div>
                 </CardHeader>
-                <CardContent>
-                    <p className="text-gray-700 mb-4 whitespace-pre-wrap">{comm.message}</p>
-                    {canManage && (
-                        <div className="flex items-center gap-2">
-                            <div className="flex-1 bg-gray-200 rounded-full h-2"><div className={`h-2 rounded-full ${getProgressColor(readCount, totalDestinatarios)}`} style={{ width: `${totalDestinatarios > 0 ? (readCount / totalDestinatarios) * 100 : 0}%` }}></div></div>
-                            <span className="text-xs text-muted-foreground">{Math.round(totalDestinatarios > 0 ? (readCount / totalDestinatarios) * 100 : 0)}%</span>
-                        </div>
-                    )}
-                    {!canManage && (
-                        <div className="mt-4 pt-4 border-t">
-                            <Button onClick={() => handleMarkAsRead(comm.id)} disabled={!!hasRead} variant={hasRead ? 'secondary' : 'default'}>
+                <CardContent className="space-y-4">
+                    <p className="text-gray-700 line-clamp-2">{comm.message}</p>
+                    
+                    {/* --- LÓGICA DE EXIBIÇÃO CORRIGIDA --- */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        {/* Botão ou status de leitura sempre aparece */}
+                        {!hasRead ? (
+                            <Button onClick={handleConfirmReadClick} size="sm">
                                 <CheckCircle className="mr-2 h-4 w-4" />
-                                {hasRead ? "Leitura Confirmada" : "Confirmar Leitura"}
+                                Confirmar Leitura
                             </Button>
-                        </div>
-                    )}
+                        ) : (
+                            <div className="text-sm font-semibold flex items-center gap-2 text-green-600">
+                                <CheckCircle className="h-4 w-4" />
+                                Leitura confirmada
+                            </div>
+                        )}
+
+                        {/* Barra de progresso aparece APENAS para admins/funcionários */}
+                        {canManage && (
+                             <div className="flex items-center gap-2 w-full sm:w-1/3">
+                                <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                    <div 
+                                        className={`h-2 rounded-full ${getProgressColor(readCount, totalDestinatarios)}`} 
+                                        style={{ width: `${totalDestinatarios > 0 ? (readCount / totalDestinatarios) * 100 : 0}%` }}
+                                    ></div>
+                                </div>
+                                <span className="text-xs text-muted-foreground">
+                                    {Math.round(totalDestinatarios > 0 ? (readCount / totalDestinatarios) * 100 : 0)}%
+                                </span>
+                            </div>
+                        )}
+                    </div>
                 </CardContent>
             </Card>
         );
@@ -130,30 +168,41 @@ export function CommunicationsClientPage() {
     if (loading) return <p className="text-center p-8">Carregando comunicados...</p>;
 
     return (
-        <Tabs defaultValue="internos" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="internos" className="flex items-center gap-2"><MessageSquare className="h-4 w-4" />Avisos Internos</TabsTrigger>
-                <TabsTrigger value="familiares" className="flex items-center gap-2"><Users className="h-4 w-4" />Comunicados Familiares</TabsTrigger>
-            </TabsList>
-            <TabsContent value="internos" className="space-y-4 pt-4">
-                {avisosInternos.length > 0 ? 
-                    avisosInternos.map((aviso) => <CommunicationCard key={aviso.id} comm={aviso} totalDestinatarios={totalInternos} />) :
-                    <p className="text-center text-muted-foreground py-8">Nenhum aviso interno no momento.</p>
-                }
-            </TabsContent>
-            <TabsContent value="familiares" className="space-y-4 pt-4">
-                {comunicadosFamiliares.length > 0 ?
-                    comunicadosFamiliares.map((comunicado) => <CommunicationCard key={comunicado.id} comm={comunicado} totalDestinatarios={totalFamiliares} />) :
-                    <p className="text-center text-muted-foreground py-8">Nenhum comunicado para familiares no momento.</p>
-                }
-            </TabsContent>
-        </Tabs>
+        <>
+            <Tabs defaultValue="internos" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="internos" className="flex items-center gap-2"><MessageSquare className="h-4 w-4" />Avisos Internos ({avisosInternos.length})</TabsTrigger>
+                    <TabsTrigger value="familiares" className="flex items-center gap-2"><Users className="h-4 w-4" />Comunicados Familiares ({comunicadosFamiliares.length})</TabsTrigger>
+                </TabsList>
+                <TabsContent value="internos" className="space-y-4 pt-4">
+                    {avisosInternos.length > 0 ? 
+                        avisosInternos.map((aviso) => <CommunicationCard key={aviso.id} comm={aviso} />) :
+                        <p className="text-center text-muted-foreground py-8">Nenhum aviso interno no momento.</p>
+                    }
+                </TabsContent>
+                <TabsContent value="familiares" className="space-y-4 pt-4">
+                    {comunicadosFamiliares.length > 0 ?
+                        comunicadosFamiliares.map((comunicado) => <CommunicationCard key={comunicado.id} comm={comunicado} />) :
+                        <p className="text-center text-muted-foreground py-8">Nenhum comunicado para familiares no momento.</p>
+                    }
+                </TabsContent>
+            </Tabs>
+
+            <CommunicationDetailsModal
+                isOpen={isDetailsModalOpen}
+                onClose={() => setIsDetailsModalOpen(false)}
+                communication={selectedComm}
+                targetUsers={getTargetUsersForComm(selectedComm)}
+                onUpdate={fetchData}
+                canManage={canManage}
+            />
+        </>
     );
 }
 
-// Sub-componente para o Modal de Criação (AGORA COMPLETO)
+// Sub-componente para o Modal de Criação (sem alterações)
 CommunicationsClientPage.CreateCommunicationModal = function CreateCommunicationModal() {
-    const { firestoreUser } = useAuth();
+    const { firestoreUser, fetchUnreadCount } = useAuth();
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState<CommunicationFormData>({
@@ -165,18 +214,18 @@ CommunicationsClientPage.CreateCommunicationModal = function CreateCommunication
 
     const handleCreate = async () => {
         if (!firestoreUser || !formData.title || !formData.message) {
-            alert("Título e conteúdo são obrigatórios.");
+            toast.error("Título e conteúdo são obrigatórios.");
             return;
         }
         setLoading(true);
         const result = await createCommunication(formData, firestoreUser);
         setLoading(false);
         if (result.success) {
-            alert("Comunicado enviado!");
+            toast.success("Comunicado enviado!");
             setOpen(false);
-            // A atualização da lista acontecerá automaticamente na página principal
+            fetchUnreadCount();
         } else {
-            alert(result.error);
+            toast.error(result.error);
         }
     };
     
@@ -193,7 +242,7 @@ CommunicationsClientPage.CreateCommunicationModal = function CreateCommunication
                         <Select value={formData.targetRole} onValueChange={(v) => setFormData({...formData, targetRole: v as any})}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="profissional">Aviso Interno (Profissionais)</SelectItem>
+                                <SelectItem value="profissional">Aviso Interno (Profissionais/Funcionários)</SelectItem>
                                 <SelectItem value="familiar">Comunicado para Familiares</SelectItem>
                             </SelectContent>
                         </Select>

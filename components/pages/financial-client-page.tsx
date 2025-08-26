@@ -3,10 +3,11 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus } from "lucide-react";
+import { Plus, Wallet } from "lucide-react";
 import { format, startOfMonth, endOfMonth, startOfDay, endOfDay } from "date-fns";
 import { toast } from "sonner";
-import { Timestamp } from "firebase/firestore";
+import { db } from "@/lib/firebaseConfig";
+import { doc, writeBatch } from "firebase/firestore";
 
 // Services
 import {
@@ -17,7 +18,8 @@ import {
     getCovenants, addCovenant, updateCovenant, deleteCovenant, Covenant,
     getBankAccounts, addBankAccount, updateBankAccount, deleteBankAccount, BankAccount,
     getTransactionsForReport, getPendingTransactions, getExpensesByCostCenter,
-    createTransactionBlock, TransactionBlockFormData
+    createTransactionBlock, TransactionBlockFormData,
+    getAllPaidTransactions
 } from "@/services/financialService";
 import {
     getCostCenters, CostCenter, addCostCenter, updateCostCenter, deleteCostCenter,
@@ -39,7 +41,7 @@ import { FutureForecastsModal } from "@/components/financial/future-forecasts-mo
 import { FinancialGoalsModal } from "@/components/financial/financial-goals-modal";
 import { AnaliseTendenciasModal } from "@/components/financial/analise-tendencias-modal";
 import { ComparativoMensalModal } from "@/components/financial/comparativo-mensal-modal";
-
+import { BankBalancesModal } from "@/components/financial/bank-balances-modal";
 
 // Componentes Refatorados
 import { FinancialSummaryCards } from "@/components/financial/financial-summary-cards";
@@ -76,7 +78,7 @@ export default function FinancialClientPage() {
     const [isFinancialGoalsModalOpen, setIsFinancialGoalsModalOpen] = useState(false);
     const [isAnaliseTendenciasModalOpen, setIsAnaliseTendenciasModalOpen] = useState(false);
     const [isComparativoMensalModalOpen, setIsComparativoMensalModalOpen] = useState(false);
-
+    const [isBankBalancesModalOpen, setIsBankBalancesModalOpen] = useState(false);
 
     // Estados para Modais de Transação
     const [isAddTransactionModalOpen, setIsAddTransactionModalOpen] = useState(false);
@@ -115,26 +117,19 @@ export default function FinancialClientPage() {
     }, [dateFrom, dateTo]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
-
+    
     const handleOpenReportModal = (type: ReportType) => {
         setReportType(type);
         setIsReportModalOpen(true);
     };
 
     const handleOpenVisualizer = (type: ReportType) => {
-        if (type === 'fluxo_caixa') {
-            setIsFluxoDeCaixaModalOpen(true);
-        } else if (type === 'previsoes_futuras') {
-            setIsFutureForecastsModalOpen(true);
-        } else if (type === 'metas_financeiras') {
-            setIsFinancialGoalsModalOpen(true);
-        } else if (type === 'analise_tendencias') {
-            setIsAnaliseTendenciasModalOpen(true);
-        } else if (type === 'comparativo_mensal') {
-            setIsComparativoMensalModalOpen(true);
-        } else {
-            alert(`Visualizador para ${type} está em desenvolvimento.`);
-        }
+        if (type === 'fluxo_caixa') setIsFluxoDeCaixaModalOpen(true);
+        else if (type === 'previsoes_futuras') setIsFutureForecastsModalOpen(true);
+        else if (type === 'metas_financeiras') setIsFinancialGoalsModalOpen(true);
+        else if (type === 'analise_tendencias') setIsAnaliseTendenciasModalOpen(true);
+        else if (type === 'comparativo_mensal') setIsComparativoMensalModalOpen(true);
+        else alert(`Visualizador para ${type} está em desenvolvimento.`);
     };
 
     const handleGenerateReport = async (params: any) => {
@@ -152,72 +147,34 @@ export default function FinancialClientPage() {
         switch (reportType) {
             case 'contas_pagas':
                 headers = ["Data Pagamento", "Descricao", "Categoria", "Centro de Custo", "Valor Pago"];
-                const paidTransactions = await getTransactionsForReport({
-                    type: 'despesa',
-                    status: 'pago',
-                    startDate,
-                    endDate
-                });
-                dataToExport = paidTransactions.map(tx => [
-                    format(tx.date.toDate(), 'dd/MM/yyyy'), `"${tx.description}"`, tx.category, tx.costCenter, tx.value.toFixed(2).replace('.', ',')
-                ]);
+                const paidTransactions = await getTransactionsForReport({ type: 'despesa', status: 'pago', startDate, endDate });
+                dataToExport = paidTransactions.map(tx => [ format(tx.date.toDate(), 'dd/MM/yyyy'), `"${tx.description}"`, tx.category, tx.costCenter, tx.value.toFixed(2).replace('.', ',') ]);
                 break;
             case 'contas_recebidas':
                 headers = ["Data Recebimento", "Descricao", "Categoria", "Centro de Custo", "Valor Recebido"];
-                const receivedTransactions = await getTransactionsForReport({
-                    type: 'receita',
-                    status: 'pago',
-                    startDate,
-                    endDate
-                });
-                dataToExport = receivedTransactions.map(tx => [
-                    format(tx.date.toDate(), 'dd/MM/yyyy'), `"${tx.description}"`, tx.category, tx.costCenter, tx.value.toFixed(2).replace('.', ',')
-                ]);
+                const receivedTransactions = await getTransactionsForReport({ type: 'receita', status: 'pago', startDate, endDate });
+                dataToExport = receivedTransactions.map(tx => [ format(tx.date.toDate(), 'dd/MM/yyyy'), `"${tx.description}"`, tx.category, tx.costCenter, tx.value.toFixed(2).replace('.', ',') ]);
                 break;
-            case 'receitas':
-            case 'despesas':
-            case 'fluxo_caixa':
+            case 'receitas': case 'despesas': case 'fluxo_caixa':
                 headers = ["Data", "Tipo", "Categoria", "Descricao", "Centro de Custo", "Status", "Valor"];
-                const reportTransactions = await getTransactionsForReport({
-                    type: reportType === 'fluxo_caixa' ? undefined : reportType,
-                    startDate,
-                    endDate
-                });
-                dataToExport = reportTransactions.map(tx => [
-                    format(tx.date.toDate(), 'dd/MM/yyyy'), tx.type, tx.category, `"${tx.description}"`, tx.costCenter, tx.status, tx.value.toFixed(2).replace('.', ',')
-                ]);
+                const reportTransactions = await getTransactionsForReport({ type: reportType === 'fluxo_caixa' ? undefined : reportType, startDate, endDate });
+                dataToExport = reportTransactions.map(tx => [ format(tx.date.toDate(), 'dd/MM/yyyy'), tx.type, tx.category, `"${tx.description}"`, tx.costCenter, tx.status, tx.value.toFixed(2).replace('.', ',') ]);
                 break;
-            case 'contas_a_pagar':
-            case 'contas_a_receber':
+            case 'contas_a_pagar': case 'contas_a_receber':
                 headers = ["Data Vencimento", "Descricao", "Categoria", "Valor Pendente"];
                 const pendingType = reportType === 'contas_a_pagar' ? 'despesa' : 'receita';
                 const pendingTransactions = await getPendingTransactions({ type: pendingType, startDate, endDate });
-                dataToExport = pendingTransactions.map(tx => [
-                    format(tx.date.toDate(), 'dd/MM/yyyy'), `"${tx.description}"`, tx.category, tx.value.toFixed(2).replace('.', ',')
-                ]);
+                dataToExport = pendingTransactions.map(tx => [ format(tx.date.toDate(), 'dd/MM/yyyy'), `"${tx.description}"`, tx.category, tx.value.toFixed(2).replace('.', ',') ]);
                 break;
             case 'despesas_por_centro_custo':
                 headers = ["Centro de Custo", "Total Despesas", "Qtd. Transacoes"];
                 const expensesByCenter = await getExpensesByCostCenter(startDate, endDate);
-                dataToExport = Object.entries(expensesByCenter).map(([center, data]) => [
-                    center, data.total.toFixed(2).replace('.', ','), data.count
-                ]);
+                dataToExport = Object.entries(expensesByCenter).map(([center, data]) => [ center, data.total.toFixed(2).replace('.', ','), data.count ]);
                 break;
             case 'movimentacao_bancaria':
                 headers = ["Data", "Tipo", "Descricao", "Categoria", "Status", "Valor"];
-                const bankTransactions = await getTransactionsForReport({
-                    startDate,
-                    endDate,
-                    bankAccountId: filters.bankAccountId,
-                });
-                dataToExport = bankTransactions.map(tx => [
-                    format(tx.date.toDate(), 'dd/MM/yyyy'),
-                    tx.type,
-                    `"${tx.description}"`,
-                    tx.category,
-                    tx.status,
-                    tx.value.toFixed(2).replace('.', ',')
-                ]);
+                const bankTransactions = await getTransactionsForReport({ startDate, endDate, bankAccountId: filters.bankAccountId });
+                dataToExport = bankTransactions.map(tx => [ format(tx.date.toDate(), 'dd/MM/yyyy'), tx.type, `"${tx.description}"`, tx.category, tx.status, tx.value.toFixed(2).replace('.', ',') ]);
                 const bank = bankAccounts.find(b => b.id === filters.bankAccountId);
                 fileName = `extrato_${bank?.name.replace(/\s+/g, '_') || 'banco'}_${startDateStr}_a_${endDateStr}.csv`;
                 break;
@@ -245,13 +202,8 @@ export default function FinancialClientPage() {
 
     const handleAddTransaction = async (data: AddTransactionFormValues, isBlock: boolean) => {
         setIsSubmitting(true);
-        let result;
-        const transactionDataWithDateObject = { ...data, date: new Date(data.date) };
-        if (isBlock) {
-            result = await createTransactionBlock(transactionDataWithDateObject as TransactionBlockFormData);
-        } else {
-            result = await addTransaction(transactionDataWithDateObject);
-        }
+        const dataWithDateObject = { ...data, date: new Date(data.date) };
+        const result = isBlock ? await createTransactionBlock({ ...dataWithDateObject, repetitions: data.repetitions || 1 }) : await addTransaction(dataWithDateObject);
         if (result.success) {
             toast.success(`Movimentação ${isBlock ? 'sequencial registrada' : 'registrada'}!`);
             setIsAddTransactionModalOpen(false);
@@ -280,17 +232,7 @@ export default function FinancialClientPage() {
     const handleAddBankAccount = async (data: any) => { setIsSubmitting(true); const result = await addBankAccount(data); if (result.success) { toast.success("Conta adicionada!"); setIsBankAccountModalOpen(false); fetchData(); } else { toast.error(result.error); } setIsSubmitting(false); };
     const handleUpdateBankAccount = async (data: any) => { if (!selectedBankAccount) return; setIsSubmitting(true); const result = await updateBankAccount(selectedBankAccount.id, data); if (result.success) { toast.success("Conta atualizada!"); setIsBankAccountModalOpen(false); fetchData(); } else { toast.error(result.error); } setIsSubmitting(false); };
     const handleDeleteBankAccount = async (id: string) => { if(window.confirm("Excluir conta?")) { const result = await deleteBankAccount(id); if (result.success) { toast.success("Conta excluída!"); fetchData(); } else { toast.error(result.error); } } };
-    const handleUpdateCompanyData = async (data: CompanyData) => {
-        setIsSubmitting(true);
-        const result = await updateCompanyData(data);
-        if (result.success) {
-            toast.success("Dados da empresa atualizados com sucesso!");
-            fetchData();
-        } else {
-            toast.error(result.error || "Falha ao salvar os dados da empresa.");
-        }
-        setIsSubmitting(false);
-    };
+    const handleUpdateCompanyData = async (data: CompanyData) => { setIsSubmitting(true); const result = await updateCompanyData(data); if (result.success) { toast.success("Dados da empresa atualizados com sucesso!"); fetchData(); } else { toast.error(result.error || "Falha ao salvar os dados da empresa."); } setIsSubmitting(false); };
 
     const filteredTransactions = useMemo(() => transactions.filter(mov => mov.description.toLowerCase().includes(searchTerm.toLowerCase())), [transactions, searchTerm]);
     const receitas = filteredTransactions.filter(t => t.type === 'receita');
@@ -304,7 +246,10 @@ export default function FinancialClientPage() {
             <div className="space-y-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div><h1 className="text-3xl font-bold text-gray-900">Financeiro</h1><p className="text-gray-600">Gestão completa das finanças da clínica</p></div>
-                    <Button onClick={() => setIsAddTransactionModalOpen(true)} className="bg-primary-teal hover:bg-primary-teal/90"><Plus className="mr-2 h-4 w-4" />Nova Movimentação</Button>
+                    <div className="flex w-full sm:w-auto gap-2">
+                        <Button onClick={() => setIsAddTransactionModalOpen(true)} className="bg-primary-teal hover:bg-primary-teal/90 w-full"><Plus className="mr-2 h-4 w-4" />Nova Movimentação</Button>
+                        <Button onClick={() => setIsBankBalancesModalOpen(true)} className="bg-primary-dark-blue hover:bg-primary-dark-blue/90 w-full"><Wallet className="mr-2 h-4 w-4" />Saldos Bancários</Button>
+                    </div>
                 </div>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -314,18 +259,10 @@ export default function FinancialClientPage() {
                         <FinancialFilters dateFrom={dateFrom} dateTo={dateTo} searchTerm={searchTerm} onDateFromChange={setDateFrom} onDateToChange={setDateTo} onSearchTermChange={setSearchTerm} />
                     </div>
 
-                    <TabsContent value="despesas" className="mt-6">
-                        <FinancialTable title="Despesas" data={despesas} type="despesa" loading={loading} onAddTransaction={() => setIsAddTransactionModalOpen(true)} onEditTransaction={(tx) => { setSelectedTransaction(tx); setIsEditTransactionModalOpen(true); }} onUpdateStatus={handleUpdateStatus} onDeleteTransaction={handleDeleteTransaction} bankAccounts={bankAccounts} />
-                    </TabsContent>
-                    <TabsContent value="receitas" className="mt-6">
-                        <FinancialTable title="Receitas" data={receitas} type="receita" loading={loading} onAddTransaction={() => setIsAddTransactionModalOpen(true)} onEditTransaction={(tx) => { setSelectedTransaction(tx); setIsEditTransactionModalOpen(true); }} onUpdateStatus={handleUpdateStatus} onDeleteTransaction={handleDeleteTransaction} bankAccounts={bankAccounts} />
-                    </TabsContent>
-                    <TabsContent value="repasses" className="mt-6">
-                        <ProfessionalRepasseDashboard transactions={transactions} professionals={professionals} loading={loading} />
-                    </TabsContent>
-                    <TabsContent value="relatorios" className="mt-6">
-                        <FinancialReportsDashboard onGenerateReport={handleOpenReportModal} onOpenVisualizer={handleOpenVisualizer} />
-                    </TabsContent>
+                    <TabsContent value="despesas" className="mt-6"><FinancialTable title="Despesas" data={despesas} type="despesa" loading={loading} onAddTransaction={() => setIsAddTransactionModalOpen(true)} onEditTransaction={(tx) => { setSelectedTransaction(tx); setIsEditTransactionModalOpen(true); }} onUpdateStatus={handleUpdateStatus} onDeleteTransaction={handleDeleteTransaction} bankAccounts={bankAccounts} /></TabsContent>
+                    <TabsContent value="receitas" className="mt-6"><FinancialTable title="Receitas" data={receitas} type="receita" loading={loading} onAddTransaction={() => setIsAddTransactionModalOpen(true)} onEditTransaction={(tx) => { setSelectedTransaction(tx); setIsEditTransactionModalOpen(true); }} onUpdateStatus={handleUpdateStatus} onDeleteTransaction={handleDeleteTransaction} bankAccounts={bankAccounts} /></TabsContent>
+                    <TabsContent value="repasses" className="mt-6"><ProfessionalRepasseDashboard transactions={transactions} professionals={professionals} loading={loading} /></TabsContent>
+                    <TabsContent value="relatorios" className="mt-6"><FinancialReportsDashboard onGenerateReport={handleOpenReportModal} onOpenVisualizer={handleOpenVisualizer} /></TabsContent>
                     <TabsContent value="configuracoes" className="mt-6">
                         <SettingsDashboard
                             accountPlans={accountPlans} costCenters={costCenters} suppliers={suppliers} covenants={covenants} bankAccounts={bankAccounts} loading={loading}
@@ -346,11 +283,29 @@ export default function FinancialClientPage() {
                             onAddBankAccount={() => { setSelectedBankAccount(null); setIsBankAccountModalOpen(true); }}
                             onEditBankAccount={(account) => { setSelectedBankAccount(account); setIsBankAccountModalOpen(true); }}
                             onDeleteBankAccount={handleDeleteBankAccount}
+                            onRecalculateBalances={async () => {
+                                setLoading(true);
+                                toast.info("Recalculando saldos... Isso pode levar um momento.");
+                                const allPaid = await getAllPaidTransactions();
+                                const allAccounts = await getBankAccounts();
+                                const batch = writeBatch(db);
+
+                                for (const account of allAccounts) {
+                                    const accountRef = doc(db, "bankAccounts", account.id);
+                                    const txsForAccount = allPaid.filter(tx => tx.bankAccountId === account.id);
+                                    const balanceChange = txsForAccount.reduce((acc, tx) => acc + (tx.type === 'receita' ? tx.value : -tx.value), 0);
+                                    const newBalance = account.initialBalance + balanceChange;
+                                    batch.update(accountRef, { currentBalance: newBalance });
+                                }
+                                await batch.commit();
+                                toast.success("Saldos recalculados e atualizados com sucesso!");
+                                fetchData();
+                            }}
                         />
                     </TabsContent>
                 </Tabs>
             </div>
-
+            
             <AddTransactionModal isOpen={isAddTransactionModalOpen} onClose={() => setIsAddTransactionModalOpen(false)} onSubmit={handleAddTransaction} accountPlans={accountPlans} costCenters={costCenters} bankAccounts={bankAccounts} isLoading={isSubmitting} />
             <EditTransactionModal isOpen={isEditTransactionModalOpen} onClose={() => setIsEditTransactionModalOpen(false)} onSubmit={handleUpdateTransaction} transaction={selectedTransaction} accountPlans={accountPlans} costCenters={costCenters} bankAccounts={bankAccounts} isLoading={isSubmitting} />
             <AddEditAccountPlanModal isOpen={isAccountPlanModalOpen} onClose={() => { setIsAccountPlanModalOpen(false); setSelectedAccountPlan(null); }} onSubmit={selectedAccountPlan?.id ? handleUpdateAccountPlan : handleAddAccountPlan} accountPlan={selectedAccountPlan} isLoading={isSubmitting} />
@@ -364,6 +319,13 @@ export default function FinancialClientPage() {
             <FinancialGoalsModal isOpen={isFinancialGoalsModalOpen} onClose={() => setIsFinancialGoalsModalOpen(false)} />
             <AnaliseTendenciasModal isOpen={isAnaliseTendenciasModalOpen} onClose={() => setIsAnaliseTendenciasModalOpen(false)} />
             <ComparativoMensalModal isOpen={isComparativoMensalModalOpen} onClose={() => setIsComparativoMensalModalOpen(false)} />
+            
+            <BankBalancesModal 
+                isOpen={isBankBalancesModalOpen}
+                onClose={() => setIsBankBalancesModalOpen(false)}
+                accounts={bankAccounts}
+                loading={loading}
+            />
         </>
     );
 }

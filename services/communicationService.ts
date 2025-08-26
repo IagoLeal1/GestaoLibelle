@@ -1,3 +1,4 @@
+// services/communicationService.ts
 import { db } from "@/lib/firebaseConfig";
 import { 
   collection, 
@@ -9,7 +10,7 @@ import {
   orderBy,
   doc,
   updateDoc,
-  deleteDoc, // Importamos a função de deletar
+  deleteDoc,
   getCountFromServer
 } from "firebase/firestore";
 import { FirestoreUser } from "@/context/AuthContext";
@@ -30,6 +31,12 @@ export interface CommunicationFormData {
     message: string;
     isImportant: boolean;
     targetRole: 'profissional' | 'funcionario' | 'familiar';
+}
+
+// Interface para buscar detalhes básicos dos usuários
+export interface UserDetails {
+    uid: string;
+    displayName: string;
 }
 
 // --- Funções do Serviço ---
@@ -66,6 +73,41 @@ export const createCommunication = async (data: CommunicationFormData, author: F
     }
 }
 
+/**
+ * Atualiza o título e a mensagem de um comunicado existente.
+ */
+export const updateCommunication = async (id: string, data: { title: string, message: string }) => {
+    try {
+        const docRef = doc(db, 'communications', id);
+        await updateDoc(docRef, data);
+        return { success: true };
+    } catch (error) {
+        console.error("Erro ao atualizar comunicado:", error);
+        return { success: false, error: "Falha ao atualizar o comunicado." };
+    }
+}
+
+/**
+ * Busca todos os usuários aprovados de um determinado perfil para a lista de leitura.
+ */
+export const getUsersByRole = async (role: 'profissional' | 'familiar' | 'funcionario' | 'admin'): Promise<UserDetails[]> => {
+    try {
+        const q = query(
+            collection(db, 'users'), 
+            where('profile.role', '==', role), 
+            where('profile.status', '==', 'aprovado')
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({
+            uid: doc.id,
+            displayName: doc.data().displayName
+        }));
+    } catch (error) {
+        console.error(`Erro ao buscar usuários do perfil ${role}:`, error);
+        return [];
+    }
+};
+
 export const markCommunicationAsRead = async (communicationId: string, userId: string) => {
     try {
         const docRef = doc(db, 'communications', communicationId);
@@ -78,7 +120,9 @@ export const markCommunicationAsRead = async (communicationId: string, userId: s
     }
 }
 
-export const countUsersByRole = async (role: 'profissional' | 'funcionario' | 'familiar'): Promise<number> => {
+// --- FUNÇÃO CORRIGIDA ---
+// Adicionamos 'admin' aos tipos de perfis que a função aceita.
+export const countUsersByRole = async (role: 'profissional' | 'funcionario' | 'familiar' | 'admin'): Promise<number> => {
     try {
         const q = query(collection(db, 'users'), where('profile.role', '==', role), where('profile.status', '==', 'aprovado'));
         const snapshot = await getCountFromServer(q);
@@ -89,7 +133,6 @@ export const countUsersByRole = async (role: 'profissional' | 'funcionario' | 'f
     }
 }
 
-// NOVO: Função para deletar um comunicado
 export const deleteCommunication = async (communicationId: string) => {
     try {
         const docRef = doc(db, 'communications', communicationId);

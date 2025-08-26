@@ -9,13 +9,13 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, MoreHorizontal, Library, Building, Users, Handshake, Landmark, Save, Briefcase } from "lucide-react";
+import { Plus, MoreHorizontal, Library, Building, Users, Handshake, Landmark, Save, Briefcase, RefreshCw } from "lucide-react";
 import { AccountPlan, Supplier, Covenant, BankAccount } from "@/services/financialService";
 import { CostCenter, CompanyData } from "@/services/settingsService";
 import { Skeleton } from "../ui/skeleton";
-import { formatCEP, formatCPF_CNPJ, formatPhone } from "@/lib/formatters"; // Importando as funções
+import { formatCEP, formatCPF_CNPJ, formatPhone } from "@/lib/formatters";
 
-// --- Sub-componente: Dados da Empresa (COM FORMATAÇÃO) ---
+// --- Sub-componente: Dados da Empresa ---
 const CompanyInfoManager = ({ initialData, onSave, loading }: { initialData: CompanyData | null, onSave: (data: CompanyData) => Promise<void>, loading: boolean }) => {
     const [formData, setFormData] = useState<CompanyData>({});
     const [isSaving, setIsSaving] = useState(false);
@@ -27,22 +27,16 @@ const CompanyInfoManager = ({ initialData, onSave, loading }: { initialData: Com
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { id, value } = e.target;
         
-        // Aplica a formatação condicional
         let formattedValue = value;
-        if (id === 'cnpj') {
-            formattedValue = formatCPF_CNPJ(value);
-        } else if (id === 'zipCode') {
-            formattedValue = formatCEP(value);
-        } else if (id === 'phone') {
-            formattedValue = formatPhone(value);
-        }
+        if (id === 'cnpj') formattedValue = formatCPF_CNPJ(value);
+        else if (id === 'zipCode') formattedValue = formatCEP(value);
+        else if (id === 'phone') formattedValue = formatPhone(value);
 
         setFormData(prev => ({ ...prev, [id]: formattedValue }));
     };
 
     const handleSave = async () => {
         setIsSaving(true);
-        // Remove a formatação antes de salvar para guardar apenas os números
         const dataToSave = {
             ...formData,
             cnpj: formData.cnpj?.replace(/\D/g, ''),
@@ -60,40 +54,16 @@ const CompanyInfoManager = ({ initialData, onSave, loading }: { initialData: Com
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="name">Nome da Empresa</Label>
-                        {loading ? <Skeleton className="h-10" /> : <Input id="name" value={formData.name || ''} onChange={handleChange} placeholder="Casa Libelle - Terapias Integradas"/>}
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="cnpj">CPF/CNPJ</Label>
-                         {loading ? <Skeleton className="h-10" /> : <Input id="cnpj" value={formData.cnpj || ''} onChange={handleChange} placeholder="00.000.000/0000-00" />}
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="address">Endereço</Label>
-                         {loading ? <Skeleton className="h-10" /> : <Input id="address" value={formData.address || ''} onChange={handleChange} placeholder="Rua das Flores, 123 - Centro" />}
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="city">Cidade</Label>
-                         {loading ? <Skeleton className="h-10" /> : <Input id="city" value={formData.city || ''} onChange={handleChange} placeholder="São Paulo - SP" />}
-                    </div>
-                     <div className="space-y-2">
-                        <Label htmlFor="zipCode">CEP</Label>
-                         {loading ? <Skeleton className="h-10" /> : <Input id="zipCode" value={formData.zipCode || ''} onChange={handleChange} placeholder="01234-567" />}
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="phone">Telefone</Label>
-                         {loading ? <Skeleton className="h-10" /> : <Input id="phone" value={formData.phone || ''} onChange={handleChange} placeholder="(11) 99999-9999" />}
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                        <Label htmlFor="email">E-mail</Label>
-                         {loading ? <Skeleton className="h-10" /> : <Input id="email" type="email" value={formData.email || ''} onChange={handleChange} placeholder="contato@casalibelle.com.br" />}
-                    </div>
+                    <div className="space-y-2"><Label htmlFor="name">Nome da Empresa</Label>{loading ? <Skeleton className="h-10" /> : <Input id="name" value={formData.name || ''} onChange={handleChange} placeholder="Casa Libelle - Terapias Integradas"/>}</div>
+                    <div className="space-y-2"><Label htmlFor="cnpj">CPF/CNPJ</Label>{loading ? <Skeleton className="h-10" /> : <Input id="cnpj" value={formData.cnpj || ''} onChange={handleChange} placeholder="00.000.000/0000-00" />}</div>
+                    <div className="space-y-2"><Label htmlFor="address">Endereço</Label>{loading ? <Skeleton className="h-10" /> : <Input id="address" value={formData.address || ''} onChange={handleChange} placeholder="Rua das Flores, 123 - Centro" />}</div>
+                    <div className="space-y-2"><Label htmlFor="city">Cidade</Label>{loading ? <Skeleton className="h-10" /> : <Input id="city" value={formData.city || ''} onChange={handleChange} placeholder="São Paulo - SP" />}</div>
+                    <div className="space-y-2"><Label htmlFor="zipCode">CEP</Label>{loading ? <Skeleton className="h-10" /> : <Input id="zipCode" value={formData.zipCode || ''} onChange={handleChange} placeholder="01234-567" />}</div>
+                    <div className="space-y-2"><Label htmlFor="phone">Telefone</Label>{loading ? <Skeleton className="h-10" /> : <Input id="phone" value={formData.phone || ''} onChange={handleChange} placeholder="(11) 99999-9999" />}</div>
+                    <div className="space-y-2 md:col-span-2"><Label htmlFor="email">E-mail</Label>{loading ? <Skeleton className="h-10" /> : <Input id="email" type="email" value={formData.email || ''} onChange={handleChange} placeholder="contato@casalibelle.com.br" />}</div>
                 </div>
                 <div className="flex justify-end">
-                    <Button onClick={handleSave} disabled={loading || isSaving}>
-                        <Save className="mr-2 h-4 w-4" />
-                        {isSaving ? "Salvando..." : "Salvar Dados da Empresa"}
-                    </Button>
+                    <Button onClick={handleSave} disabled={loading || isSaving}><Save className="mr-2 h-4 w-4" />{isSaving ? "Salvando..." : "Salvar Dados da Empresa"}</Button>
                 </div>
             </CardContent>
         </Card>
@@ -109,8 +79,7 @@ interface PlanoContasManagerProps {
     onDelete: (id: string) => void;
 }
 
-// --- Sub-componente: Plano de Contas (sem alterações) ---
-const PlanoContasManager = ({ accountPlans, loading, onAdd, onEdit, onDelete }: PlanoContasManagerProps) => {
+const PlanoContasManager = ({ accountPlans, loading, onAdd, onEdit, onDelete }: PlanoContasManagerProps) => { 
     const renderPlanTable = (title: string, plans: AccountPlan[]) => (
         <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -121,9 +90,7 @@ const PlanoContasManager = ({ accountPlans, loading, onAdd, onEdit, onDelete }: 
                 <Table>
                     <TableHeader><TableRow><TableHead>Código</TableHead><TableHead>Nome da Conta</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
                     <TableBody>
-                        {loading ? (
-                            <TableRow><TableCell colSpan={3} className="text-center h-24">Carregando...</TableCell></TableRow>
-                        ) : (
+                        {loading ? (<TableRow><TableCell colSpan={3} className="text-center h-24">Carregando...</TableCell></TableRow>) : (
                             plans.map((plan) => (
                                 <TableRow key={plan.id}>
                                     <TableCell>{plan.code}</TableCell>
@@ -148,20 +115,12 @@ const PlanoContasManager = ({ accountPlans, loading, onAdd, onEdit, onDelete }: 
 
     return (
         <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-xl"><Library className="h-5 w-5" />Plano de Contas</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-                <div className="grid md:grid-cols-2 gap-6">
-                    {renderPlanTable("Categorias de Receita", accountPlans.receitas)}
-                    {renderPlanTable("Categorias de Despesa", accountPlans.despesas)}
-                </div>
-            </CardContent>
+            <CardHeader><CardTitle className="flex items-center gap-2 text-xl"><Library className="h-5 w-5" />Plano de Contas</CardTitle></CardHeader>
+            <CardContent className="space-y-6"><div className="grid md:grid-cols-2 gap-6">{renderPlanTable("Categorias de Receita", accountPlans.receitas)}{renderPlanTable("Categorias de Despesa", accountPlans.despesas)}</div></CardContent>
         </Card>
     );
 };
-
-const CostCenterManager = ({ costCenters, loading, onAdd, onEdit, onDelete }: { costCenters: CostCenter[], loading: boolean, onAdd: () => void, onEdit: (center: CostCenter) => void, onDelete: (id: string) => void }) => (
+const CostCenterManager = ({ costCenters, loading, onAdd, onEdit, onDelete }: { costCenters: CostCenter[], loading: boolean, onAdd: () => void, onEdit: (center: CostCenter) => void, onDelete: (id: string) => void }) => ( 
     <Card>
         <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2"><Building className="h-5 w-5" />Centros de Custo</CardTitle>
@@ -191,7 +150,6 @@ const CostCenterManager = ({ costCenters, loading, onAdd, onEdit, onDelete }: { 
         </CardContent>
     </Card>
 );
-
 const SupplierManager = ({ suppliers, loading, onAdd, onEdit, onDelete }: { suppliers: Supplier[], loading: boolean, onAdd: () => void, onEdit: (supplier: Supplier) => void, onDelete: (id: string) => void }) => (
     <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -224,7 +182,6 @@ const SupplierManager = ({ suppliers, loading, onAdd, onEdit, onDelete }: { supp
         </CardContent>
     </Card>
 );
-
 const CovenantManager = ({ covenants, loading, onAdd, onEdit, onDelete }: { covenants: Covenant[], loading: boolean, onAdd: () => void, onEdit: (covenant: Covenant) => void, onDelete: (id: string) => void }) => (
     <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -257,7 +214,6 @@ const CovenantManager = ({ covenants, loading, onAdd, onEdit, onDelete }: { cove
         </CardContent>
     </Card>
 );
-
 const BankAccountManager = ({ bankAccounts, loading, onAdd, onEdit, onDelete }: { bankAccounts: BankAccount[], loading: boolean, onAdd: () => void, onEdit: (account: BankAccount) => void, onDelete: (id: string) => void }) => (
     <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -292,6 +248,7 @@ const BankAccountManager = ({ bankAccounts, loading, onAdd, onEdit, onDelete }: 
     </Card>
 );
 
+// --- INTERFACE DE PROPS CORRIGIDA ---
 interface SettingsDashboardProps {
     companyData: CompanyData | null;
     onUpdateCompanyData: (data: CompanyData) => Promise<void>;
@@ -316,6 +273,7 @@ interface SettingsDashboardProps {
     onAddBankAccount: () => void;
     onEditBankAccount: (account: BankAccount) => void;
     onDeleteBankAccount: (id: string) => void;
+    onRecalculateBalances: () => Promise<void>;
 }
 
 export function SettingsDashboard({
@@ -326,7 +284,18 @@ export function SettingsDashboard({
     onAddSupplier, onEditSupplier, onDeleteSupplier,
     onAddCovenant, onEditCovenant, onDeleteCovenant,
     onAddBankAccount, onEditBankAccount, onDeleteBankAccount,
+    onRecalculateBalances,
 }: SettingsDashboardProps) {
+    const [isRecalculating, setIsRecalculating] = useState(false);
+
+    const handleRecalculate = async () => {
+        if(confirm("Esta ação irá recalcular o saldo de todas as contas com base no histórico. Isso pode levar alguns segundos e só precisa ser feito uma vez ou para corrigir inconsistências. Deseja continuar?")) {
+            setIsRecalculating(true);
+            await onRecalculateBalances();
+            setIsRecalculating(false);
+        }
+    }
+
     return (
         <div className="space-y-6">
             <CompanyInfoManager
@@ -334,6 +303,23 @@ export function SettingsDashboard({
                 onSave={onUpdateCompanyData}
                 loading={loading}
             />
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Ações do Sistema</CardTitle>
+                </CardHeader>
+                <CardContent className="flex items-center justify-between">
+                    <div>
+                        <p className="font-medium">Recalcular Saldos Bancários</p>
+                        <p className="text-sm text-muted-foreground">Use esta função para sincronizar os saldos caso encontre alguma inconsistência.</p>
+                    </div>
+                    <Button onClick={handleRecalculate} disabled={isRecalculating}>
+                        <RefreshCw className={`mr-2 h-4 w-4 ${isRecalculating ? 'animate-spin' : ''}`} />
+                        {isRecalculating ? "Recalculando..." : "Recalcular Agora"}
+                    </Button>
+                </CardContent>
+            </Card>
+
             <PlanoContasManager
                 accountPlans={accountPlans}
                 loading={loading}

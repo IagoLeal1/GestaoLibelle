@@ -21,7 +21,7 @@ const getInitials = (name: string | null | undefined = "") => {
 };
 
 export function Header() {
-  const { firestoreUser } = useAuth();
+  const { firestoreUser, unreadCount } = useAuth(); // Pega a contagem de não lidos do contexto
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -43,7 +43,13 @@ export function Header() {
         <Button variant="ghost" size="icon" className="relative">
           <Link href="/comunicacao">
             <Bell className="h-4 w-4" />
-            {/* <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 text-[10px] flex items-center justify-center">3</span> */}
+            {/* --- LÓGICA DA NOTIFICAÇÃO ADICIONADA AQUI --- */}
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary-red opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-secondary-red"></span>
+              </span>
+            )}
           </Link>
         </Button>
         <DropdownMenu>
