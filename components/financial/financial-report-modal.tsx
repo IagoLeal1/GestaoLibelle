@@ -11,7 +11,7 @@ import { Download } from "lucide-react";
 import { CostCenter } from "@/services/settingsService";
 import { BankAccount } from "@/services/financialService";
 
-// --- TIPO CORRIGIDO E ATUALIZADO ---
+// --- TIPO ATUALIZADO PARA INCLUIR OS NOVOS RELATÓRIOS VISUAIS ---
 export type ReportType =
     | 'receitas'
     | 'despesas'

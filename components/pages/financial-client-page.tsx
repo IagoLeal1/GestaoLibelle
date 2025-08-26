@@ -37,6 +37,9 @@ import { FinancialReportModal, ReportType } from "@/components/financial/financi
 import { FluxoDeCaixaModal } from "@/components/financial/fluxo-de-caixa-modal";
 import { FutureForecastsModal } from "@/components/financial/future-forecasts-modal";
 import { FinancialGoalsModal } from "@/components/financial/financial-goals-modal";
+import { AnaliseTendenciasModal } from "@/components/financial/analise-tendencias-modal";
+import { ComparativoMensalModal } from "@/components/financial/comparativo-mensal-modal";
+
 
 // Componentes Refatorados
 import { FinancialSummaryCards } from "@/components/financial/financial-summary-cards";
@@ -71,6 +74,9 @@ export default function FinancialClientPage() {
     const [isFluxoDeCaixaModalOpen, setIsFluxoDeCaixaModalOpen] = useState(false);
     const [isFutureForecastsModalOpen, setIsFutureForecastsModalOpen] = useState(false);
     const [isFinancialGoalsModalOpen, setIsFinancialGoalsModalOpen] = useState(false);
+    const [isAnaliseTendenciasModalOpen, setIsAnaliseTendenciasModalOpen] = useState(false);
+    const [isComparativoMensalModalOpen, setIsComparativoMensalModalOpen] = useState(false);
+
 
     // Estados para Modais de Transação
     const [isAddTransactionModalOpen, setIsAddTransactionModalOpen] = useState(false);
@@ -122,6 +128,10 @@ export default function FinancialClientPage() {
             setIsFutureForecastsModalOpen(true);
         } else if (type === 'metas_financeiras') {
             setIsFinancialGoalsModalOpen(true);
+        } else if (type === 'analise_tendencias') {
+            setIsAnaliseTendenciasModalOpen(true);
+        } else if (type === 'comparativo_mensal') {
+            setIsComparativoMensalModalOpen(true);
         } else {
             alert(`Visualizador para ${type} está em desenvolvimento.`);
         }
@@ -351,10 +361,9 @@ export default function FinancialClientPage() {
             <FinancialReportModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} onGenerate={handleGenerateReport} reportType={reportType} costCenters={costCenters} bankAccounts={bankAccounts} />
             <FluxoDeCaixaModal isOpen={isFluxoDeCaixaModalOpen} onClose={() => setIsFluxoDeCaixaModalOpen(false)} />
             <FutureForecastsModal isOpen={isFutureForecastsModalOpen} onClose={() => setIsFutureForecastsModalOpen(false)} />
-            <FinancialGoalsModal
-                isOpen={isFinancialGoalsModalOpen}
-                onClose={() => setIsFinancialGoalsModalOpen(false)}
-            />
+            <FinancialGoalsModal isOpen={isFinancialGoalsModalOpen} onClose={() => setIsFinancialGoalsModalOpen(false)} />
+            <AnaliseTendenciasModal isOpen={isAnaliseTendenciasModalOpen} onClose={() => setIsAnaliseTendenciasModalOpen(false)} />
+            <ComparativoMensalModal isOpen={isComparativoMensalModalOpen} onClose={() => setIsComparativoMensalModalOpen(false)} />
         </>
     );
 }

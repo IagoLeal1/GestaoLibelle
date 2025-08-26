@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Covenant } from "@/services/financialService";
+import { formatCPF_CNPJ, formatPhone } from "@/lib/formatters"; // Importando as funções
 
 interface AddEditCovenantModalProps {
     isOpen: boolean;
@@ -22,12 +23,11 @@ interface AddEditCovenantModalProps {
 }
 
 export function AddEditCovenantModal({ isOpen, onClose, onSubmit, covenant, isLoading }: AddEditCovenantModalProps) {
-    const [formData, setFormData] = useState<Omit<Covenant, 'id'>>({
+    const [formData, setFormData] = useState<Omit<Covenant, 'id' | 'address'>>({
         name: '',
         cnpj: '',
         phone: '',
         email: '',
-        address: '',
         status: 'Ativo',
         valuePerConsult: 0
     });
@@ -39,7 +39,6 @@ export function AddEditCovenantModal({ isOpen, onClose, onSubmit, covenant, isLo
                 cnpj: covenant.cnpj,
                 phone: covenant.phone,
                 email: covenant.email,
-                address: covenant.address,
                 status: covenant.status,
                 valuePerConsult: covenant.valuePerConsult
             });
@@ -49,7 +48,6 @@ export function AddEditCovenantModal({ isOpen, onClose, onSubmit, covenant, isLo
                 cnpj: '',
                 phone: '',
                 email: '',
-                address: '',
                 status: 'Ativo',
                 valuePerConsult: 0
             });
@@ -58,7 +56,15 @@ export function AddEditCovenantModal({ isOpen, onClose, onSubmit, covenant, isLo
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { id, value } = e.target;
-        setFormData(prev => ({ ...prev, [id]: value }));
+        
+        let formattedValue = value;
+        if (id === 'cnpj') {
+            formattedValue = formatCPF_CNPJ(value);
+        } else if (id === 'phone') {
+            formattedValue = formatPhone(value);
+        }
+
+        setFormData(prev => ({ ...prev, [id]: formattedValue }));
     };
 
     const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -67,7 +73,12 @@ export function AddEditCovenantModal({ isOpen, onClose, onSubmit, covenant, isLo
     };
 
     const handleSubmit = async () => {
-        await onSubmit(formData);
+        const dataToSubmit = {
+            ...formData,
+            cnpj: formData.cnpj.replace(/\D/g, ''),
+            phone: formData.phone.replace(/\D/g, ''),
+        };
+        await onSubmit(dataToSubmit as any);
     };
 
     return (
@@ -96,10 +107,6 @@ export function AddEditCovenantModal({ isOpen, onClose, onSubmit, covenant, isLo
                     <div>
                         <Label htmlFor="email">E-mail</Label>
                         <Input id="email" type="email" value={formData.email} onChange={handleChange} placeholder="convenio@email.com" />
-                    </div>
-                    <div>
-                        <Label htmlFor="address">Endereço</Label>
-                        <Input id="address" value={formData.address} onChange={handleChange} placeholder="Rua, número, bairro, cidade" />
                     </div>
                     <div>
                         <Label htmlFor="status">Status</Label>

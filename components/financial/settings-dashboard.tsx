@@ -13,8 +13,9 @@ import { Plus, MoreHorizontal, Library, Building, Users, Handshake, Landmark, Sa
 import { AccountPlan, Supplier, Covenant, BankAccount } from "@/services/financialService";
 import { CostCenter, CompanyData } from "@/services/settingsService";
 import { Skeleton } from "../ui/skeleton";
+import { formatCEP, formatCPF_CNPJ, formatPhone } from "@/lib/formatters"; // Importando as funções
 
-// --- Sub-componente: Dados da Empresa ---
+// --- Sub-componente: Dados da Empresa (COM FORMATAÇÃO) ---
 const CompanyInfoManager = ({ initialData, onSave, loading }: { initialData: CompanyData | null, onSave: (data: CompanyData) => Promise<void>, loading: boolean }) => {
     const [formData, setFormData] = useState<CompanyData>({});
     const [isSaving, setIsSaving] = useState(false);
@@ -25,12 +26,30 @@ const CompanyInfoManager = ({ initialData, onSave, loading }: { initialData: Com
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { id, value } = e.target;
-        setFormData(prev => ({ ...prev, [id]: value }));
+        
+        // Aplica a formatação condicional
+        let formattedValue = value;
+        if (id === 'cnpj') {
+            formattedValue = formatCPF_CNPJ(value);
+        } else if (id === 'zipCode') {
+            formattedValue = formatCEP(value);
+        } else if (id === 'phone') {
+            formattedValue = formatPhone(value);
+        }
+
+        setFormData(prev => ({ ...prev, [id]: formattedValue }));
     };
 
     const handleSave = async () => {
         setIsSaving(true);
-        await onSave(formData);
+        // Remove a formatação antes de salvar para guardar apenas os números
+        const dataToSave = {
+            ...formData,
+            cnpj: formData.cnpj?.replace(/\D/g, ''),
+            zipCode: formData.zipCode?.replace(/\D/g, ''),
+            phone: formData.phone?.replace(/\D/g, ''),
+        };
+        await onSave(dataToSave);
         setIsSaving(false);
     };
 
@@ -47,7 +66,7 @@ const CompanyInfoManager = ({ initialData, onSave, loading }: { initialData: Com
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="cnpj">CPF/CNPJ</Label>
-                         {loading ? <Skeleton className="h-10" /> : <Input id="cnpj" value={formData.cnpj || ''} onChange={handleChange} placeholder="12.345.678/0001-90" />}
+                         {loading ? <Skeleton className="h-10" /> : <Input id="cnpj" value={formData.cnpj || ''} onChange={handleChange} placeholder="00.000.000/0000-00" />}
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="address">Endereço</Label>
@@ -90,7 +109,7 @@ interface PlanoContasManagerProps {
     onDelete: (id: string) => void;
 }
 
-// --- Sub-componente: Plano de Contas ---
+// --- Sub-componente: Plano de Contas (sem alterações) ---
 const PlanoContasManager = ({ accountPlans, loading, onAdd, onEdit, onDelete }: PlanoContasManagerProps) => {
     const renderPlanTable = (title: string, plans: AccountPlan[]) => (
         <Card>

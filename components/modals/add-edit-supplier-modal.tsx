@@ -11,8 +11,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Supplier } from "@/services/financialService";
+import { formatCPF_CNPJ, formatPhone } from "@/lib/formatters"; // Importando as funções
 
 interface AddEditSupplierModalProps {
     isOpen: boolean;
@@ -23,12 +23,11 @@ interface AddEditSupplierModalProps {
 }
 
 export function AddEditSupplierModal({ isOpen, onClose, onSubmit, supplier, isLoading }: AddEditSupplierModalProps) {
-    const [formData, setFormData] = useState<Omit<Supplier, 'id'>>({
+    const [formData, setFormData] = useState<Omit<Supplier, 'id' | 'address'>>({
         name: '',
         cnpj: '',
         phone: '',
         email: '',
-        address: '',
         status: 'Ativo'
     });
 
@@ -39,7 +38,6 @@ export function AddEditSupplierModal({ isOpen, onClose, onSubmit, supplier, isLo
                 cnpj: supplier.cnpj,
                 phone: supplier.phone,
                 email: supplier.email,
-                address: supplier.address,
                 status: supplier.status
             });
         } else {
@@ -48,7 +46,6 @@ export function AddEditSupplierModal({ isOpen, onClose, onSubmit, supplier, isLo
                 cnpj: '',
                 phone: '',
                 email: '',
-                address: '',
                 status: 'Ativo'
             });
         }
@@ -56,11 +53,24 @@ export function AddEditSupplierModal({ isOpen, onClose, onSubmit, supplier, isLo
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { id, value } = e.target;
-        setFormData(prev => ({ ...prev, [id]: value }));
+
+        let formattedValue = value;
+        if (id === 'cnpj') {
+            formattedValue = formatCPF_CNPJ(value);
+        } else if (id === 'phone') {
+            formattedValue = formatPhone(value);
+        }
+
+        setFormData(prev => ({ ...prev, [id]: formattedValue }));
     };
 
     const handleSubmit = async () => {
-        await onSubmit(formData);
+        const dataToSubmit = {
+            ...formData,
+            cnpj: formData.cnpj.replace(/\D/g, ''),
+            phone: formData.phone.replace(/\D/g, ''),
+        };
+        await onSubmit(dataToSubmit as any);
     };
 
     return (
@@ -85,10 +95,6 @@ export function AddEditSupplierModal({ isOpen, onClose, onSubmit, supplier, isLo
                     <div>
                         <Label htmlFor="email">E-mail</Label>
                         <Input id="email" type="email" value={formData.email} onChange={handleChange} placeholder="fornecedor@email.com" />
-                    </div>
-                    <div>
-                        <Label htmlFor="address">Endereço</Label>
-                        <Input id="address" value={formData.address} onChange={handleChange} placeholder="Rua, número, bairro, cidade" />
                     </div>
                     <div>
                         <Label htmlFor="status">Status</Label>

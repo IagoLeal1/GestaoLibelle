@@ -85,7 +85,8 @@ export function FinancialReportsDashboard({ onGenerateReport, onOpenVisualizer }
         <ReportCard 
           title="Controle de Inadimplência" description="Relatório de contas em atraso com alertas automáticos."
           icon={AlertTriangle} iconColor="text-secondary-red" actionText="Gerar Relatório" actionIcon={Download}
-          badgeText="3 contas vencidas"
+          badgeText="Em breve"
+          badgeVariant="secondary"
           onClick={() => alert("Funcionalidade em desenvolvimento.")}
         />
 
@@ -112,7 +113,7 @@ export function FinancialReportsDashboard({ onGenerateReport, onOpenVisualizer }
         />
          <ReportCard 
           title="Comparativo Mensal" description="Análise comparativa de receitas e despesas por mês."
-          icon={Target} iconColor="text-primary-medium-green" actionText="Ver Comparativo" actionIcon={BarChart3}
+          icon={BarChart3} iconColor="text-primary-medium-green" actionText="Ver Comparativo" actionIcon={BarChart3}
           onClick={() => onOpenVisualizer('comparativo_mensal')}
         />
 
