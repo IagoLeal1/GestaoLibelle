@@ -1,8 +1,10 @@
+// components/ui/form.tsx
 "use client"
 
 import * as React from "react"
 import * as LabelPrimitive from "@radix-ui/react-label"
-import { Slot } from "@radix-ui/react-slot"
+// O Slot não é mais usado diretamente no FormControl, mas mantemos para outros componentes que possam precisar.
+import { Slot } from "@radix-ui/react-slot" 
 import {
   Controller,
   ControllerProps,
@@ -103,14 +105,15 @@ const FormLabel = React.forwardRef<
 })
 FormLabel.displayName = "FormLabel"
 
+// --- NOVA VERSÃO SIMPLIFICADA E CORRIGIDA ---
 const FormControl = React.forwardRef<
-  React.ElementRef<typeof Slot>,
-  React.ComponentPropsWithoutRef<typeof Slot>
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
 >(({ ...props }, ref) => {
   const { error, formItemId, formDescriptionId, formMessageId } = useFormField()
 
   return (
-    <Slot
+    <div
       ref={ref}
       id={formItemId}
       aria-describedby={
@@ -124,6 +127,7 @@ const FormControl = React.forwardRef<
   )
 })
 FormControl.displayName = "FormControl"
+// --- FIM DA CORREÇÃO ---
 
 const FormDescription = React.forwardRef<
   HTMLParagraphElement,

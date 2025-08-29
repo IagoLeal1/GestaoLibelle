@@ -23,6 +23,7 @@ interface FinancialTableProps {
     bankAccounts: BankAccount[];
 }
 
+// O componente de linha foi atualizado para mostrar as duas datas
 const TransactionRow = ({ tx, onEdit, onUpdateStatus, onDelete, getBankNameById }: { 
     tx: Transaction,
     onEdit: (tx: Transaction) => void;
@@ -36,10 +37,16 @@ const TransactionRow = ({ tx, onEdit, onUpdateStatus, onDelete, getBankNameById 
         <TableCell><Badge variant="outline">{tx.costCenter || 'N/A'}</Badge></TableCell>
         <TableCell>{getBankNameById(tx.bankAccountId)}</TableCell>
         <TableCell className={`text-right font-medium ${tx.type === 'receita' ? 'text-green-600' : 'text-red-600'}`}>
-            {/* --- CORREÇÃO APLICADA AQUI --- */}
             {tx.type === 'despesa' ? '- ' : ''}R$ {tx.value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
         </TableCell>
-        <TableCell>{format(tx.date instanceof Timestamp ? tx.date.toDate() : new Date(tx.date as any), 'dd/MM/yyyy')}</TableCell>
+        {/* Data de Emissão */}
+        <TableCell>
+            {tx.dataEmissao ? format(tx.dataEmissao.toDate(), 'dd/MM/yyyy') : 'N/A'}
+        </TableCell>
+        {/* Data de Movimento */}
+        <TableCell>
+            {format(tx.dataMovimento.toDate(), 'dd/MM/yyyy')}
+        </TableCell>
         <TableCell>
             <Badge className={tx.status === 'pago' ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800"}>
                 {tx.status.charAt(0).toUpperCase() + tx.status.slice(1)}
@@ -62,7 +69,7 @@ export function FinancialTable({ title, data, type, loading, onAddTransaction, o
     const getBankNameById = (id?: string) => {
         if (!id) return 'N/A';
         const account = bankAccounts.find(acc => acc.id === id);
-        return account ? account.name : 'Banco Excluído';
+        return account ? account.name : 'Excluído';
     };
 
     return (
@@ -78,12 +85,13 @@ export function FinancialTable({ title, data, type, loading, onAddTransaction, o
             <CardContent>
                 <div className="overflow-x-auto">
                     <Table>
-                        <TableHeader><TableRow><TableHead>Categoria</TableHead><TableHead>Descrição</TableHead><TableHead>Centro de Custo</TableHead><TableHead>Banco</TableHead><TableHead className="text-right">Valor</TableHead><TableHead>Data</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+                        {/* Cabeçalho atualizado */}
+                        <TableHeader><TableRow><TableHead>Categoria</TableHead><TableHead>Descrição</TableHead><TableHead>Centro de Custo</TableHead><TableHead>Banco</TableHead><TableHead className="text-right">Valor</TableHead><TableHead>Data Emissão</TableHead><TableHead>Data Movimento</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
                         <TableBody>
                             {loading ?
-                                <TableRow><TableCell colSpan={8} className="text-center h-24">Carregando...</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={9} className="text-center h-24">Carregando...</TableCell></TableRow>
                                 : data.length === 0 ?
-                                    <TableRow><TableCell colSpan={8} className="text-center h-24">Nenhuma movimentação encontrada.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={9} className="text-center h-24">Nenhuma movimentação encontrada.</TableCell></TableRow>
                                     : data.map(tx => (
                                         <TransactionRow 
                                             key={tx.id} 

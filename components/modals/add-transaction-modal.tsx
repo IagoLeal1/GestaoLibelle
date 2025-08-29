@@ -1,49 +1,39 @@
-// src/components/modals/add-transaction-modal.tsx
+// components/modals/add-transaction-modal.tsx
 "use client";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogFooter,
+    Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-    Form,
-    FormControl,
-    FormField,
-    FormItem,
-    FormLabel,
-    FormMessage,
+    Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
 import { Repeat } from "lucide-react";
 import { AccountPlan, BankAccount } from "@/services/financialService";
 import { CostCenter } from "@/services/settingsService";
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
+import { FormRecurringSwitch } from "../forms/FormRecurringSwitch";
 
 const formSchema = z.object({
     type: z.enum(["receita", "despesa"]),
     description: z.string().min(1, "A descrição é obrigatória."),
     value: z.coerce.number().min(0.01, "O valor deve ser maior que zero."),
-    date: z.string().min(1, "A data é obrigatória."),
+    dataMovimento: z.string().min(1, "A data de movimento é obrigatória."),
+    dataEmissao: z.string().optional(),
     status: z.enum(["pendente", "pago"]),
     category: z.string().min(1, "A categoria é obrigatória."),
     costCenter: z.string().min(1, "O centro de custo é obrigatório."),
     bankAccountId: z.string().optional(),
+    isRecurring: z.boolean().default(false),
     repetitions: z.coerce.number().optional(),
 });
 
@@ -60,61 +50,62 @@ export interface AddTransactionModalProps {
 }
 
 export function AddTransactionModal({ isOpen, onClose, onSubmit, accountPlans, costCenters, bankAccounts, isLoading }: AddTransactionModalProps) {
-    const [isRecurring, setIsRecurring] = useState(false);
-
     const form = useForm<FormValues>({
         resolver: zodResolver(formSchema),
         defaultValues: {
-            type: "despesa",
+            type: "receita",
             description: "",
             value: 0,
-            date: new Date().toISOString().split('T')[0],
+            dataMovimento: new Date().toISOString().split('T')[0],
+            dataEmissao: new Date().toISOString().split('T')[0],
             status: "pendente",
             category: "",
             costCenter: "",
-            bankAccountId: "",
+            bankAccountId: "none",
+            isRecurring: false,
             repetitions: 1,
         },
     });
 
+    const isRecurring = form.watch("isRecurring");
     const selectedType = form.watch("type");
 
     useEffect(() => {
         if (!isOpen) {
-            form.reset();
-            setIsRecurring(false);
+            form.reset({
+                type: "receita", description: "", value: 0,
+                dataMovimento: new Date().toISOString().split('T')[0],
+                dataEmissao: new Date().toISOString().split('T')[0],
+                status: "pendente", category: "", costCenter: "",
+                bankAccountId: "none", isRecurring: false, repetitions: 1,
+            });
         }
     }, [isOpen, form]);
 
     const handleFormSubmit = async (data: FormValues) => {
-        if (isRecurring && (!data.repetitions || data.repetitions < 1)) {
+        if (data.isRecurring && (!data.repetitions || data.repetitions < 1)) {
             form.setError("repetitions", { message: "Deve ser no mínimo 1." });
             return;
         }
-
-        const submissionData = {
-            ...data,
-            bankAccountId: data.bankAccountId === "none" ? undefined : data.bankAccountId,
-        };
-
-        await onSubmit(submissionData, isRecurring);
+        await onSubmit(data, data.isRecurring);
     };
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+           <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Nova Movimentação</DialogTitle>
                 </DialogHeader>
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-4 py-4">
+                        
                         <FormField
                             control={form.control}
                             name="type"
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Tipo</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isLoading}>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
                                         <FormControl>
                                             <SelectTrigger><SelectValue /></SelectTrigger>
                                         </FormControl>
@@ -127,56 +118,24 @@ export function AddTransactionModal({ isOpen, onClose, onSubmit, accountPlans, c
                                 </FormItem>
                             )}
                         />
-                        <FormField
-                            control={form.control}
-                            name="description"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Descrição</FormLabel>
-                                    <FormControl>
-                                        <Textarea placeholder="Ex: Conta de Luz, Repasse, Consulta..." {...field} disabled={isLoading} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                         <div className="grid grid-cols-2 gap-4">
-                            <FormField
-                                control={form.control}
-                                name="value"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Valor (R$)</FormLabel>
-                                        <FormControl>
-                                            <Input type="number" step="0.01" {...field} disabled={isLoading} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="date"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Data</FormLabel>
-                                        <FormControl>
-                                            <Input type="date" {...field} disabled={isLoading} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+
+                        <FormField control={form.control} name="description" render={({ field }) => ( <FormItem> <FormLabel>Descrição *</FormLabel> <FormControl> <Textarea placeholder="Ex: Consulta, Repasse..." {...field} /> </FormControl> <FormMessage /> </FormItem> )}/>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <FormField control={form.control} name="value" render={({ field }) => ( <FormItem> <FormLabel>Valor (R$) *</FormLabel> <FormControl> <Input type="number" step="0.01" {...field} /> </FormControl> <FormMessage /> </FormItem> )}/>
+                            <FormField control={form.control} name="dataEmissao" render={({ field }) => ( <FormItem> <FormLabel>Data de Emissão</FormLabel> <FormControl> <Input type="date" {...field} /> </FormControl> <FormMessage /> </FormItem> )}/>
                         </div>
+                        <FormField control={form.control} name="dataMovimento" render={({ field }) => ( <FormItem> <FormLabel>Data de Movimento *</FormLabel> <FormControl> <Input type="date" {...field} /> </FormControl> <FormMessage /> </FormItem> )}/>
+                        
                         <FormField
                             control={form.control}
                             name="category"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Plano de Contas</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value} disabled={isLoading}>
+                                    <FormLabel>Plano de Contas *</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value}>
                                         <FormControl>
-                                            <SelectTrigger><SelectValue placeholder="Selecione uma categoria" /></SelectTrigger>
+                                            <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                                         </FormControl>
                                         <SelectContent>
                                             {(selectedType === 'receita' ? accountPlans.receitas : accountPlans.despesas).map((plan) => (
@@ -188,15 +147,16 @@ export function AddTransactionModal({ isOpen, onClose, onSubmit, accountPlans, c
                                 </FormItem>
                             )}
                         />
+                        
                         <FormField
                             control={form.control}
                             name="costCenter"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Centro de Custo</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value} disabled={isLoading}>
+                                    <FormLabel>Centro de Custo *</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value}>
                                         <FormControl>
-                                            <SelectTrigger><SelectValue placeholder="Selecione o centro de custo" /></SelectTrigger>
+                                            <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                                         </FormControl>
                                         <SelectContent>
                                             {costCenters.map((center) => (
@@ -208,39 +168,36 @@ export function AddTransactionModal({ isOpen, onClose, onSubmit, accountPlans, c
                                 </FormItem>
                             )}
                         />
-                        {/* --- CORREÇÃO APLICADA AQUI --- */}
+
                         <FormField
                             control={form.control}
                             name="bankAccountId"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Conta Bancária (Opcional)</FormLabel>
-                                    <FormControl>
-                                        <Select onValueChange={field.onChange} value={field.value} disabled={isLoading}>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Selecione a conta de origem/destino" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="none">Nenhuma</SelectItem>
-                                                {bankAccounts.map((account) => (
-                                                    <SelectItem key={account.id} value={account.id}>
-                                                        {account.name} - ({account.account})
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </FormControl>
+                                    <FormLabel>Conta Bancária</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value}>
+                                        <FormControl>
+                                            <SelectTrigger><SelectValue placeholder="Selecione a conta" /></SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            <SelectItem value="none">Nenhuma</SelectItem>
+                                            {bankAccounts.map((account) => (
+                                                <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                     <FormMessage />
                                 </FormItem>
                             )}
                         />
+
                         <FormField
                             control={form.control}
                             name="status"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Status</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isLoading}>
+                                    <FormLabel>Status *</FormLabel>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
                                         <FormControl>
                                             <SelectTrigger><SelectValue /></SelectTrigger>
                                         </FormControl>
@@ -253,15 +210,9 @@ export function AddTransactionModal({ isOpen, onClose, onSubmit, accountPlans, c
                                 </FormItem>
                             )}
                         />
-                        <div className="space-y-4 rounded-lg border p-4">
-                            <div className="flex items-center space-x-2">
-                                <Switch id="recurring-switch" checked={isRecurring} onCheckedChange={setIsRecurring} disabled={isLoading} />
-                                <Label htmlFor="recurring-switch" className="cursor-pointer flex items-center gap-2"> <Repeat className="h-4 w-4" /> Lançamento Sequencial (Mensal) </Label>
-                            </div>
-                            {isRecurring && (
-                                <FormField control={form.control} name="repetitions" render={({ field }) => ( <FormItem className="pt-4 border-t"> <FormLabel>Número de Parcelas/Repetições</FormLabel> <FormControl> <Input type="number" min={1} {...field} disabled={isLoading} /> </FormControl> <FormMessage /> </FormItem> )} />
-                            )}
-                        </div>
+                        
+                        <FormRecurringSwitch isRecurring={isRecurring} />
+
                         <DialogFooter className="mt-4">
                             <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>Cancelar</Button>
                             <Button type="submit" disabled={isLoading}>

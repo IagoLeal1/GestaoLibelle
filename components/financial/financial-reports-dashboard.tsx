@@ -18,22 +18,24 @@ interface ReportCardProps {
   actionText: string;
   actionIcon: React.ElementType;
   onClick: () => void;
-  badgeText?: string;
+  badgeText?: string | number;
   badgeVariant?: "default" | "secondary" | "destructive" | "outline";
+  disabled?: boolean;
 }
 
-const ReportCard = ({ title, description, icon: Icon, iconColor, actionText, actionIcon: ActionIcon, onClick, badgeText, badgeVariant }: ReportCardProps) => (
-  <Card className="hover:shadow-lg transition-shadow flex flex-col">
+const ReportCard = ({ title, description, icon: Icon, iconColor, actionText, actionIcon: ActionIcon, onClick, badgeText, badgeVariant, disabled = false }: ReportCardProps) => (
+  <Card className={`hover:shadow-lg transition-shadow flex flex-col ${disabled ? 'opacity-60' : ''}`}>
     <CardHeader>
       <CardTitle className="flex items-center gap-2 text-lg">
         <Icon className={`h-5 w-5 ${iconColor}`} />
         {title}
-        {badgeText && <Badge variant={badgeVariant || 'destructive'} className="ml-auto">{badgeText}</Badge>}
+        {/* Renderiza o badge apenas se houver texto/número */}
+        {badgeText !== undefined && <Badge variant={badgeVariant || 'destructive'} className="ml-auto">{badgeText}</Badge>}
       </CardTitle>
     </CardHeader>
     <CardContent className="flex flex-col flex-grow">
       <p className="text-sm text-muted-foreground mb-4 flex-grow">{description}</p>
-      <Button onClick={onClick} className="w-full mt-auto bg-transparent" variant="outline">
+      <Button onClick={onClick} className="w-full mt-auto bg-transparent" variant="outline" disabled={disabled}>
         <ActionIcon className="mr-2 h-4 w-4" />
         {actionText}
       </Button>
@@ -44,14 +46,27 @@ const ReportCard = ({ title, description, icon: Icon, iconColor, actionText, act
 interface FinancialReportsDashboardProps {
   onGenerateReport: (type: ReportType) => void;
   onOpenVisualizer: (type: ReportType) => void;
+  overdueCount: number;
+  onOpenOverdueModal: () => void;
 }
 
-export function FinancialReportsDashboard({ onGenerateReport, onOpenVisualizer }: FinancialReportsDashboardProps) {
+export function FinancialReportsDashboard({ onGenerateReport, onOpenVisualizer, overdueCount, onOpenOverdueModal }: FinancialReportsDashboardProps) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         
-        {/* Relatórios de Exportação */}
+        <ReportCard 
+          title="Controle de Inadimplência" 
+          description="Visualize todas as despesas pendentes que estão vencidas ou vencem hoje."
+          icon={AlertTriangle} 
+          iconColor="text-secondary-red" 
+          actionText="Ver Contas Vencidas" 
+          actionIcon={Eye}
+          badgeText={overdueCount > 0 ? overdueCount : 0} // Mostra 0 se não houver nenhuma
+          badgeVariant={overdueCount > 0 ? "destructive" : "secondary"}
+          onClick={onOpenOverdueModal}
+        />
+        
         <ReportCard 
           title="Contas Pagas" description="Relatório detalhado de todas as contas que foram pagas no período selecionado."
           icon={FileText} iconColor="text-primary-medium-green" actionText="Gerar Relatório" actionIcon={Download}
@@ -82,14 +97,7 @@ export function FinancialReportsDashboard({ onGenerateReport, onOpenVisualizer }
           icon={CreditCard} iconColor="text-purple-600" actionText="Gerar Relatório" actionIcon={Download}
           onClick={() => onGenerateReport('movimentacao_bancaria')}
         />
-        <ReportCard 
-          title="Controle de Inadimplência" description="Relatório de contas em atraso com alertas automáticos."
-          icon={AlertTriangle} iconColor="text-secondary-red" actionText="Gerar Relatório" actionIcon={Download}
-          badgeText="Em breve"
-          badgeVariant="secondary"
-          onClick={() => alert("Funcionalidade em desenvolvimento.")}
-        />
-
+        
         {/* Relatórios de Visualização */}
         <ReportCard 
           title="Fluxo de Caixa" description="Comparativo entre previsto x realizado com projeções mensais."

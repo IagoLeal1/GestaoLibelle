@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, TrendingDown, Calculator } from "lucide-react";
-import { getTransactionsForReport, Transaction } from "@/services/financialService";
+import { getTransactionsForReport } from "@/services/financialService";
 import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Skeleton } from "../ui/skeleton";
@@ -59,7 +59,9 @@ export function FluxoDeCaixaModal({ isOpen, onClose }: FluxoDeCaixaModalProps) {
       });
 
       todasTransacoes.forEach(tx => {
-        const periodId = format(tx.date.toDate(), 'yyyy-MM');
+        // --- CORREÇÃO APLICADA AQUI ---
+        // Usamos tx.dataMovimento em vez de tx.date
+        const periodId = format(tx.dataMovimento.toDate(), 'yyyy-MM');
         if (monthlyDataMap[periodId]) {
           if (tx.status === 'pago') {
             if (tx.type === 'receita') {
@@ -135,7 +137,6 @@ export function FluxoDeCaixaModal({ isOpen, onClose }: FluxoDeCaixaModalProps) {
         <DialogHeader>
           <DialogTitle>Fluxo de Caixa - Previsto x Realizado</DialogTitle>
           <DialogDescription>
-            {/* --- CORREÇÃO APLICADA AQUI: REMOÇÃO DAS TAGS <p> --- */}
             Comparativo dos últimos 6 meses. O valor Previsto é baseado nas transações Pendentes e o Realizado nas transações Pagas.
           </DialogDescription>
         </DialogHeader>

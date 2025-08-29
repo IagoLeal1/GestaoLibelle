@@ -19,7 +19,8 @@ import {
     getBankAccounts, addBankAccount, updateBankAccount, deleteBankAccount, BankAccount,
     getTransactionsForReport, getPendingTransactions, getExpensesByCostCenter,
     createTransactionBlock, TransactionBlockFormData,
-    getAllPaidTransactions
+    getAllPaidTransactions,
+    getOverdueExpenses // Importando a nova função
 } from "@/services/financialService";
 import {
     getCostCenters, CostCenter, addCostCenter, updateCostCenter, deleteCostCenter,
@@ -42,6 +43,7 @@ import { FinancialGoalsModal } from "@/components/financial/financial-goals-moda
 import { AnaliseTendenciasModal } from "@/components/financial/analise-tendencias-modal";
 import { ComparativoMensalModal } from "@/components/financial/comparativo-mensal-modal";
 import { BankBalancesModal } from "@/components/financial/bank-balances-modal";
+import { OverdueExpensesModal } from "@/components/financial/overdue-expenses-modal"; // Importando o novo modal
 
 // Componentes Refatorados
 import { FinancialSummaryCards } from "@/components/financial/financial-summary-cards";
@@ -57,6 +59,7 @@ export default function FinancialClientPage() {
 
     // Estados de Dados
     const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [overdueExpenses, setOverdueExpenses] = useState<Transaction[]>([]); // Novo estado
     const [accountPlans, setAccountPlans] = useState<{ receitas: AccountPlan[], despesas: AccountPlan[] }>({ receitas: [], despesas: [] });
     const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -71,6 +74,9 @@ export default function FinancialClientPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [dateFrom, setDateFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
     const [dateTo, setDateTo] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+    
+    // Estados dos Modais
+    const [isOverdueModalOpen, setIsOverdueModalOpen] = useState(false);
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [reportType, setReportType] = useState<ReportType | null>(null);
     const [isFluxoDeCaixaModalOpen, setIsFluxoDeCaixaModalOpen] = useState(false);
@@ -79,13 +85,9 @@ export default function FinancialClientPage() {
     const [isAnaliseTendenciasModalOpen, setIsAnaliseTendenciasModalOpen] = useState(false);
     const [isComparativoMensalModalOpen, setIsComparativoMensalModalOpen] = useState(false);
     const [isBankBalancesModalOpen, setIsBankBalancesModalOpen] = useState(false);
-
-    // Estados para Modais de Transação
     const [isAddTransactionModalOpen, setIsAddTransactionModalOpen] = useState(false);
     const [isEditTransactionModalOpen, setIsEditTransactionModalOpen] = useState(false);
     const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
-
-    // Estados para Modais de Configuração
     const [isAccountPlanModalOpen, setIsAccountPlanModalOpen] = useState(false);
     const [selectedAccountPlan, setSelectedAccountPlan] = useState<Partial<AccountPlan> | null>(null);
     const [isCostCenterModalOpen, setIsCostCenterModalOpen] = useState(false);
@@ -101,11 +103,29 @@ export default function FinancialClientPage() {
         setLoading(true);
         const startDate = startOfDay(new Date(dateFrom));
         const endDate = endOfDay(new Date(dateTo));
-        const [ transactionsData, plansData, centersData, suppliersData, covenantsData, bankAccountsData, professionalsData, companyInfo ] = await Promise.all([
-            getTransactionsByPeriod(startDate, endDate), getAccountPlans(), getCostCenters(),
-            getSuppliers(), getCovenants(), getBankAccounts(), getProfessionalsForRepasse(), getCompanyData()
+        const [
+            transactionsData,
+            overdueData,
+            plansData,
+            centersData,
+            suppliersData,
+            covenantsData,
+            bankAccountsData,
+            professionalsData,
+            companyInfo
+        ] = await Promise.all([
+            getTransactionsByPeriod(startDate, endDate),
+            getOverdueExpenses(),
+            getAccountPlans(),
+            getCostCenters(),
+            getSuppliers(),
+            getCovenants(),
+            getBankAccounts(),
+            getProfessionalsForRepasse(),
+            getCompanyData()
         ]);
         setTransactions(transactionsData);
+        setOverdueExpenses(overdueData);
         setAccountPlans(plansData);
         setCostCenters(centersData);
         setSuppliers(suppliersData);
@@ -148,23 +168,23 @@ export default function FinancialClientPage() {
             case 'contas_pagas':
                 headers = ["Data Pagamento", "Descricao", "Categoria", "Centro de Custo", "Valor Pago"];
                 const paidTransactions = await getTransactionsForReport({ type: 'despesa', status: 'pago', startDate, endDate });
-                dataToExport = paidTransactions.map(tx => [ format(tx.date.toDate(), 'dd/MM/yyyy'), `"${tx.description}"`, tx.category, tx.costCenter, tx.value.toFixed(2).replace('.', ',') ]);
+                dataToExport = paidTransactions.map(tx => [ format(tx.dataMovimento.toDate(), 'dd/MM/yyyy'), `"${tx.description}"`, tx.category, tx.costCenter, tx.value.toFixed(2).replace('.', ',') ]);
                 break;
             case 'contas_recebidas':
                 headers = ["Data Recebimento", "Descricao", "Categoria", "Centro de Custo", "Valor Recebido"];
                 const receivedTransactions = await getTransactionsForReport({ type: 'receita', status: 'pago', startDate, endDate });
-                dataToExport = receivedTransactions.map(tx => [ format(tx.date.toDate(), 'dd/MM/yyyy'), `"${tx.description}"`, tx.category, tx.costCenter, tx.value.toFixed(2).replace('.', ',') ]);
+                dataToExport = receivedTransactions.map(tx => [ format(tx.dataMovimento.toDate(), 'dd/MM/yyyy'), `"${tx.description}"`, tx.category, tx.costCenter, tx.value.toFixed(2).replace('.', ',') ]);
                 break;
             case 'receitas': case 'despesas': case 'fluxo_caixa':
-                headers = ["Data", "Tipo", "Categoria", "Descricao", "Centro de Custo", "Status", "Valor"];
+                headers = ["Data Movimento", "Data Emissão", "Tipo", "Categoria", "Descricao", "Centro de Custo", "Status", "Valor"];
                 const reportTransactions = await getTransactionsForReport({ type: reportType === 'fluxo_caixa' ? undefined : reportType, startDate, endDate });
-                dataToExport = reportTransactions.map(tx => [ format(tx.date.toDate(), 'dd/MM/yyyy'), tx.type, tx.category, `"${tx.description}"`, tx.costCenter, tx.status, tx.value.toFixed(2).replace('.', ',') ]);
+                dataToExport = reportTransactions.map(tx => [ format(tx.dataMovimento.toDate(), 'dd/MM/yyyy'), tx.dataEmissao ? format(tx.dataEmissao.toDate(), 'dd/MM/yyyy') : '', tx.type, tx.category, `"${tx.description}"`, tx.costCenter, tx.status, tx.value.toFixed(2).replace('.', ',') ]);
                 break;
             case 'contas_a_pagar': case 'contas_a_receber':
                 headers = ["Data Vencimento", "Descricao", "Categoria", "Valor Pendente"];
                 const pendingType = reportType === 'contas_a_pagar' ? 'despesa' : 'receita';
                 const pendingTransactions = await getPendingTransactions({ type: pendingType, startDate, endDate });
-                dataToExport = pendingTransactions.map(tx => [ format(tx.date.toDate(), 'dd/MM/yyyy'), `"${tx.description}"`, tx.category, tx.value.toFixed(2).replace('.', ',') ]);
+                dataToExport = pendingTransactions.map(tx => [ format(tx.dataMovimento.toDate(), 'dd/MM/yyyy'), `"${tx.description}"`, tx.category, tx.value.toFixed(2).replace('.', ',') ]);
                 break;
             case 'despesas_por_centro_custo':
                 headers = ["Centro de Custo", "Total Despesas", "Qtd. Transacoes"];
@@ -172,9 +192,9 @@ export default function FinancialClientPage() {
                 dataToExport = Object.entries(expensesByCenter).map(([center, data]) => [ center, data.total.toFixed(2).replace('.', ','), data.count ]);
                 break;
             case 'movimentacao_bancaria':
-                headers = ["Data", "Tipo", "Descricao", "Categoria", "Status", "Valor"];
+                headers = ["Data Movimento", "Tipo", "Descricao", "Categoria", "Status", "Valor"];
                 const bankTransactions = await getTransactionsForReport({ startDate, endDate, bankAccountId: filters.bankAccountId });
-                dataToExport = bankTransactions.map(tx => [ format(tx.date.toDate(), 'dd/MM/yyyy'), tx.type, `"${tx.description}"`, tx.category, tx.status, tx.value.toFixed(2).replace('.', ',') ]);
+                dataToExport = bankTransactions.map(tx => [ format(tx.dataMovimento.toDate(), 'dd/MM/yyyy'), tx.type, `"${tx.description}"`, tx.category, tx.status, tx.value.toFixed(2).replace('.', ',') ]);
                 const bank = bankAccounts.find(b => b.id === filters.bankAccountId);
                 fileName = `extrato_${bank?.name.replace(/\s+/g, '_') || 'banco'}_${startDateStr}_a_${endDateStr}.csv`;
                 break;
@@ -202,8 +222,17 @@ export default function FinancialClientPage() {
 
     const handleAddTransaction = async (data: AddTransactionFormValues, isBlock: boolean) => {
         setIsSubmitting(true);
-        const dataWithDateObject = { ...data, date: new Date(data.date) };
-        const result = isBlock ? await createTransactionBlock({ ...dataWithDateObject, repetitions: data.repetitions || 1 }) : await addTransaction(dataWithDateObject);
+        
+        const dataWithDateObjects = {
+            ...data,
+            dataMovimento: new Date(data.dataMovimento),
+            ...(data.dataEmissao && { dataEmissao: new Date(data.dataEmissao) })
+        };
+        
+        const result = isBlock
+            ? await createTransactionBlock({ ...dataWithDateObjects, repetitions: data.repetitions || 1 } as TransactionBlockFormData)
+            : await addTransaction(dataWithDateObjects as TransactionFormData);
+
         if (result.success) {
             toast.success(`Movimentação ${isBlock ? 'sequencial registrada' : 'registrada'}!`);
             setIsAddTransactionModalOpen(false);
@@ -262,7 +291,14 @@ export default function FinancialClientPage() {
                     <TabsContent value="despesas" className="mt-6"><FinancialTable title="Despesas" data={despesas} type="despesa" loading={loading} onAddTransaction={() => setIsAddTransactionModalOpen(true)} onEditTransaction={(tx) => { setSelectedTransaction(tx); setIsEditTransactionModalOpen(true); }} onUpdateStatus={handleUpdateStatus} onDeleteTransaction={handleDeleteTransaction} bankAccounts={bankAccounts} /></TabsContent>
                     <TabsContent value="receitas" className="mt-6"><FinancialTable title="Receitas" data={receitas} type="receita" loading={loading} onAddTransaction={() => setIsAddTransactionModalOpen(true)} onEditTransaction={(tx) => { setSelectedTransaction(tx); setIsEditTransactionModalOpen(true); }} onUpdateStatus={handleUpdateStatus} onDeleteTransaction={handleDeleteTransaction} bankAccounts={bankAccounts} /></TabsContent>
                     <TabsContent value="repasses" className="mt-6"><ProfessionalRepasseDashboard transactions={transactions} professionals={professionals} loading={loading} /></TabsContent>
-                    <TabsContent value="relatorios" className="mt-6"><FinancialReportsDashboard onGenerateReport={handleOpenReportModal} onOpenVisualizer={handleOpenVisualizer} /></TabsContent>
+                    <TabsContent value="relatorios" className="mt-6">
+                        <FinancialReportsDashboard 
+                            onGenerateReport={handleOpenReportModal} 
+                            onOpenVisualizer={handleOpenVisualizer}
+                            overdueCount={overdueExpenses.length}
+                            onOpenOverdueModal={() => setIsOverdueModalOpen(true)}
+                        />
+                    </TabsContent>
                     <TabsContent value="configuracoes" className="mt-6">
                         <SettingsDashboard
                             accountPlans={accountPlans} costCenters={costCenters} suppliers={suppliers} covenants={covenants} bankAccounts={bankAccounts} loading={loading}
@@ -306,6 +342,13 @@ export default function FinancialClientPage() {
                 </Tabs>
             </div>
             
+            <OverdueExpensesModal 
+                isOpen={isOverdueModalOpen}
+                onClose={() => setIsOverdueModalOpen(false)}
+                transactions={overdueExpenses}
+                onUpdateStatus={handleUpdateStatus}
+            />
+
             <AddTransactionModal isOpen={isAddTransactionModalOpen} onClose={() => setIsAddTransactionModalOpen(false)} onSubmit={handleAddTransaction} accountPlans={accountPlans} costCenters={costCenters} bankAccounts={bankAccounts} isLoading={isSubmitting} />
             <EditTransactionModal isOpen={isEditTransactionModalOpen} onClose={() => setIsEditTransactionModalOpen(false)} onSubmit={handleUpdateTransaction} transaction={selectedTransaction} accountPlans={accountPlans} costCenters={costCenters} bankAccounts={bankAccounts} isLoading={isSubmitting} />
             <AddEditAccountPlanModal isOpen={isAccountPlanModalOpen} onClose={() => { setIsAccountPlanModalOpen(false); setSelectedAccountPlan(null); }} onSubmit={selectedAccountPlan?.id ? handleUpdateAccountPlan : handleAddAccountPlan} accountPlan={selectedAccountPlan} isLoading={isSubmitting} />

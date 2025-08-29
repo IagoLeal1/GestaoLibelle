@@ -14,7 +14,9 @@ export interface Transaction {
     type: 'receita' | 'despesa';
     description: string;
     value: number;
-    date: Timestamp;
+    date?: Timestamp; // Mantido para retrocompatibilidade
+    dataMovimento: Timestamp; 
+    dataEmissao?: Timestamp;
     status: 'pendente' | 'pago';
     appointmentId?: string;
     professionalId?: string;
@@ -30,7 +32,8 @@ export interface TransactionFormData {
     type: 'receita' | 'despesa';
     description: string;
     value: number;
-    date: Date;
+    dataMovimento: Date;
+    dataEmissao?: Date;
     status: 'pendente' | 'pago';
     appointmentId?: string;
     professionalId?: string;
@@ -44,7 +47,6 @@ export interface TransactionFormData {
 export interface TransactionBlockFormData extends TransactionFormData {
     repetitions: number;
 }
-
 export interface AccountPlan {
     id: string;
     code: string;
@@ -80,7 +82,7 @@ export interface BankAccount {
     account: string;
     type: 'Conta Corrente' | 'Conta Poupança' | 'Conta Salário';
     initialBalance: number;
-    currentBalance: number; // Agora é um campo obrigatório
+    currentBalance: number;
 }
 
 export interface Budget {
@@ -91,9 +93,6 @@ export interface Budget {
 
 // --- LÓGICA DE ATUALIZAÇÃO DE SALDO ---
 
-/**
- * Atualiza o saldo de uma conta bancária de forma atômica dentro de uma transação do Firestore.
- */
 const updateBalance = (transaction: any, bankAccountId: string, value: number) => {
     if (!bankAccountId || value === 0) return;
     const bankAccountRef = doc(db, "bankAccounts", bankAccountId);
@@ -101,13 +100,17 @@ const updateBalance = (transaction: any, bankAccountId: string, value: number) =
 };
 
 
-// --- FUNÇÕES DE TRANSAÇÃO ATUALIZADAS PARA CONTROLAR SALDO ---
+// --- FUNÇÕES DE TRANSAÇÃO ---
 
 export const addTransaction = async (data: TransactionFormData) => {
     const newDocRef = doc(collection(db, "transactions"));
     try {
         await runTransaction(db, async (transaction) => {
-            const transactionData = { ...data, date: Timestamp.fromDate(data.date) };
+            const transactionData = { 
+                ...data, 
+                dataMovimento: Timestamp.fromDate(data.dataMovimento),
+                ...(data.dataEmissao && { dataEmissao: Timestamp.fromDate(data.dataEmissao) })
+            };
             transaction.set(newDocRef, transactionData);
 
             if (data.status === 'pago' && data.bankAccountId) {
@@ -141,9 +144,9 @@ export const updateTransactionStatus = async (id: string, newStatus: 'pendente' 
                 let valueChange = 0;
                 
                 if (oldStatus === 'pendente' && newStatus === 'pago') {
-                    valueChange = value; // Aplica o valor
+                    valueChange = value;
                 } else if (oldStatus === 'pago' && newStatus === 'pendente') {
-                    valueChange = -value; // Reverte o valor
+                    valueChange = -value;
                 }
                 
                 if (valueChange !== 0) {
@@ -168,7 +171,7 @@ export const deleteTransaction = async (id: string) => {
             const txData = txDoc.data() as Transaction;
 
             if (txData.status === 'pago' && txData.bankAccountId) {
-                const valueChange = txData.type === 'receita' ? -txData.value : txData.value; // Reverte o valor
+                const valueChange = txData.type === 'receita' ? -txData.value : txData.value;
                 updateBalance(transaction, txData.bankAccountId, valueChange);
             }
 
@@ -191,8 +194,6 @@ export const addBankAccount = async (data: Omit<BankAccount, 'id' | 'currentBala
     }
 };
 
-// --- RESTANTE DAS FUNÇÕES (Mantidas para integridade do arquivo) ---
-
 export const deleteTransactionByAppointmentId = async (appointmentId: string) => {
     const transactionsRef = collection(db, "transactions");
     const q = query(transactionsRef, where("appointmentId", "==", appointmentId));
@@ -211,13 +212,19 @@ export const deleteTransactionByAppointmentId = async (appointmentId: string) =>
 
 export const createTransactionBlock = async (data: TransactionBlockFormData) => {
     try {
-        const { date, repetitions, description, ...rest } = data;
+        const { dataMovimento, dataEmissao, repetitions, description, ...rest } = data;
         const batch = writeBatch(db);
         const blockId = doc(collection(db, 'idGenerator')).id;
         for (let i = 0; i < repetitions; i++) {
-            const transactionDate = addMonths(new Date(date), i);
+            const transactionDate = addMonths(new Date(dataMovimento), i);
             const newDocRef = doc(collection(db, "transactions"));
-            const transactionData = { ...rest, description: `${description} (${i + 1}/${repetitions})`, date: Timestamp.fromDate(transactionDate), blockId };
+            const transactionData = { 
+                ...rest, 
+                description: `${description} (${i + 1}/${repetitions})`, 
+                dataMovimento: Timestamp.fromDate(transactionDate), 
+                ...(dataEmissao && { dataEmissao: Timestamp.fromDate(new Date(dataEmissao)) }),
+                blockId 
+            };
             batch.set(newDocRef, transactionData);
         }
         await batch.commit();
@@ -228,11 +235,33 @@ export const createTransactionBlock = async (data: TransactionBlockFormData) => 
     }
 };
 
+// --- FUNÇÕES DE BUSCA ATUALIZADAS PARA RETROCOMPATIBILIDADE ---
+
+const normalizeTransaction = (doc: any): Transaction => {
+    const data = doc.data();
+    return {
+        id: doc.id,
+        ...data,
+        // Garante que dataMovimento exista, usando 'date' como fallback.
+        dataMovimento: data.dataMovimento || data.date,
+    };
+};
+
 export const getTransactionsByPeriod = async (startDate: Date, endDate: Date): Promise<Transaction[]> => {
     try {
-        const q = query(collection(db, "transactions"), where("date", ">=", Timestamp.fromDate(startDate)), where("date", "<=", Timestamp.fromDate(endDate)), orderBy("date", "desc"));
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+        const qNew = query(collection(db, "transactions"), where("dataMovimento", ">=", Timestamp.fromDate(startDate)), where("dataMovimento", "<=", Timestamp.fromDate(endDate)));
+        const qOld = query(collection(db, "transactions"), where("date", ">=", Timestamp.fromDate(startDate)), where("date", "<=", Timestamp.fromDate(endDate)));
+
+        const [newSnapshot, oldSnapshot] = await Promise.all([getDocs(qNew), getDocs(qOld)]);
+
+        const allDocs = new Map<string, Transaction>();
+        newSnapshot.forEach(doc => allDocs.set(doc.id, normalizeTransaction(doc)));
+        oldSnapshot.forEach(doc => allDocs.set(doc.id, normalizeTransaction(doc)));
+        
+        const results = Array.from(allDocs.values());
+        results.sort((a, b) => b.dataMovimento.toDate().getTime() - a.dataMovimento.toDate().getTime());
+        
+        return results;
     } catch (e) {
         console.error("Erro ao buscar transações: ", e);
         return [];
@@ -241,15 +270,58 @@ export const getTransactionsByPeriod = async (startDate: Date, endDate: Date): P
 
 export const updateTransaction = async (id: string, data: Partial<TransactionFormData>) => {
     try {
-        const { date, ...rest } = data;
-        const updateData: any = rest;
-        if (date) updateData.date = Timestamp.fromDate(date);
+        const { dataMovimento, dataEmissao, ...rest } = data;
+        const updateData: any = { ...rest, date: null }; // Remove o campo 'date' legado
+        if (dataMovimento) updateData.dataMovimento = Timestamp.fromDate(dataMovimento);
+        if (dataEmissao) updateData.dataEmissao = Timestamp.fromDate(dataEmissao);
+        
         await updateDoc(doc(db, "transactions", id), updateData);
         return { success: true };
     } catch (e) {
         return { success: false, error: "Falha ao atualizar a transação." };
     }
 };
+
+export const getTransactionsForReport = async (options: { type?: 'receita' | 'despesa'; startDate: Date; endDate: Date; bankAccountId?: string; status?: 'pago' | 'pendente'; }): Promise<Transaction[]> => {
+    try {
+        const allTransactions = await getTransactionsByPeriod(options.startDate, options.endDate);
+        
+        return allTransactions.filter(tx => {
+            const typeMatch = !options.type || tx.type === options.type;
+            const bankAccountMatch = !options.bankAccountId || tx.bankAccountId === options.bankAccountId;
+            const statusMatch = !options.status || tx.status === options.status;
+            return typeMatch && bankAccountMatch && statusMatch;
+        });
+    } catch (error) {
+        console.error("Erro ao buscar transações para relatório:", error);
+        return [];
+    }
+};
+
+export const getAllPaidTransactions = async (): Promise<Transaction[]> => {
+    try {
+        const transactionsRef = collection(db, "transactions");
+        const q = query(transactionsRef, where('status', '==', 'pago'), orderBy('dataMovimento', 'asc'));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(normalizeTransaction);
+    } catch (error) {
+        console.error("Erro ao buscar todas as transações pagas:", error);
+        return [];
+    }
+};
+
+export const getPendingTransactions = async (options: { type: 'receita' | 'despesa'; startDate: Date; endDate: Date }): Promise<Transaction[]> => {
+    try {
+        const allTransactions = await getTransactionsByPeriod(options.startDate, options.endDate);
+        const pending = allTransactions.filter(tx => tx.status === 'pendente' && tx.type === options.type);
+        pending.sort((a, b) => a.dataMovimento.toDate().getTime() - b.dataMovimento.toDate().getTime());
+        return pending;
+    } catch (error) {
+        console.error(`Erro ao buscar contas a ${options.type === 'receita' ? 'receber' : 'pagar'}:`, error);
+        return [];
+    }
+};
+// ... (resto do seu código do financialService.ts)
 
 export const getAccountPlans = async (): Promise<{ receitas: AccountPlan[], despesas: AccountPlan[] }> => {
     try {
@@ -398,33 +470,6 @@ export const deleteBankAccount = async (id: string) => {
     }
 };
 
-export const getTransactionsForReport = async (options: { type?: 'receita' | 'despesa'; startDate: Date; endDate: Date; bankAccountId?: string; status?: 'pago' | 'pendente'; }): Promise<Transaction[]> => {
-    try {
-        const transactionsRef = collection(db, 'transactions');
-        let q = query(transactionsRef, where('date', '>=', Timestamp.fromDate(options.startDate)), where('date', '<=', Timestamp.fromDate(options.endDate)), orderBy('date', 'desc'));
-        if (options.type) q = query(q, where('type', '==', options.type));
-        if (options.bankAccountId) q = query(q, where('bankAccountId', '==', options.bankAccountId));
-        if (options.status) q = query(q, where('status', '==', options.status));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
-    } catch (error) {
-        console.error("Erro ao buscar transações para relatório:", error);
-        return [];
-    }
-};
-
-export const getPendingTransactions = async (options: { type: 'receita' | 'despesa'; startDate: Date; endDate: Date }): Promise<Transaction[]> => {
-    try {
-        const transactionsRef = collection(db, 'transactions');
-        const q = query(transactionsRef, where('status', '==', 'pendente'), where('type', '==', options.type), where('date', '>=', Timestamp.fromDate(options.startDate)), where('date', '<=', Timestamp.fromDate(options.endDate)), orderBy('date', 'asc'));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
-    } catch (error) {
-        console.error(`Erro ao buscar contas a ${options.type === 'receita' ? 'receber' : 'pagar'}:`, error);
-        return [];
-    }
-};
-
 export const getExpensesByCostCenter = async (startDate: Date, endDate: Date) => {
     try {
         const despesas = await getTransactionsForReport({ type: 'despesa', startDate, endDate, status: 'pago' });
@@ -463,15 +508,58 @@ export const setBudgetForMonth = async (monthId: string, data: Partial<Omit<Budg
         return { success: false, error: "Falha ao salvar a meta financeira." };
     }
 };
+/**
+ * Busca todas as despesas pendentes que estão vencidas ou vencem hoje.
+ * VERSÃO CORRIGIDA PARA RETROCOMPATIBILIDADE.
+ */
+export const getOverdueExpenses = async (): Promise<Transaction[]> => {
+  try {
+    const hoje = new Date();
+    // Definimos o final do dia para incluir qualquer conta que vença hoje.
+    const fimDoDia = new Date(hoje.setHours(23, 59, 59, 999));
 
-export const getAllPaidTransactions = async (): Promise<Transaction[]> => {
-    try {
-        const transactionsRef = collection(db, "transactions");
-        const q = query(transactionsRef, where('status', '==', 'pago'), orderBy('date', 'asc'));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
-    } catch (error) {
-        console.error("Erro ao buscar todas as transações pagas:", error);
-        return [];
-    }
+    // 1. Busca transações novas (com dataMovimento)
+    const qNew = query(collection(db, "transactions"),
+      where("type", "==", "despesa"),
+      where("status", "==", "pendente"),
+      where("dataMovimento", "<=", Timestamp.fromDate(fimDoDia))
+    );
+
+    // 2. Busca transações antigas (com date)
+    const qOld = query(collection(db, "transactions"),
+      where("type", "==", "despesa"),
+      where("status", "==", "pendente"),
+      where("date", "<=", Timestamp.fromDate(fimDoDia))
+    );
+
+    // Executa as duas buscas ao mesmo tempo
+    const [newSnapshot, oldSnapshot] = await Promise.all([getDocs(qNew), getDocs(qOld)]);
+
+    // Usamos um Map para garantir que não haja duplicatas
+    const allDocs = new Map<string, Transaction>();
+    
+    const normalizeAndAdd = (doc: any) => {
+        const data = doc.data();
+        // Normaliza o objeto para que sempre tenha a propriedade dataMovimento
+        const transaction: Transaction = {
+            id: doc.id,
+            ...data,
+            dataMovimento: data.dataMovimento || data.date, 
+        };
+        allDocs.set(doc.id, transaction);
+    };
+
+    newSnapshot.forEach(normalizeAndAdd);
+    oldSnapshot.forEach(normalizeAndAdd);
+
+    const results = Array.from(allDocs.values());
+    
+    // Ordena por data, as mais antigas primeiro
+    results.sort((a, b) => a.dataMovimento.toDate().getTime() - b.dataMovimento.toDate().getTime());
+    
+    return results;
+  } catch (error) {
+    console.error("Erro ao buscar despesas vencidas:", error);
+    return [];
+  }
 };
