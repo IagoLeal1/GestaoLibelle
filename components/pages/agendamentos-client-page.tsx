@@ -8,9 +8,9 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Filter, MoreHorizontal, Sun, Sunset, Moon, Download, Plus, AlertCircle } from "lucide-react"
+import { Search, Filter, MoreHorizontal, Sun, Sunset, Moon, Download, Plus, AlertCircle, ChevronDown } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
-import { getAppointmentsByDate, getAppointmentsForReport, Appointment, updateAppointment, deleteAppointment, AppointmentStatus, AppointmentFormData } from "@/services/appointmentService"
+import { getAppointmentsByDate, getAppointmentsForReport, Appointment, updateAppointment, AppointmentStatus, AppointmentFormData } from "@/services/appointmentService"
 import { getProfessionals, Professional } from "@/services/professionalService"
 import { getPatients, Patient } from "@/services/patientService"
 import { getRooms, Room } from "@/services/roomService"
@@ -21,6 +21,7 @@ import { MultiSelectFilter, MultiSelectOption } from "@/components/ui/multi-sele
 import Link from "next/link"
 import { format } from "date-fns"
 import { toast } from "sonner"
+import { Skeleton } from "@/components/ui/skeleton"
 
 // --- Funções de Ajuda (Helpers) ---
 const getStatusBadge = (status: string) => {
@@ -51,24 +52,16 @@ const getAppointmentStats = (appointments: Appointment[]) => ({
     emAtendimento: appointments.filter((a) => a.status === "em_atendimento").length,
 });
 const secondaryStatusOptions = [
-    { value: "confirmado", label: "Confirmado" },
-    { value: "pendente_confirmacao", label: "Pendente" },
-    { value: "pago", label: "Pago" },
-    { value: "sem_justificativa", label: "S/ Justificativa" },
-    { value: "reagendado", label: "Reagendado" },
-    { value: "em_sala", label: "Em Sala" },
-    { value: "fnj_paciente", label: "FNJ Paciente" },
-    { value: "f_terapeuta", label: "F Terapeuta" },
-    { value: "fj_paciente", label: "FJ Paciente" },
-    { value: "f_dupla", label: "F Dupla" },
-    { value: "suspenso_plano", label: "Suspenso pelo Plano" },
-    { value: "nenhum", label: "Nenhum" },
+    { value: "confirmado", label: "Confirmado" }, { value: "pendente_confirmacao", label: "Pendente" },
+    { value: "pago", label: "Pago" }, { value: "sem_justificativa", label: "S/ Justificativa" },
+    { value: "reagendado", label: "Reagendado" }, { value: "em_sala", label: "Em Sala" },
+    { value: "fnj_paciente", label: "FNJ Paciente" }, { value: "f_terapeuta", label: "F Terapeuta" },
+    { value: "fj_paciente", label: "FJ Paciente" }, { value: "f_dupla", label: "F Dupla" },
+    { value: "suspenso_plano", label: "Suspenso pelo Plano" }, { value: "nenhum", label: "Nenhum" },
 ];
 const primaryStatusOptions: { value: AppointmentStatus; label: string }[] = [
-    { value: "agendado", label: "Agendado" },
-    { value: "em_atendimento", label: "Em Atendimento" },
-    { value: "finalizado", label: "Finalizado" },
-    { value: "nao_compareceu", label: "Não Compareceu" },
+    { value: "agendado", label: "Agendado" }, { value: "em_atendimento", label: "Em Atendimento" },
+    { value: "finalizado", label: "Finalizado" }, { value: "nao_compareceu", label: "Não Compareceu" },
     { value: "cancelado", label: "Cancelado" },
 ];
 
@@ -77,7 +70,8 @@ export function AgendamentosClientPage() {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isPageLoading, setIsPageLoading] = useState(true);
+  const [isTableLoading, setIsTableLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -94,30 +88,45 @@ export function AgendamentosClientPage() {
     return room ? room.name : "Sala Excluída";
   };
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (isInitialLoad = false) => {
+    if (isInitialLoad) setIsPageLoading(true);
+    setIsTableLoading(true);
     setError(null);
     try {
-      const [appointmentsData, professionalsData, patientsData, roomsData] = await Promise.all([ 
-        getAppointmentsByDate(selectedDate), 
-        getProfessionals(),
-        getPatients(),
-        getRooms()
-      ]);
+      if (isInitialLoad) {
+        const [professionalsData, patientsData, roomsData] = await Promise.all([ 
+          getProfessionals(),
+          getPatients(),
+          getRooms()
+        ]);
+        setProfessionals(professionalsData);
+        setPatients(patientsData);
+        setRooms(roomsData);
+      }
+      const appointmentsData = await getAppointmentsByDate(selectedDate);
       setAppointments(appointmentsData);
-      setProfessionals(professionalsData);
-      setPatients(patientsData);
-      setRooms(roomsData);
     } catch (err) {
       setError("Falha ao carregar dados.");
     } finally {
-      setLoading(false);
+      if (isInitialLoad) setIsPageLoading(false);
+      setIsTableLoading(false);
     }
   }, [selectedDate]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchData(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isPageLoading) {
+        setIsTableLoading(true);
+        setError(null);
+        getAppointmentsByDate(selectedDate)
+            .then(setAppointments)
+            .catch(() => setError("Falha ao carregar agendamentos."))
+            .finally(() => setIsTableLoading(false));
+    }
+  }, [selectedDate, isPageLoading]);
 
   const handleOpenEditModal = (appointment: Appointment) => {
     setSelectedAppointment(appointment);
@@ -137,8 +146,6 @@ export function AgendamentosClientPage() {
   };
   
   const handleDeleteAppointment = (isBlock: boolean) => {
-    // A lógica de exclusão agora está dentro do modal, 
-    // esta função apenas fecha o modal e recarrega os dados.
     toast.success("Operação de exclusão concluída.");
     setIsEditModalOpen(false);
     fetchData();
@@ -238,7 +245,7 @@ export function AgendamentosClientPage() {
     )
   };
 
-  const TabelaDeAgendamentos = ({ agendamentos }: { agendamentos: Appointment[] }) => (
+  const TabelaDeAgendamentos = ({ agendamentos, loading }: { agendamentos: Appointment[], loading: boolean }) => (
     <div className="overflow-x-auto">
       <Table>
         <TableHeader><TableRow>
@@ -247,7 +254,13 @@ export function AgendamentosClientPage() {
           <TableHead>Status Sec.</TableHead><TableHead className="text-right">Ações</TableHead>
         </TableRow></TableHeader>
         <TableBody>
-          {agendamentos.length > 0 ? agendamentos.map((appointment) => (
+          {loading ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <TableRow key={i}>
+                <TableCell colSpan={8}><Skeleton className="h-5 w-full" /></TableCell>
+              </TableRow>
+            ))
+          ) : agendamentos.length > 0 ? agendamentos.map((appointment) => (
             <TableRow 
               key={appointment.id} 
               onClick={() => handleOpenEditModal(appointment)}
@@ -311,7 +324,7 @@ export function AgendamentosClientPage() {
     </div>
   );
 
-  if (loading) return <p className="text-center p-8">Carregando agendamentos...</p>;
+  if (isPageLoading) return <p className="text-center p-8">Carregando dados da página...</p>;
   if (error) return <div className="text-center p-8 bg-red-50 text-red-700 rounded-lg"><AlertCircle className="mx-auto h-8 w-8 mb-2" /><h3 className="font-bold">Ocorreu um Erro</h3><p>{error}</p></div>;
 
   return (
@@ -324,19 +337,23 @@ export function AgendamentosClientPage() {
           </div>
           <div className="flex w-full sm:w-auto gap-2">
             <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => setIsReportModalOpen(true)}>
-              <Download className="mr-2 h-4 w-4" />
-              Exportar Relatório
+              <Download className="mr-2 h-4 w-4" /> Exportar Relatório
             </Button>
-            <Link href="/agendamentos/novo" className="w-full">
-              <Button className="w-full">
-                <Plus className="mr-2 h-4 w-4" />
-                Novo Agendamento
-              </Button>
-            </Link>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                  <Button className="w-full">
+                      <Plus className="mr-2 h-4 w-4" /> Novo Agendamento <ChevronDown className="ml-2 h-4 w-4" />
+                  </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                  <Link href="/agendamentos/novo" passHref><DropdownMenuItem>Agendamento Único/Sequencial</DropdownMenuItem></Link>
+                  <Link href="/agendamentos/grade" passHref><DropdownMenuItem>Agendamento em Grade</DropdownMenuItem></Link>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
         
-        <RenewalNotice onActionCompleted={fetchData} />
+        <RenewalNotice onActionCompleted={() => fetchData(false)} />
         <BlocoDeEstatisticas agendamentos={appointments} />
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5" />Filtros</CardTitle></CardHeader>
@@ -357,7 +374,7 @@ export function AgendamentosClientPage() {
               <TabsTrigger value="tarde" className="gap-1"><Sunset className="h-4 w-4" />Tarde ({appointmentsPorPeriodo.tarde.length})</TabsTrigger>
               <TabsTrigger value="noite" className="gap-1"><Moon className="h-4 w-4" />Noite ({appointmentsPorPeriodo.noite.length})</TabsTrigger>
           </TabsList>
-          <TabsContent value="todos" className="mt-4"><Card><CardHeader><CardTitle>Todos os Agendamentos do Dia</CardTitle></CardHeader><CardContent><TabelaDeAgendamentos agendamentos={appointmentsFiltrados} /></CardContent></Card></TabsContent>
+          <TabsContent value="todos" className="mt-4"><Card><CardHeader><CardTitle>Todos os Agendamentos do Dia</CardTitle></CardHeader><CardContent><TabelaDeAgendamentos agendamentos={appointmentsFiltrados} loading={isTableLoading} /></CardContent></Card></TabsContent>
           {["manha", "tarde", "noite"].map((periodo) => {
             const dataPeriodo = appointmentsPorPeriodo[periodo as keyof typeof appointmentsPorPeriodo];
             return (
@@ -365,7 +382,7 @@ export function AgendamentosClientPage() {
                 <BlocoDeEstatisticas agendamentos={dataPeriodo} />
                 <Card>
                   <CardHeader><CardTitle className="flex items-center gap-2">{getPeriodoIcon(periodo)} Agendamentos da {getPeriodoLabel(periodo)} ({dataPeriodo.length})</CardTitle></CardHeader>
-                  <CardContent><TabelaDeAgendamentos agendamentos={dataPeriodo} /></CardContent>
+                  <CardContent><TabelaDeAgendamentos agendamentos={dataPeriodo} loading={isTableLoading} /></CardContent>
                 </Card>
               </TabsContent>
             )
@@ -373,22 +390,8 @@ export function AgendamentosClientPage() {
         </Tabs>
       </div>
 
-      <ReportModal 
-        isOpen={isReportModalOpen}
-        onClose={() => setIsReportModalOpen(false)}
-        onGenerate={handleGenerateReport}
-        patients={patients}
-        professionals={professionals}
-      />
-      <EditAppointmentModal 
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        onSave={handleUpdateAppointment}
-        onDelete={handleDeleteAppointment}
-        appointment={selectedAppointment}
-        patients={patients}
-        professionals={professionals}
-      />
+      <ReportModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} onGenerate={handleGenerateReport} patients={patients} professionals={professionals} />
+      <EditAppointmentModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} onSave={handleUpdateAppointment} onDelete={handleDeleteAppointment} appointment={selectedAppointment} patients={patients} professionals={professionals} />
     </>
   )
 }

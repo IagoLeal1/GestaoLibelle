@@ -13,16 +13,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BankAccount } from "@/services/financialService";
 
+// --- TIPO CORRIGIDO AQUI ---
+// O onSubmit agora espera os dados do formulário, sem o currentBalance
 interface AddEditBankAccountModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSubmit: (data: Omit<BankAccount, 'id'>) => Promise<void>;
+    onSubmit: (data: Omit<BankAccount, 'id' | 'currentBalance'>) => Promise<void>;
     bankAccount?: BankAccount | null;
     isLoading: boolean;
 }
 
 export function AddEditBankAccountModal({ isOpen, onClose, onSubmit, bankAccount, isLoading }: AddEditBankAccountModalProps) {
-    const [formData, setFormData] = useState<Omit<BankAccount, 'id'>>({
+    // --- TIPO CORRIGIDO AQUI ---
+    // O estado agora reflete os dados que o formulário realmente gerencia
+    const [formData, setFormData] = useState<Omit<BankAccount, 'id' | 'currentBalance'>>({
         name: '',
         agency: '',
         account: '',

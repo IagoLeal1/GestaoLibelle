@@ -64,7 +64,8 @@ export function RepasseDetailsModal({ isOpen, onClose, details }: RepasseDetails
                                 ) : (
                                     details.transacoes.map((tx) => (
                                         <TableRow key={tx.id}>
-                                            <TableCell>{format(tx.date.toDate(), 'dd/MM/yyyy')}</TableCell>
+                                            {/* --- CORREÇÃO APLICADA AQUI --- */}
+                                            <TableCell>{format(tx.dataMovimento.toDate(), 'dd/MM/yyyy')}</TableCell>
                                             <TableCell>{tx.description}</TableCell>
                                             <TableCell><Badge variant="outline">{tx.category}</Badge></TableCell>
                                             <TableCell className="text-right font-medium text-red-600">

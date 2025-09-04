@@ -1,16 +1,14 @@
-// components/dashboards/professional-repasse-dashboard.tsx
 "use client";
 
-import { useMemo, useState } from "react"; // Adicionado useState
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { Transaction } from "@/services/financialService";
 import { Professional } from "@/services/settingsService";
-import { RepasseDetailsModal } from "@/components/modals/repasse-details-modal"; // Importação do novo modal
+import { RepasseDetailsModal } from "@/components/modals/repasse-details-modal";
 
-// Interface para os detalhes que o modal vai receber
 interface RepasseDetails {
     name: string;
     totalRepasse: number;
@@ -24,7 +22,6 @@ interface ProfessionalRepasseDashboardProps {
 }
 
 export function ProfessionalRepasseDashboard({ transactions, professionals, loading }: ProfessionalRepasseDashboardProps) {
-    // --- LÓGICA DO MODAL ADICIONADA AQUI ---
     const [modalDetails, setModalDetails] = useState<RepasseDetails | null>(null);
 
     const handleOpenDetails = (professionalData: any) => {
@@ -38,7 +35,6 @@ export function ProfessionalRepasseDashboard({ transactions, professionals, load
             transacoes: transacoesDoProfissional
         });
     };
-    // ------------------------------------
 
     const repassesPorProfissional = useMemo(() => {
         const repasses = transactions.filter(tx => tx.type === 'despesa' && !!tx.professionalId);
@@ -47,7 +43,8 @@ export function ProfessionalRepasseDashboard({ transactions, professionals, load
             const transacoesDoProfissional = repasses.filter(tx => tx.professionalId === prof.id);
             const totalRepasse = transacoesDoProfissional.reduce((acc, tx) => acc + tx.value, 0);
             const ultimosRepasses = transacoesDoProfissional
-                .sort((a, b) => b.date.toDate().getTime() - a.date.toDate().getTime())
+                // --- CORREÇÃO APLICADA AQUI ---
+                .sort((a, b) => b.dataMovimento.toDate().getTime() - a.dataMovimento.toDate().getTime())
                 .slice(0, 1);
 
             return {
@@ -95,7 +92,8 @@ export function ProfessionalRepasseDashboard({ transactions, professionals, load
                                                 <TableCell className="text-center">{prof.quantidade}</TableCell>
                                                 <TableCell>
                                                     {prof.ultimoRepasse 
-                                                        ? `${format(prof.ultimoRepasse.date.toDate(), 'dd/MM/yyyy')} - R$ ${prof.ultimoRepasse.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                                                        // --- CORREÇÃO APLICADA AQUI ---
+                                                        ? `${format(prof.ultimoRepasse.dataMovimento.toDate(), 'dd/MM/yyyy')} - R$ ${prof.ultimoRepasse.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
                                                         : 'Nenhum lançamento no período'
                                                     }
                                                 </TableCell>
@@ -113,7 +111,6 @@ export function ProfessionalRepasseDashboard({ transactions, professionals, load
                 </Card>
             </div>
 
-            {/* Renderiza o modal */}
             <RepasseDetailsModal 
                 isOpen={!!modalDetails}
                 onClose={() => setModalDetails(null)}
