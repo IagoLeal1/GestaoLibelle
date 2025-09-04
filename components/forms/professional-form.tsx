@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { getProfessionalById, updateProfessional, createProfessional, ProfessionalFormData, Professional } from "@/services/professionalService";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getProfessionalById, updateProfessional, createProfessional, ProfessionalFormData } from "@/services/professionalService";
 
 const DIAS_SEMANA = [
   { id: 'segunda', label: 'Seg' }, { id: 'terca', label: 'Ter' },
@@ -17,7 +18,6 @@ const DIAS_SEMANA = [
   { id: 'domingo', label: 'Dom' },
 ];
 
-// O formulário não recebe props, ele busca seus próprios dados
 export function ProfessionalForm() {
   const router = useRouter();
   const params = useParams();
@@ -26,33 +26,22 @@ export function ProfessionalForm() {
   const { register, handleSubmit, control, reset, formState: { errors } } = useForm<ProfessionalFormData>();
   const [loading, setLoading] = useState(!!id);
   const [serverError, setServerError] = useState<string | null>(null);
-  const [isEditMode, setIsEditMode] = useState(!!id);
+  const isEditMode = !!id;
+
+  const tipoPagamento = useWatch({
+    control,
+    name: "financeiro.tipoPagamento",
+    defaultValue: "repasse"
+  });
 
   useEffect(() => {
     if (id) {
-      // --- ESPIONANDO O PROCESSO ---
-      console.log("DEBUG 1: ID do profissional encontrado na URL:", id);
-
       const fetchProfessional = async () => {
         setLoading(true);
         const professional = await getProfessionalById(id);
-
-        console.log("DEBUG 2: Dados recebidos do Firebase:", professional);
-
         if (professional) {
-          // Os dados do Firebase (com Timestamp) são convertidos para o formato do formulário (com string de data)
-          const formDataToSet = {
-            ...professional,
-            percentualRepasse: professional.financeiro?.percentualRepasse || 0,
-            valorConsulta: professional.financeiro?.valorConsulta || 0,
-            // A data de contratação não está no formulário, então não precisamos formatá-la aqui
-          };
-          
-          console.log("DEBUG 3: Dados que serão preenchidos no formulário:", formDataToSet);
-          
-          reset(formDataToSet); // Preenche o formulário com os dados
+          reset(professional);
         } else {
-          console.error("DEBUG 4: Profissional não encontrado para o ID:", id);
           setServerError("Profissional não encontrado.");
         }
         setLoading(false);
@@ -65,12 +54,13 @@ export function ProfessionalForm() {
     setLoading(true);
     setServerError(null);
     
-    let result;
-    if (isEditMode && id) {
-      result = await updateProfessional(id, data);
-    } else {
-      result = await createProfessional(data);
+    if (data.financeiro.percentualRepasse) {
+        data.financeiro.percentualRepasse = Number(data.financeiro.percentualRepasse);
     }
+
+    const result = isEditMode && id
+      ? await updateProfessional(id, data)
+      : await createProfessional(data);
 
     setLoading(false);
     if (result.success) {
@@ -99,50 +89,92 @@ export function ProfessionalForm() {
           <div className="space-y-2"><Label htmlFor="telefone">Telefone</Label><Input id="telefone" {...register("telefone")} /></div>
         </CardContent>
       </Card>
+
       <Card>
         <CardHeader><CardTitle>Informações Profissionais e Financeiras</CardTitle></CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="space-y-2"><Label htmlFor="conselho">Conselho (Ex: CRP)</Label><Input id="conselho" {...register("conselho")} /></div>
-          <div className="space-y-2"><Label htmlFor="numeroConselho">Nº do Conselho</Label><Input id="numeroConselho" {...register("numeroConselho")} /></div>
-          <div className="space-y-2"><Label htmlFor="percentualRepasse">Repasse (%)</Label><Input id="percentualRepasse" type="number" {...register("percentualRepasse", { valueAsNumber: true })} /></div>
-          <div className="space-y-2"><Label htmlFor="valorConsulta">Valor Consulta (R$)</Label><Input id="valorConsulta" type="number" step="0.01" {...register("valorConsulta", { valueAsNumber: true })} /></div>
+        <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2"><Label htmlFor="conselho">Conselho (Ex: CRP)</Label><Input id="conselho" {...register("conselho")} /></div>
+                <div className="space-y-2"><Label htmlFor="numeroConselho">Nº do Conselho</Label><Input id="numeroConselho" {...register("numeroConselho")} /></div>
+            </div>
+            
+            <div className="border-t pt-4">
+                {/* --- LAYOUT CORRIGIDO AQUI --- */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                        <Label>Tipo de Pagamento</Label>
+                        <Controller
+                            name="financeiro.tipoPagamento"
+                            control={control}
+                            defaultValue="repasse"
+                            render={({ field }) => (
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="repasse">Repasse</SelectItem>
+                                        <SelectItem value="fixo">Fixo</SelectItem>
+                                        <SelectItem value="ambos">Ambos</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            )}
+                        />
+                    </div>
+                    
+                    {(tipoPagamento === 'repasse' || tipoPagamento === 'ambos') && (
+                        <div className="space-y-2">
+                            <Label>Repasse (%)</Label>
+                            <Input type="number" {...register("financeiro.percentualRepasse")} />
+                        </div>
+                    )}
+                </div>
+
+                {tipoPagamento === 'ambos' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+                        <div className="space-y-2"><Label>Início do Horário Fixo</Label><Input type="time" {...register("financeiro.horarioFixoInicio")} /></div>
+                        <div className="space-y-2"><Label>Fim do Horário Fixo</Label><Input type="time" {...register("financeiro.horarioFixoFim")} /></div>
+                    </div>
+                )}
+            </div>
         </CardContent>
       </Card>
+      
       <Card>
         <CardHeader><CardTitle>Dias e Horários de Atendimento</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label className="mb-2 block">Dias da Semana</Label>
-            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-4">
-              <Controller
-                name="diasAtendimento"
-                control={control}
-                render={({ field }) => (
-                  <>
-                    {DIAS_SEMANA.map(dia => (
-                      <div key={dia.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={dia.id}
-                          checked={field.value?.includes(dia.id)}
-                          onCheckedChange={(checked) => {
-                            const currentValue = field.value || [];
-                            return checked
-                              ? field.onChange([...currentValue, dia.id])
-                              : field.onChange(currentValue.filter(value => value !== dia.id));
-                          }}
-                        />
-                        <Label htmlFor={dia.id} className="font-normal">{dia.label}</Label>
-                      </div>
-                    ))}
-                  </>
-                )}
-              />
+        <CardContent>
+            <div className="space-y-4">
+                <div>
+                    <Label>Dias de Atendimento</Label>
+                    <div className="flex flex-wrap gap-4 pt-2">
+                        {DIAS_SEMANA.map(dia => (
+                            <div key={dia.id} className="flex items-center space-x-2">
+                                <Controller
+                                    name="diasAtendimento"
+                                    control={control}
+                                    render={({ field }) => (
+                                        <Checkbox
+                                            id={dia.id}
+                                            checked={field.value?.includes(dia.id)}
+                                            onCheckedChange={(checked) => {
+                                                const currentValues = field.value || [];
+                                                if (checked) {
+                                                    field.onChange([...currentValues, dia.id]);
+                                                } else {
+                                                    field.onChange(currentValues.filter(value => value !== dia.id));
+                                                }
+                                            }}
+                                        />
+                                    )}
+                                />
+                                <label htmlFor={dia.id} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{dia.label}</label>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                    <div className="space-y-2"><Label htmlFor="horarioInicio">Horário de Início</Label><Input id="horarioInicio" type="time" {...register("horarioInicio")} /></div>
+                    <div className="space-y-2"><Label htmlFor="horarioFim">Horário de Fim</Label><Input id="horarioFim" type="time" {...register("horarioFim")} /></div>
+                </div>
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4 pt-4">
-            <div className="space-y-2"><Label htmlFor="horarioInicio">Horário de Início</Label><Input id="horarioInicio" type="time" {...register("horarioInicio")} /></div>
-            <div className="space-y-2"><Label htmlFor="horarioFim">Horário de Fim</Label><Input id="horarioFim" type="time" {...register("horarioFim")} /></div>
-          </div>
         </CardContent>
       </Card>
       

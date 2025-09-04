@@ -207,9 +207,17 @@ export function AppointmentForm() {
             </div>
             <div className="space-y-2 lg:col-span-2">
                 <Label>Valor da Consulta (R$)</Label>
-                <div className="relative"><DollarSign className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={formData.valorConsulta?.toFixed(2).replace('.', ',') || '0,00'} readOnly className="pl-8" /></div>
+                <div className="relative">
+                    <DollarSign className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                        type="number"
+                        step="0.01"
+                        value={formData.valorConsulta || ''} 
+                        onChange={(e) => handleInputChange("valorConsulta", parseFloat(e.target.value) || 0)} 
+                        className="pl-8" 
+                    />
+                </div>
             </div>
-
           </div>
           
           <div className="space-y-4 rounded-lg border p-4">

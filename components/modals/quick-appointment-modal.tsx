@@ -15,7 +15,7 @@ import { Specialty } from "@/services/specialtyService";
 import { Room } from "@/services/roomService";
 import { QuickAppointmentData } from "@/services/appointmentService";
 import { toast } from "sonner";
-import { DollarSign } from "lucide-react"; // Importar o ícone
+import { DollarSign } from "lucide-react";
 
 interface QuickAppointmentModalProps {
   isOpen: boolean;
@@ -31,7 +31,7 @@ interface QuickAppointmentModalProps {
 export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patient, professionals, specialties, rooms }: QuickAppointmentModalProps) {
     const [professionalId, setProfessionalId] = useState<string>('');
     const [specialty, setSpecialty] = useState<string>('');
-    const [valorConsulta, setValorConsulta] = useState<number>(0); // <-- NOVO ESTADO
+    const [valorConsulta, setValorConsulta] = useState<number>(0);
     const [roomId, setRoomId] = useState<string | undefined>(undefined);
     const [isRecurring, setIsRecurring] = useState(false);
     const [sessions, setSessions] = useState(4);
@@ -41,7 +41,7 @@ export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patie
         if (isOpen) {
             setProfessionalId('');
             setSpecialty('');
-            setValorConsulta(0); // <-- RESETAR O VALOR
+            setValorConsulta(0);
             setRoomId(undefined);
             setIsRecurring(false);
             setSessions(4);
@@ -62,7 +62,6 @@ export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patie
         }
     }, [isOpen, patient, specialties]);
 
-    // Função para atualizar o valor quando a especialidade muda
     const handleSpecialtyChange = (specialtyName: string) => {
         const selectedSpecialty = specialties.find(s => s.name === specialtyName);
         setSpecialty(specialtyName);
@@ -84,7 +83,7 @@ export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patie
             end: endDate,
             professionalId,
             specialty,
-            valorConsulta, // <-- ENVIAR O VALOR
+            valorConsulta,
             roomId,
             isRecurring,
             sessions: isRecurring ? sessions : 1,
@@ -134,7 +133,14 @@ export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patie
                             <Label htmlFor="valorConsulta">Valor da Consulta (R$)</Label>
                             <div className="relative">
                                 <DollarSign className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                                <Input id="valorConsulta" value={valorConsulta.toFixed(2).replace('.', ',')} readOnly className="pl-8" />
+                                <Input 
+                                    id="valorConsulta" 
+                                    type="number" 
+                                    step="0.01"
+                                    value={valorConsulta} 
+                                    onChange={(e) => setValorConsulta(parseFloat(e.target.value) || 0)} 
+                                    className="pl-8" 
+                                />
                             </div>
                         </div>
                     </div>

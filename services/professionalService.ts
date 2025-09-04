@@ -1,22 +1,21 @@
 import { db } from "@/lib/firebaseConfig";
-import { 
-  collection, 
-  getDocs, 
-  query, 
-  orderBy, 
-  Timestamp, 
-  addDoc, 
-  doc, 
-  updateDoc,
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
   getDoc,
-  where // <-- Importe o 'where' para a consulta
-} from "firebase/firestore";
-
-// --- Interfaces ---
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  Timestamp,
+  orderBy
+} from 'firebase/firestore';
 
 export interface Professional {
   id: string;
-  userId?: string; // userId pode ser opcional se o admin cadastra antes do profissional ter uma conta
+  userId?: string;
   fullName: string;
   email: string;
   status: 'ativo' | 'inativo' | 'licenca';
@@ -31,8 +30,10 @@ export interface Professional {
   horarioFim: string;
   dataContratacao: Timestamp;
   financeiro: {
-    percentualRepasse: number;
-    valorConsulta: number;
+    tipoPagamento: 'fixo' | 'repasse' | 'ambos';
+    percentualRepasse?: number;
+    horarioFixoInicio?: string;
+    horarioFixoFim?: string;
   }
 }
 
@@ -45,19 +46,24 @@ export interface ProfessionalFormData {
   telefone: string;
   celular: string;
   email: string;
-  percentualRepasse: number;
-  valorConsulta: number;
   diasAtendimento: string[];
   horarioInicio: string;
   horarioFim: string;
+  financeiro: {
+    tipoPagamento: 'fixo' | 'repasse' | 'ambos';
+    percentualRepasse?: number;
+    horarioFixoInicio?: string;
+    horarioFixoFim?: string;
+  }
 }
-
-// --- Funções do Serviço ---
 
 export const getProfessionals = async (): Promise<Professional[]> => {
   try {
     const q = query(collection(db, 'professionals'), orderBy('fullName'));
     const snapshot = await getDocs(q);
+    if (snapshot.empty) {
+      return [];
+    }
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Professional));
   } catch (error) {
     console.error("Erro ao buscar profissionais:", error);
@@ -69,35 +75,29 @@ export const getProfessionalById = async (id: string): Promise<Professional | nu
   try {
     const docRef = doc(db, 'professionals', id);
     const docSnap = await getDoc(docRef);
-    return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as Professional : null;
+    if (docSnap.exists()) {
+      return { id: docSnap.id, ...docSnap.data() } as Professional;
+    }
+    return null;
   } catch (error) {
     console.error("Erro ao buscar profissional por ID:", error);
     return null;
   }
 };
 
-// --- FUNÇÃO ATUALIZADA ---
 export const createProfessional = async (data: ProfessionalFormData): Promise<{success: boolean, error?: string}> => {
   try {
-    // 1. VERIFICAÇÃO DE DUPLICIDADE PELO CPF
     const q = query(collection(db, "professionals"), where("cpf", "==", data.cpf));
     const querySnapshot = await getDocs(q);
 
-    // 2. SE A CONSULTA RETORNAR DOCUMENTOS, O CPF JÁ EXISTE
     if (!querySnapshot.empty) {
       return { success: false, error: "Já existe um profissional cadastrado com este CPF." };
     }
 
-    // 3. SE O CPF FOR ÚNICO, PROSSEGUE COM A CRIAÇÃO
-    const { percentualRepasse, valorConsulta, ...restData } = data;
     await addDoc(collection(db, 'professionals'), {
-      ...restData,
+      ...data,
       status: 'ativo',
       dataContratacao: Timestamp.now(),
-      financeiro: {
-        percentualRepasse: Number(percentualRepasse) || 0,
-        valorConsulta: Number(valorConsulta) || 0,
-      }
     });
     return { success: true };
   } catch (error) {
@@ -106,17 +106,10 @@ export const createProfessional = async (data: ProfessionalFormData): Promise<{s
   }
 };
 
-export const updateProfessional = async (id: string, data: ProfessionalFormData) => {
+export const updateProfessional = async (id: string, data: Partial<ProfessionalFormData>) => {
   try {
     const docRef = doc(db, 'professionals', id);
-    const { percentualRepasse, valorConsulta, ...restData } = data;
-    await updateDoc(docRef, {
-      ...restData,
-      financeiro: {
-        percentualRepasse: Number(percentualRepasse) || 0,
-        valorConsulta: Number(valorConsulta) || 0,
-      }
-    });
+    await updateDoc(docRef, data);
     return { success: true };
   } catch (error) {
     console.error("Erro ao atualizar profissional:", error);
@@ -124,13 +117,25 @@ export const updateProfessional = async (id: string, data: ProfessionalFormData)
   }
 };
 
-export const updateProfessionalStatus = async (id: string, newStatus: 'ativo' | 'inativo' | 'licenca') => {
+export const deleteProfessional = async (id: string) => {
   try {
     const docRef = doc(db, 'professionals', id);
-    await updateDoc(docRef, { status: newStatus });
+    await deleteDoc(docRef);
+    return { success: true };
+  } catch (error) {
+    console.error("Erro ao deletar profissional:", error);
+    return { success: false, error: "Falha ao deletar profissional." };
+  }
+};
+
+// --- NOVA FUNÇÃO ADICIONADA AQUI ---
+export const updateProfessionalStatus = async (id: string, status: 'ativo' | 'inativo' | 'licenca') => {
+  try {
+    const docRef = doc(db, 'professionals', id);
+    await updateDoc(docRef, { status: status });
     return { success: true };
   } catch (error) {
     console.error("Erro ao atualizar status do profissional:", error);
-    return { success: false, error: "Falha ao atualizar o status." };
+    return { success: false, error: "Falha ao atualizar status." };
   }
 };

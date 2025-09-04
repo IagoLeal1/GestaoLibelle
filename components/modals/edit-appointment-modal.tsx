@@ -27,7 +27,6 @@ interface EditAppointmentModalProps {
   professionals: Professional[];
 }
 
-// --- CONSTANTE ADICIONADA AQUI ---
 const secondaryStatusOptions = [
     { value: "confirmado", label: "Confirmado" },
     { value: "pendente_confirmacao", label: "Pendente" },
@@ -42,7 +41,6 @@ const secondaryStatusOptions = [
     { value: "suspenso_plano", label: "Suspenso pelo Plano" },
     { value: "nenhum", label: "Nenhum" },
 ];
-// ------------------------------------
 
 export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appointment, patients, professionals }: EditAppointmentModalProps) {
   const [formData, setFormData] = useState<Partial<AppointmentFormData & { status: AppointmentStatus }>>({});
@@ -154,7 +152,7 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
 
   const handleSave = async () => {
     setIsSubmitting(true);
-    await onSave(formData); // Espera a função onSave (que é async) terminar
+    await onSave(formData);
     setIsSubmitting(false);
   };
   
@@ -211,7 +209,19 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-2"><Label>Sala</Label><Select value={formData.sala} onValueChange={handleRoomChange}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{rooms.map(r => <SelectItem key={r.id} value={r.id} className={occupiedRoomIds.includes(r.id) ? 'text-red-500 font-semibold' : ''}>{r.name} {occupiedRoomIds.includes(r.id) ? '(Ocupada)' : ''}</SelectItem>)}</SelectContent></Select></div>
                 <div className="space-y-2"><Label>Convênio</Label><Input value={formData.convenio || ''} readOnly /></div>
-                <div className="space-y-2"><Label>Valor (R$)</Label><div className="relative"><DollarSign className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={formData.valorConsulta?.toFixed(2).replace('.', ',') || '0,00'} readOnly className="pl-8" /></div></div>
+                <div className="space-y-2">
+                    <Label>Valor (R$)</Label>
+                    <div className="relative">
+                        <DollarSign className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input 
+                            type="number"
+                            step="0.01"
+                            value={formData.valorConsulta || ''} 
+                            onChange={(e) => handleInputChange("valorConsulta", parseFloat(e.target.value) || 0)} 
+                            className="pl-8" 
+                        />
+                    </div>
+                </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

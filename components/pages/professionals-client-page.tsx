@@ -94,9 +94,7 @@ const { user, firestoreUser: userProfile } = useAuth();
 
   const especialidadesUnicas = [...new Set(professionals.map(p => p.especialidade))];
 
-   // NOVO: Adicione esta função
-   const handleToggleStatus = async (professional: Professional) => {
-    // Define o novo status e o texto da confirmação
+    const handleToggleStatus = async (professional: Professional) => {
     const newStatus = professional.status === 'ativo' ? 'inativo' : 'ativo';
     const actionText = newStatus === 'ativo' ? 'ativar' : 'desativar';
 
@@ -104,7 +102,6 @@ const { user, firestoreUser: userProfile } = useAuth();
       const result = await updateProfessionalStatus(professional.id, newStatus);
       
       if (result.success) {
-        // Atualiza a lista na tela instantaneamente para o usuário ver a mudança
         setProfessionals(prev => 
           prev.map(p => 
             p.id === professional.id ? { ...p, status: newStatus } : p
@@ -119,6 +116,14 @@ const { user, firestoreUser: userProfile } = useAuth();
 
 
   if (loading) return <div className="text-center p-8">Carregando profissionais...</div>;
+
+  // --- Função de Ajuda para o Modal ---
+  const formatTipoPagamento = (tipo?: string) => {
+    if (tipo === 'fixo') return 'Fixo';
+    if (tipo === 'repasse') return 'Repasse';
+    if (tipo === 'ambos') return 'Ambos (Fixo + Repasse)';
+    return 'Não definido';
+  };
 
   return (
     <div className="space-y-6">
@@ -171,7 +176,6 @@ const { user, firestoreUser: userProfile } = useAuth();
                                 <DropdownMenuItem>Editar</DropdownMenuItem>
                             </Link>
 
-                            {/* NOVO: Item de menu para Ativar/Desativar */}
                             <DropdownMenuItem
                                 className={profissional.status === 'ativo' ? "text-red-600 focus:text-red-600" : "text-green-600 focus:text-green-600"}
                                 onClick={() => handleToggleStatus(profissional)}
@@ -179,7 +183,7 @@ const { user, firestoreUser: userProfile } = useAuth();
                                 {profissional.status === 'ativo' ? 'Desativar' : 'Ativar'}
                             </DropdownMenuItem>
 
-                            </DropdownMenuContent>
+                          </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
                     </TableRow>
@@ -191,7 +195,7 @@ const { user, firestoreUser: userProfile } = useAuth();
         </CardContent>
       </Card>
 
-      {/* Modal de Detalhes do Profissional */}
+      {/* --- MODAL DE DETALHES DO PROFISSIONAL COM SEÇÃO FINANCEIRA CORRIGIDA --- */}
       <Dialog open={modalAberto} onOpenChange={setModalAberto}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><User className="h-5 w-5" /> Detalhes do Profissional</DialogTitle></DialogHeader>
@@ -218,8 +222,28 @@ const { user, firestoreUser: userProfile } = useAuth();
               <Card>
                 <CardHeader><CardTitle className="flex items-center gap-2"><DollarSign className="h-5 w-5" /> Configurações Financeiras</CardTitle></CardHeader>
                 <CardContent><div className="grid gap-4 md:grid-cols-2">
-                  <div><Label className="text-sm text-gray-500">Repasse</Label><p className="text-lg font-bold">{profissionalSelecionado.financeiro?.percentualRepasse}%</p></div>
-                  <div><Label className="text-sm text-gray-500">Valor Consulta</Label><p className="text-lg font-bold">R$ {(profissionalSelecionado.financeiro?.valorConsulta || 0).toFixed(2).replace(".", ",")}</p></div>
+                    <div>
+                        <Label className="text-sm text-gray-500">Tipo de Pagamento</Label>
+                        <p>{formatTipoPagamento(profissionalSelecionado.financeiro?.tipoPagamento)}</p>
+                    </div>
+                    {(profissionalSelecionado.financeiro?.tipoPagamento === 'repasse' || profissionalSelecionado.financeiro?.tipoPagamento === 'ambos') && (
+                        <div>
+                            <Label className="text-sm text-gray-500">Percentual de Repasse</Label>
+                            <p>{profissionalSelecionado.financeiro?.percentualRepasse ?? 'N/A'}%</p>
+                        </div>
+                    )}
+                    {profissionalSelecionado.financeiro?.tipoPagamento === 'ambos' && (
+                        <>
+                            <div>
+                                <Label className="text-sm text-gray-500">Início do Horário Fixo</Label>
+                                <p>{profissionalSelecionado.financeiro?.horarioFixoInicio || 'N/A'}</p>
+                            </div>
+                            <div>
+                                <Label className="text-sm text-gray-500">Fim do Horário Fixo</Label>
+                                <p>{profissionalSelecionado.financeiro?.horarioFixoFim || 'N/A'}</p>
+                            </div>
+                        </>
+                    )}
                 </div></CardContent>
               </Card>
               <Card>
