@@ -10,10 +10,12 @@ import {
   query, 
   orderBy,
   getDoc,
-  setDoc 
+  setDoc,
+  where, // Adicionado
+  limit  // Adicionado
 } from "firebase/firestore";
 
-// --- NOVAS INTERFACES ---
+// --- INTERFACES ---
 export interface CompanyData {
     name?: string;
     cnpj?: string;
@@ -34,7 +36,7 @@ export interface Professional {
     name: string;
 }
 
-// --- NOVAS FUNÇÕES ---
+// --- FUNÇÕES DE DADOS DA EMPRESA ---
 /**
  * Busca os dados da empresa.
  * Os dados são armazenados num único documento para facilitar a gestão.
@@ -68,7 +70,7 @@ export const updateCompanyData = async (data: CompanyData) => {
     }
 };
 
-// --- FUNÇÕES EXISTENTES ---
+// --- FUNÇÕES DE CENTRO DE CUSTO ---
 
 export const getCostCenters = async (): Promise<CostCenter[]> => {
     try {
@@ -111,6 +113,36 @@ export const deleteCostCenter = async (id: string) => {
         return { success: false, error: "Falha ao excluir centro de custo." };
     }
 };
+
+/**
+ * --- NOVA FUNÇÃO ---
+ * Verifica se um centro de custo com um nome específico já existe.
+ * Se não existir, cria um novo.
+ */
+export const findOrCreateCostCenter = async (name: string) => {
+  if (!name || name.trim() === '') {
+    // Não faz nada se o nome for inválido
+    return;
+  }
+
+  try {
+    const costCentersRef = collection(db, "costCenters");
+    // Cria uma consulta para buscar um centro de custo com o nome exato.
+    const q = query(costCentersRef, where("name", "==", name), limit(1));
+    const querySnapshot = await getDocs(q);
+
+    // Se a consulta não retornar nenhum documento, significa que ele não existe.
+    if (querySnapshot.empty) {
+      console.log(`Centro de custo "${name}" não encontrado. Criando...`);
+      await addDoc(costCentersRef, { name });
+    }
+    // Se existir, não fazemos nada.
+  } catch (error) {
+    console.error(`Erro ao verificar/criar centro de custo "${name}":`, error);
+  }
+};
+
+// --- FUNÇÕES DE PROFISSIONAIS (PARA REPASSE) ---
 
 export const getProfessionalsForRepasse = async (): Promise<Professional[]> => {
     try {

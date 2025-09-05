@@ -83,6 +83,7 @@ export interface BankAccount {
     type: 'Conta Corrente' | 'Conta Poupança' | 'Conta Salário';
     initialBalance: number;
     currentBalance: number;
+    isDefault?: boolean; // Campo para identificar a conta padrão
 }
 
 export interface Budget {
@@ -181,16 +182,6 @@ export const deleteTransaction = async (id: string) => {
     } catch (e) {
         console.error("Erro ao excluir transação: ", e);
         return { success: false, error: "Falha ao excluir a transação." };
-    }
-};
-
-export const addBankAccount = async (data: Omit<BankAccount, 'id' | 'currentBalance'>) => {
-    try {
-        const dataWithBalance = { ...data, currentBalance: data.initialBalance };
-        await addDoc(collection(db, "bankAccounts"), dataWithBalance);
-        return { success: true };
-    } catch (e) {
-        return { success: false, error: "Falha ao adicionar conta bancária." };
     }
 };
 
@@ -321,8 +312,52 @@ export const getPendingTransactions = async (options: { type: 'receita' | 'despe
         return [];
     }
 };
-// ... (resto do seu código do financialService.ts)
 
+export const getOverdueExpenses = async (): Promise<Transaction[]> => {
+  try {
+    const hoje = new Date();
+    const fimDoDia = new Date(hoje.setHours(23, 59, 59, 999));
+
+    const qNew = query(collection(db, "transactions"),
+      where("type", "==", "despesa"),
+      where("status", "==", "pendente"),
+      where("dataMovimento", "<=", Timestamp.fromDate(fimDoDia))
+    );
+
+    const qOld = query(collection(db, "transactions"),
+      where("type", "==", "despesa"),
+      where("status", "==", "pendente"),
+      where("date", "<=", Timestamp.fromDate(fimDoDia))
+    );
+
+    const [newSnapshot, oldSnapshot] = await Promise.all([getDocs(qNew), getDocs(qOld)]);
+    const allDocs = new Map<string, Transaction>();
+    
+    const normalizeAndAdd = (doc: any) => {
+        const data = doc.data();
+        const transaction: Transaction = {
+            id: doc.id,
+            ...data,
+            dataMovimento: data.dataMovimento || data.date, 
+        };
+        allDocs.set(doc.id, transaction);
+    };
+
+    newSnapshot.forEach(normalizeAndAdd);
+    oldSnapshot.forEach(normalizeAndAdd);
+
+    const results = Array.from(allDocs.values());
+    results.sort((a, b) => a.dataMovimento.toDate().getTime() - b.dataMovimento.toDate().getTime());
+    
+    return results;
+  } catch (error) {
+    console.error("Erro ao buscar despesas vencidas:", error);
+    return [];
+  }
+};
+
+// --- PLANO DE CONTAS, FORNECEDORES, CONVÊNIOS ---
+// ... (as funções get/add/update/deleteAccountPlan, get/add/update/deleteSupplier, get/add/update/deleteCovenant continuam aqui, sem alterações)
 export const getAccountPlans = async (): Promise<{ receitas: AccountPlan[], despesas: AccountPlan[] }> => {
     try {
         const q = query(collection(db, "accountPlans"), orderBy("name"));
@@ -337,109 +372,19 @@ export const getAccountPlans = async (): Promise<{ receitas: AccountPlan[], desp
         return { receitas: [], despesas: [] };
     }
 };
+export const addAccountPlan = async (data: Omit<AccountPlan, 'id'>) => { try { await addDoc(collection(db, "accountPlans"), data); return { success: true }; } catch (e) { return { success: false, error: "Falha ao adicionar plano de contas." }; }};
+export const updateAccountPlan = async (id: string, data: Partial<Omit<AccountPlan, 'id'>>) => { try { await updateDoc(doc(db, "accountPlans", id), data); return { success: true }; } catch (e) { return { success: false, error: "Falha ao atualizar plano de contas." }; }};
+export const deleteAccountPlan = async (id: string) => { try { await deleteDoc(doc(db, "accountPlans", id)); return { success: true }; } catch (e) { return { success: false, error: "Falha ao excluir plano de contas." }; }};
+export const getSuppliers = async (): Promise<Supplier[]> => { try { const q = query(collection(db, "suppliers"), orderBy("name")); const querySnapshot = await getDocs(q); return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Supplier)); } catch (e) { console.error("Erro ao buscar fornecedores: ", e); return []; }};
+export const addSupplier = async (data: Omit<Supplier, 'id' | 'status'>) => { try { await addDoc(collection(db, "suppliers"), { ...data, status: "Ativo" }); return { success: true }; } catch (e) { return { success: false, error: "Falha ao adicionar fornecedor." }; }};
+export const updateSupplier = async (id: string, data: Partial<Omit<Supplier, 'id'>>) => { try { await updateDoc(doc(db, "suppliers", id), data); return { success: true }; } catch (e) { return { success: false, error: "Falha ao atualizar fornecedor." }; }};
+export const deleteSupplier = async (id: string) => { try { await deleteDoc(doc(db, "suppliers", id)); return { success: true }; } catch (e) { return { success: false, error: "Falha ao excluir fornecedor." }; }};
+export const getCovenants = async (): Promise<Covenant[]> => { try { const q = query(collection(db, "covenants"), orderBy("name")); const querySnapshot = await getDocs(q); return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Covenant)); } catch (e) { console.error("Erro ao buscar convênios: ", e); return []; }};
+export const addCovenant = async (data: Omit<Covenant, 'id' | 'status'>) => { try { await addDoc(collection(db, "covenants"), { ...data, status: "Ativo" }); return { success: true }; } catch (e) { return { success: false, error: "Falha ao adicionar convênio." }; }};
+export const updateCovenant = async (id: string, data: Partial<Omit<Covenant, 'id'>>) => { try { await updateDoc(doc(db, "covenants", id), data); return { success: true }; } catch (e) { return { success: false, error: "Falha ao atualizar convênio." }; }};
+export const deleteCovenant = async (id: string) => { try { await deleteDoc(doc(db, "covenants", id)); return { success: true }; } catch (e) { return { success: false, error: "Falha ao excluir convênio." }; }};
 
-export const addAccountPlan = async (data: Omit<AccountPlan, 'id'>) => {
-    try {
-        await addDoc(collection(db, "accountPlans"), data);
-        return { success: true };
-    } catch (e) {
-        return { success: false, error: "Falha ao adicionar plano de contas." };
-    }
-};
-
-export const updateAccountPlan = async (id: string, data: Partial<Omit<AccountPlan, 'id'>>) => {
-    try {
-        await updateDoc(doc(db, "accountPlans", id), data);
-        return { success: true };
-    } catch (e) {
-        return { success: false, error: "Falha ao atualizar plano de contas." };
-    }
-};
-
-export const deleteAccountPlan = async (id: string) => {
-    try {
-        await deleteDoc(doc(db, "accountPlans", id));
-        return { success: true };
-    } catch (e) {
-        return { success: false, error: "Falha ao excluir plano de contas." };
-    }
-};
-
-export const getSuppliers = async (): Promise<Supplier[]> => {
-    try {
-        const q = query(collection(db, "suppliers"), orderBy("name"));
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Supplier));
-    } catch (e) {
-        console.error("Erro ao buscar fornecedores: ", e);
-        return [];
-    }
-};
-
-export const addSupplier = async (data: Omit<Supplier, 'id' | 'status'>) => {
-    try {
-        await addDoc(collection(db, "suppliers"), { ...data, status: "Ativo" });
-        return { success: true };
-    } catch (e) {
-        return { success: false, error: "Falha ao adicionar fornecedor." };
-    }
-};
-
-export const updateSupplier = async (id: string, data: Partial<Omit<Supplier, 'id'>>) => {
-    try {
-        await updateDoc(doc(db, "suppliers", id), data);
-        return { success: true };
-    } catch (e) {
-        return { success: false, error: "Falha ao atualizar fornecedor." };
-    }
-};
-
-export const deleteSupplier = async (id: string) => {
-    try {
-        await deleteDoc(doc(db, "suppliers", id));
-        return { success: true };
-    } catch (e) {
-        return { success: false, error: "Falha ao excluir fornecedor." };
-    }
-};
-
-export const getCovenants = async (): Promise<Covenant[]> => {
-    try {
-        const q = query(collection(db, "covenants"), orderBy("name"));
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Covenant));
-    } catch (e) {
-        console.error("Erro ao buscar convênios: ", e);
-        return [];
-    }
-};
-
-export const addCovenant = async (data: Omit<Covenant, 'id' | 'status'>) => {
-    try {
-        await addDoc(collection(db, "covenants"), { ...data, status: "Ativo" });
-        return { success: true };
-    } catch (e) {
-        return { success: false, error: "Falha ao adicionar convênio." };
-    }
-};
-
-export const updateCovenant = async (id: string, data: Partial<Omit<Covenant, 'id'>>) => {
-    try {
-        await updateDoc(doc(db, "covenants", id), data);
-        return { success: true };
-    } catch (e) {
-        return { success: false, error: "Falha ao atualizar convênio." };
-    }
-};
-
-export const deleteCovenant = async (id: string) => {
-    try {
-        await deleteDoc(doc(db, "covenants", id));
-        return { success: true };
-    } catch (e) {
-        return { success: false, error: "Falha ao excluir convênio." };
-    }
-};
+// --- CONTAS BANCÁRIAS ---
 
 export const getBankAccounts = async (): Promise<BankAccount[]> => {
     try {
@@ -449,6 +394,16 @@ export const getBankAccounts = async (): Promise<BankAccount[]> => {
     } catch (e) {
         console.error("Erro ao buscar contas bancárias: ", e);
         return [];
+    }
+};
+
+export const addBankAccount = async (data: Omit<BankAccount, 'id' | 'currentBalance'>) => {
+    try {
+        const dataWithBalance = { ...data, currentBalance: data.initialBalance };
+        await addDoc(collection(db, "bankAccounts"), dataWithBalance);
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: "Falha ao adicionar conta bancária." };
     }
 };
 
@@ -470,96 +425,33 @@ export const deleteBankAccount = async (id: string) => {
     }
 };
 
-export const getExpensesByCostCenter = async (startDate: Date, endDate: Date) => {
-    try {
-        const despesas = await getTransactionsForReport({ type: 'despesa', startDate, endDate, status: 'pago' });
-        return despesas.reduce((acc, despesa) => {
-            const center = despesa.costCenter || 'Sem Centro de Custo';
-            if (!acc[center]) acc[center] = { total: 0, count: 0, transactions: [] };
-            acc[center].total += despesa.value;
-            acc[center].count += 1;
-            acc[center].transactions.push(despesa);
-            return acc;
-        }, {} as Record<string, { total: number, count: number, transactions: Transaction[] }>);
-    } catch (error) {
-        console.error("Erro ao agrupar despesas por centro de custo:", error);
-        return {};
-    }
-};
-
-export const getBudgetForMonth = async (monthId: string): Promise<Budget | null> => {
-    try {
-        const docRef = doc(db, 'budgets', monthId);
-        const docSnap = await getDoc(docRef);
-        return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as Budget : null;
-    } catch (error) {
-        console.error("Erro ao buscar orçamento do mês:", error);
-        return null;
-    }
-};
-
-export const setBudgetForMonth = async (monthId: string, data: Partial<Omit<Budget, 'id'>>) => {
-    try {
-        const docRef = doc(db, 'budgets', monthId);
-        await setDoc(docRef, data, { merge: true });
-        return { success: true };
-    } catch (error) {
-        console.error("Erro ao salvar orçamento do mês:", error);
-        return { success: false, error: "Falha ao salvar a meta financeira." };
-    }
-};
 /**
- * Busca todas as despesas pendentes que estão vencidas ou vencem hoje.
- * VERSÃO CORRIGIDA PARA RETROCOMPATIBILIDADE.
+ * --- NOVA FUNÇÃO ---
+ * Define uma conta bancária como a padrão para transações.
+ * Garante que apenas uma conta possa ser a padrão por vez.
  */
-export const getOverdueExpenses = async (): Promise<Transaction[]> => {
-  try {
-    const hoje = new Date();
-    // Definimos o final do dia para incluir qualquer conta que vença hoje.
-    const fimDoDia = new Date(hoje.setHours(23, 59, 59, 999));
+export const setDefaultBankAccount = async (defaultAccountId: string) => {
+    const batch = writeBatch(db);
+    try {
+        const accountsSnapshot = await getDocs(collection(db, "bankAccounts"));
+        
+        accountsSnapshot.forEach(docSnapshot => {
+            const accountRef = doc(db, "bankAccounts", docSnapshot.id);
+            // Define como padrão se o ID for o escolhido, senão, garante que não seja padrão.
+            const isDefault = docSnapshot.id === defaultAccountId;
+            batch.update(accountRef, { isDefault: isDefault });
+        });
 
-    // 1. Busca transações novas (com dataMovimento)
-    const qNew = query(collection(db, "transactions"),
-      where("type", "==", "despesa"),
-      where("status", "==", "pendente"),
-      where("dataMovimento", "<=", Timestamp.fromDate(fimDoDia))
-    );
-
-    // 2. Busca transações antigas (com date)
-    const qOld = query(collection(db, "transactions"),
-      where("type", "==", "despesa"),
-      where("status", "==", "pendente"),
-      where("date", "<=", Timestamp.fromDate(fimDoDia))
-    );
-
-    // Executa as duas buscas ao mesmo tempo
-    const [newSnapshot, oldSnapshot] = await Promise.all([getDocs(qNew), getDocs(qOld)]);
-
-    // Usamos um Map para garantir que não haja duplicatas
-    const allDocs = new Map<string, Transaction>();
-    
-    const normalizeAndAdd = (doc: any) => {
-        const data = doc.data();
-        // Normaliza o objeto para que sempre tenha a propriedade dataMovimento
-        const transaction: Transaction = {
-            id: doc.id,
-            ...data,
-            dataMovimento: data.dataMovimento || data.date, 
-        };
-        allDocs.set(doc.id, transaction);
-    };
-
-    newSnapshot.forEach(normalizeAndAdd);
-    oldSnapshot.forEach(normalizeAndAdd);
-
-    const results = Array.from(allDocs.values());
-    
-    // Ordena por data, as mais antigas primeiro
-    results.sort((a, b) => a.dataMovimento.toDate().getTime() - b.dataMovimento.toDate().getTime());
-    
-    return results;
-  } catch (error) {
-    console.error("Erro ao buscar despesas vencidas:", error);
-    return [];
-  }
+        await batch.commit();
+        return { success: true };
+    } catch (e) {
+        console.error("Erro ao definir conta padrão: ", e);
+        return { success: false, error: "Falha ao definir a conta padrão." };
+    }
 };
+
+// --- ORÇAMENTO E RELATÓRIOS ---
+// ... (as funções getExpensesByCostCenter, getBudgetForMonth, setBudgetForMonth continuam aqui, sem alterações)
+export const getExpensesByCostCenter = async (startDate: Date, endDate: Date) => { try { const despesas = await getTransactionsForReport({ type: 'despesa', startDate, endDate, status: 'pago' }); return despesas.reduce((acc, despesa) => { const center = despesa.costCenter || 'Sem Centro de Custo'; if (!acc[center]) acc[center] = { total: 0, count: 0, transactions: [] }; acc[center].total += despesa.value; acc[center].count += 1; acc[center].transactions.push(despesa); return acc; }, {} as Record<string, { total: number, count: number, transactions: Transaction[] }>); } catch (error) { console.error("Erro ao agrupar despesas por centro de custo:", error); return {}; }};
+export const getBudgetForMonth = async (monthId: string): Promise<Budget | null> => { try { const docRef = doc(db, 'budgets', monthId); const docSnap = await getDoc(docRef); return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as Budget : null; } catch (error) { console.error("Erro ao buscar orçamento do mês:", error); return null; }};
+export const setBudgetForMonth = async (monthId: string, data: Partial<Omit<Budget, 'id'>>) => { try { const docRef = doc(db, 'budgets', monthId); await setDoc(docRef, data, { merge: true }); return { success: true }; } catch (error) { console.error("Erro ao salvar orçamento do mês:", error); return { success: false, error: "Falha ao salvar a meta financeira." }; }};

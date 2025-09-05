@@ -9,7 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, MoreHorizontal, Library, Building, Users, Handshake, Landmark, Save, Briefcase, RefreshCw } from "lucide-react";
+import { Plus, MoreHorizontal, Library, Building, Users, Handshake, Landmark, Save, Briefcase, RefreshCw, Star } from "lucide-react";
 import { AccountPlan, Supplier, Covenant, BankAccount } from "@/services/financialService";
 import { CostCenter, CompanyData } from "@/services/settingsService";
 import { Skeleton } from "../ui/skeleton";
@@ -214,7 +214,15 @@ const CovenantManager = ({ covenants, loading, onAdd, onEdit, onDelete }: { cove
         </CardContent>
     </Card>
 );
-const BankAccountManager = ({ bankAccounts, loading, onAdd, onEdit, onDelete }: { bankAccounts: BankAccount[], loading: boolean, onAdd: () => void, onEdit: (account: BankAccount) => void, onDelete: (id: string) => void }) => (
+
+const BankAccountManager = ({ bankAccounts, loading, onAdd, onEdit, onDelete, onSetDefault }: { 
+    bankAccounts: BankAccount[], 
+    loading: boolean, 
+    onAdd: () => void, 
+    onEdit: (account: BankAccount) => void, 
+    onDelete: (id: string) => void,
+    onSetDefault: (id: string) => void 
+}) => (
     <Card>
         <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2"><Landmark className="h-5 w-5" />Contas Bancárias</CardTitle>
@@ -227,7 +235,10 @@ const BankAccountManager = ({ bankAccounts, loading, onAdd, onEdit, onDelete }: 
                     {loading ? <TableRow><TableCell colSpan={5} className="text-center h-24">Carregando...</TableCell></TableRow> :
                     bankAccounts.map((account) => (
                         <TableRow key={account.id}>
-                            <TableCell className="font-medium">{account.name}</TableCell>
+                            <TableCell className="font-medium flex items-center gap-2">
+                                {account.isDefault && <Star className="h-4 w-4 text-yellow-500 fill-yellow-400" />}
+                                {account.name}
+                            </TableCell>
                             <TableCell>{account.agency}</TableCell>
                             <TableCell>{account.account}</TableCell>
                             <TableCell>R$ {account.initialBalance.toLocaleString("pt-BR")}</TableCell>
@@ -235,6 +246,7 @@ const BankAccountManager = ({ bankAccounts, loading, onAdd, onEdit, onDelete }: 
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
+                                        {!account.isDefault && <DropdownMenuItem onClick={() => onSetDefault(account.id)}>Definir como Padrão</DropdownMenuItem>}
                                         <DropdownMenuItem onClick={() => onEdit(account)}>Editar</DropdownMenuItem>
                                         <DropdownMenuItem className="text-red-600" onClick={() => onDelete(account.id)}>Excluir</DropdownMenuItem>
                                     </DropdownMenuContent>
@@ -248,7 +260,8 @@ const BankAccountManager = ({ bankAccounts, loading, onAdd, onEdit, onDelete }: 
     </Card>
 );
 
-// --- INTERFACE DE PROPS CORRIGIDA ---
+
+// --- INTERFACE DE PROPS COMPLETA ---
 interface SettingsDashboardProps {
     companyData: CompanyData | null;
     onUpdateCompanyData: (data: CompanyData) => Promise<void>;
@@ -273,6 +286,7 @@ interface SettingsDashboardProps {
     onAddBankAccount: () => void;
     onEditBankAccount: (account: BankAccount) => void;
     onDeleteBankAccount: (id: string) => void;
+    onSetDefaultBankAccount: (id: string) => void;
     onRecalculateBalances: () => Promise<void>;
 }
 
@@ -284,6 +298,7 @@ export function SettingsDashboard({
     onAddSupplier, onEditSupplier, onDeleteSupplier,
     onAddCovenant, onEditCovenant, onDeleteCovenant,
     onAddBankAccount, onEditBankAccount, onDeleteBankAccount,
+    onSetDefaultBankAccount,
     onRecalculateBalances,
 }: SettingsDashboardProps) {
     const [isRecalculating, setIsRecalculating] = useState(false);
@@ -355,6 +370,7 @@ export function SettingsDashboard({
                     onAdd={onAddBankAccount}
                     onEdit={onEditBankAccount}
                     onDelete={onDeleteBankAccount}
+                    onSetDefault={onSetDefaultBankAccount}
                 />
             </div>
         </div>

@@ -17,10 +17,11 @@ import {
     deleteAccountPlan, getSuppliers, addSupplier, updateSupplier, deleteSupplier, Supplier,
     getCovenants, addCovenant, updateCovenant, deleteCovenant, Covenant,
     getBankAccounts, addBankAccount, updateBankAccount, deleteBankAccount, BankAccount,
+    setDefaultBankAccount, // <-- Importado
     getTransactionsForReport, getPendingTransactions, getExpensesByCostCenter,
     createTransactionBlock, TransactionBlockFormData,
     getAllPaidTransactions,
-    getOverdueExpenses // Importando a nova função
+    getOverdueExpenses
 } from "@/services/financialService";
 import {
     getCostCenters, CostCenter, addCostCenter, updateCostCenter, deleteCostCenter,
@@ -43,7 +44,7 @@ import { FinancialGoalsModal } from "@/components/financial/financial-goals-moda
 import { AnaliseTendenciasModal } from "@/components/financial/analise-tendencias-modal";
 import { ComparativoMensalModal } from "@/components/financial/comparativo-mensal-modal";
 import { BankBalancesModal } from "@/components/financial/bank-balances-modal";
-import { OverdueExpensesModal } from "@/components/financial/overdue-expenses-modal"; // Importando o novo modal
+import { OverdueExpensesModal } from "@/components/financial/overdue-expenses-modal";
 
 // Componentes Refatorados
 import { FinancialSummaryCards } from "@/components/financial/financial-summary-cards";
@@ -59,7 +60,7 @@ export default function FinancialClientPage() {
 
     // Estados de Dados
     const [transactions, setTransactions] = useState<Transaction[]>([]);
-    const [overdueExpenses, setOverdueExpenses] = useState<Transaction[]>([]); // Novo estado
+    const [overdueExpenses, setOverdueExpenses] = useState<Transaction[]>([]);
     const [accountPlans, setAccountPlans] = useState<{ receitas: AccountPlan[], despesas: AccountPlan[] }>({ receitas: [], despesas: [] });
     const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -222,24 +223,9 @@ export default function FinancialClientPage() {
 
     const handleAddTransaction = async (data: AddTransactionFormValues, isBlock: boolean) => {
         setIsSubmitting(true);
-        
-        const dataWithDateObjects = {
-            ...data,
-            dataMovimento: new Date(data.dataMovimento),
-            ...(data.dataEmissao && { dataEmissao: new Date(data.dataEmissao) })
-        };
-        
-        const result = isBlock
-            ? await createTransactionBlock({ ...dataWithDateObjects, repetitions: data.repetitions || 1 } as TransactionBlockFormData)
-            : await addTransaction(dataWithDateObjects as TransactionFormData);
-
-        if (result.success) {
-            toast.success(`Movimentação ${isBlock ? 'sequencial registrada' : 'registrada'}!`);
-            setIsAddTransactionModalOpen(false);
-            fetchData();
-        } else {
-            toast.error(result.error);
-        }
+        const dataWithDateObjects = { ...data, dataMovimento: new Date(data.dataMovimento), ...(data.dataEmissao && { dataEmissao: new Date(data.dataEmissao) }) };
+        const result = isBlock ? await createTransactionBlock({ ...dataWithDateObjects, repetitions: data.repetitions || 1 } as TransactionBlockFormData) : await addTransaction(dataWithDateObjects as TransactionFormData);
+        if (result.success) { toast.success(`Movimentação ${isBlock ? 'sequencial registrada' : 'registrada'}!`); setIsAddTransactionModalOpen(false); fetchData(); } else { toast.error(result.error); }
         setIsSubmitting(false);
     };
 
@@ -262,6 +248,17 @@ export default function FinancialClientPage() {
     const handleUpdateBankAccount = async (data: any) => { if (!selectedBankAccount) return; setIsSubmitting(true); const result = await updateBankAccount(selectedBankAccount.id, data); if (result.success) { toast.success("Conta atualizada!"); setIsBankAccountModalOpen(false); fetchData(); } else { toast.error(result.error); } setIsSubmitting(false); };
     const handleDeleteBankAccount = async (id: string) => { if(window.confirm("Excluir conta?")) { const result = await deleteBankAccount(id); if (result.success) { toast.success("Conta excluída!"); fetchData(); } else { toast.error(result.error); } } };
     const handleUpdateCompanyData = async (data: CompanyData) => { setIsSubmitting(true); const result = await updateCompanyData(data); if (result.success) { toast.success("Dados da empresa atualizados com sucesso!"); fetchData(); } else { toast.error(result.error || "Falha ao salvar os dados da empresa."); } setIsSubmitting(false); };
+    
+    // --- NOVA FUNÇÃO HANDLER ---
+    const handleSetDefaultBankAccount = async (id: string) => {
+        const result = await setDefaultBankAccount(id);
+        if (result.success) {
+            toast.success("Conta padrão atualizada com sucesso!");
+            fetchData(); // Recarrega os dados para mostrar a atualização visual
+        } else {
+            toast.error(result.error || "Falha ao definir a conta padrão.");
+        }
+    };
 
     const filteredTransactions = useMemo(() => transactions.filter(mov => mov.description.toLowerCase().includes(searchTerm.toLowerCase())), [transactions, searchTerm]);
     const receitas = filteredTransactions.filter(t => t.type === 'receita');
@@ -319,6 +316,7 @@ export default function FinancialClientPage() {
                             onAddBankAccount={() => { setSelectedBankAccount(null); setIsBankAccountModalOpen(true); }}
                             onEditBankAccount={(account) => { setSelectedBankAccount(account); setIsBankAccountModalOpen(true); }}
                             onDeleteBankAccount={handleDeleteBankAccount}
+                            onSetDefaultBankAccount={handleSetDefaultBankAccount}
                             onRecalculateBalances={async () => {
                                 setLoading(true);
                                 toast.info("Recalculando saldos... Isso pode levar um momento.");

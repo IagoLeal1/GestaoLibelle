@@ -13,9 +13,10 @@ import {
   deleteDoc,
   writeBatch
 } from 'firebase/firestore';
-import { addWeeks, startOfDay, endOfDay, differenceInMinutes, addDays, format, getHours, getMinutes } from 'date-fns';
+import { addWeeks, startOfDay, endOfDay, differenceInMinutes, addDays, format, getHours, getMinutes, addMonths } from 'date-fns';
 import { getProfessionalById } from "./professionalService";
-import { addTransaction, deleteTransactionByAppointmentId, TransactionFormData } from "./financialService";
+import { addTransaction, deleteTransactionByAppointmentId, TransactionFormData, getBankAccounts, BankAccount } from "./financialService";
+import { findOrCreateCostCenter } from "./settingsService";
 
 // --- Interfaces ---
 export type AppointmentStatus = 'agendado' | 'finalizado' | 'nao_compareceu' | 'cancelado' | 'em_atendimento';
@@ -73,7 +74,7 @@ export interface QuickAppointmentData {
 }
 
 
-// --- FUNÇÃO DE REPASSE ATUALIZADA COM A NOVA LÓGICA ---
+// --- FUNÇÃO DE REPASSE ATUALIZADA COM TODAS AS NOVAS REGRAS ---
 const handleRepasseTransaction = async (appointment: Appointment) => {
   await deleteTransactionByAppointmentId(appointment.id);
 
@@ -82,7 +83,7 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
     (appointment.status === 'nao_compareceu' && appointment.statusSecundario === 'fnj_paciente');
 
   if (!shouldGenerateRepasse) {
-    return { success: true, message: "Nenhum repasse gerado." };
+    return { success: true, message: "Nenhuma condição para repasse atendida." };
   }
 
   const professional = await getProfessionalById(appointment.professionalId);
@@ -90,6 +91,13 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
     return { success: false, error: "Dados financeiros do profissional não encontrados." };
   }
 
+  // Garante que o centro de custo (especialidade) exista antes de prosseguir.
+  await findOrCreateCostCenter(professional.especialidade);
+  
+  // Busca a conta bancária definida como padrão.
+  const allBankAccounts = await getBankAccounts();
+  const defaultAccount = allBankAccounts.find(acc => acc.isDefault);
+  
   let valorRepasse = 0;
   const { tipoPagamento, percentualRepasse, horarioFixoInicio, horarioFixoFim } = professional.financeiro;
   const valorConsulta = appointment.valorConsulta || 0;
@@ -124,12 +132,14 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
 
   const transactionData: TransactionFormData = {
     type: 'despesa',
-    description: `Repasse - ${appointment.patientName} - ${format(appointment.start.toDate(), 'dd/MM/yyyy')}`,
+    description: `Repasse ${professional.fullName} - Sessão ${appointment.patientName} ${format(appointment.start.toDate(), 'dd/MM')}`,
     value: valorRepasse,
-    dataMovimento: appointment.start.toDate(),
+    dataMovimento: addMonths(appointment.start.toDate(), 2),
+    dataEmissao: appointment.start.toDate(),
     status: 'pendente',
     category: 'Repasse de Profissional',
-    costCenter: 'Serviços Prestados',
+    costCenter: professional.especialidade || 'Não especificado',
+    bankAccountId: defaultAccount ? defaultAccount.id : undefined,
     professionalId: appointment.professionalId,
     patientId: appointment.patientId,
     appointmentId: appointment.id,
