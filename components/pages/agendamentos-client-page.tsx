@@ -16,7 +16,7 @@ import { getPatients, Patient } from "@/services/patientService"
 import { getRooms, Room } from "@/services/roomService"
 import { ReportModal } from "@/components/modals/report-modal"
 import { EditAppointmentModal } from "@/components/modals/edit-appointment-modal"
-import { RenewalNotice } from "@/components/features/RenewalNotice"
+import { RenewalNotificationButton } from "@/components/features/RenewalNotificationButton"; // Importa o novo botão
 import { MultiSelectFilter, MultiSelectOption } from "@/components/ui/multi-select-filter"
 import Link from "next/link"
 import { format } from "date-fns"
@@ -336,6 +336,7 @@ export function AgendamentosClientPage() {
             <p className="text-muted-foreground">Gerencie todos os agendamentos da clínica por período</p>
           </div>
           <div className="flex w-full sm:w-auto gap-2">
+            <RenewalNotificationButton />
             <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => setIsReportModalOpen(true)}>
               <Download className="mr-2 h-4 w-4" /> Exportar Relatório
             </Button>
@@ -353,7 +354,6 @@ export function AgendamentosClientPage() {
           </div>
         </div>
         
-        <RenewalNotice onActionCompleted={() => fetchData(false)} />
         <BlocoDeEstatisticas agendamentos={appointments} />
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5" />Filtros</CardTitle></CardHeader>

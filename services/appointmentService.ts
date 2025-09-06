@@ -486,3 +486,50 @@ export const getOccupiedRoomIdsByTime = async (startTime: Date, endTime: Date): 
       return [];
     }
 };
+
+// --- NOVA FUNÇÃO ---
+export interface RenewableBlock {
+  patientId: string;
+  patientName: string;
+  appointments: Appointment[];
+}
+
+/**
+ * Busca os últimos agendamentos de blocos que estão perto de vencer
+ * e os agrupa por paciente.
+ */
+export const getRenewableAppointmentsByPatient = async (): Promise<RenewableBlock[]> => {
+  try {
+    const today = startOfDay(new Date());
+    const sevenDaysFromNow = endOfDay(addDays(today, 7));
+    const q = query(
+      collection(db, 'appointments'),
+      where('isLastInBlock', '==', true),
+      where('status', '==', 'agendado'),
+      where('start', '>=', Timestamp.fromDate(today)),
+      where('start', '<=', Timestamp.fromDate(sevenDaysFromNow)),
+      orderBy('start')
+    );
+    const snapshot = await getDocs(q);
+    const appointments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
+
+    // Agrupando os resultados por paciente no backend
+    const groupedByPatient = appointments.reduce((acc, app) => {
+      if (!acc[app.patientId]) {
+        acc[app.patientId] = {
+          patientId: app.patientId,
+          patientName: app.patientName,
+          appointments: [],
+        };
+      }
+      acc[app.patientId].appointments.push(app);
+      return acc;
+    }, {} as Record<string, RenewableBlock>);
+
+    return Object.values(groupedByPatient);
+
+  } catch (error) {
+    console.error("Erro ao buscar e agrupar agendamentos para renovação:", error);
+    return [];
+  }
+};
