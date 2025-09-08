@@ -17,17 +17,20 @@ import {
     deleteAccountPlan, getSuppliers, addSupplier, updateSupplier, deleteSupplier, Supplier,
     getCovenants, addCovenant, updateCovenant, deleteCovenant, Covenant,
     getBankAccounts, addBankAccount, updateBankAccount, deleteBankAccount, BankAccount,
-    setDefaultBankAccount, // <-- Importado
+    setDefaultBankAccount,
     getTransactionsForReport, getPendingTransactions, getExpensesByCostCenter,
     createTransactionBlock, TransactionBlockFormData,
     getAllPaidTransactions,
-    getOverdueExpenses
+    getOverdueExpenses,
+    getFinancialSummaryByCategory,
+    getFinancialSummaryByPatient,
 } from "@/services/financialService";
 import {
     getCostCenters, CostCenter, addCostCenter, updateCostCenter, deleteCostCenter,
     getProfessionalsForRepasse, Professional,
     getCompanyData, updateCompanyData, CompanyData
 } from "@/services/settingsService";
+import { getPatients, Patient } from "@/services/patientService";
 
 // Modals
 import { AddTransactionModal, FormValues as AddTransactionFormValues } from "@/components/modals/add-transaction-modal";
@@ -68,6 +71,7 @@ export default function FinancialClientPage() {
     const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
     const [professionals, setProfessionals] = useState<Professional[]>([]);
     const [companyData, setCompanyData] = useState<CompanyData | null>(null);
+    const [patients, setPatients] = useState<Patient[]>([]);
 
     // Estados de Controle de UI
     const [loading, setLoading] = useState(true);
@@ -105,25 +109,12 @@ export default function FinancialClientPage() {
         const startDate = startOfDay(new Date(dateFrom));
         const endDate = endOfDay(new Date(dateTo));
         const [
-            transactionsData,
-            overdueData,
-            plansData,
-            centersData,
-            suppliersData,
-            covenantsData,
-            bankAccountsData,
-            professionalsData,
-            companyInfo
+            transactionsData, overdueData, plansData, centersData, suppliersData,
+            covenantsData, bankAccountsData, professionalsData, companyInfo, patientsData
         ] = await Promise.all([
-            getTransactionsByPeriod(startDate, endDate),
-            getOverdueExpenses(),
-            getAccountPlans(),
-            getCostCenters(),
-            getSuppliers(),
-            getCovenants(),
-            getBankAccounts(),
-            getProfessionalsForRepasse(),
-            getCompanyData()
+            getTransactionsByPeriod(startDate, endDate), getOverdueExpenses(), getAccountPlans(),
+            getCostCenters(), getSuppliers(), getCovenants(), getBankAccounts(),
+            getProfessionalsForRepasse(), getCompanyData(), getPatients()
         ]);
         setTransactions(transactionsData);
         setOverdueExpenses(overdueData);
@@ -134,6 +125,7 @@ export default function FinancialClientPage() {
         setBankAccounts(bankAccountsData);
         setProfessionals(professionalsData);
         setCompanyData(companyInfo);
+        setPatients(patientsData);
         setLoading(false);
     }, [dateFrom, dateTo]);
 
@@ -192,6 +184,28 @@ export default function FinancialClientPage() {
                 const expensesByCenter = await getExpensesByCostCenter(startDate, endDate);
                 dataToExport = Object.entries(expensesByCenter).map(([center, data]) => [ center, data.total.toFixed(2).replace('.', ','), data.count ]);
                 break;
+            case 'despesas_por_categoria':
+                headers = ["Categoria", "Total Receitas", "Total Despesas", "Saldo", "Qtd. Transacoes"];
+                const summaryByCategory = await getFinancialSummaryByCategory(startDate, endDate);
+                dataToExport = Object.entries(summaryByCategory).map(([category, data]) => [
+                    `"${category}"`,
+                    data.receitas.toFixed(2).replace('.', ','),
+                    data.despesas.toFixed(2).replace('.', ','),
+                    data.total.toFixed(2).replace('.', ','),
+                    data.count
+                ]);
+                break;
+            case 'rentabilidade_paciente':
+                headers = ["Paciente", "Total Receitas", "Total Despesas (Repasses)", "Rentabilidade"];
+                const patientId = filters.patientId === 'todos' ? undefined : filters.patientId;
+                const summaryByPatient = await getFinancialSummaryByPatient(startDate, endDate, patientId);
+                dataToExport = Object.values(summaryByPatient).map(data => [
+                    `"${data.patientName}"`,
+                    data.receitas.toFixed(2).replace('.', ','),
+                    data.despesas.toFixed(2).replace('.', ','),
+                    data.saldo.toFixed(2).replace('.', ',')
+                ]);
+                break;
             case 'movimentacao_bancaria':
                 headers = ["Data Movimento", "Tipo", "Descricao", "Categoria", "Status", "Valor"];
                 const bankTransactions = await getTransactionsForReport({ startDate, endDate, bankAccountId: filters.bankAccountId });
@@ -249,12 +263,11 @@ export default function FinancialClientPage() {
     const handleDeleteBankAccount = async (id: string) => { if(window.confirm("Excluir conta?")) { const result = await deleteBankAccount(id); if (result.success) { toast.success("Conta excluída!"); fetchData(); } else { toast.error(result.error); } } };
     const handleUpdateCompanyData = async (data: CompanyData) => { setIsSubmitting(true); const result = await updateCompanyData(data); if (result.success) { toast.success("Dados da empresa atualizados com sucesso!"); fetchData(); } else { toast.error(result.error || "Falha ao salvar os dados da empresa."); } setIsSubmitting(false); };
     
-    // --- NOVA FUNÇÃO HANDLER ---
     const handleSetDefaultBankAccount = async (id: string) => {
         const result = await setDefaultBankAccount(id);
         if (result.success) {
             toast.success("Conta padrão atualizada com sucesso!");
-            fetchData(); // Recarrega os dados para mostrar a atualização visual
+            fetchData();
         } else {
             toast.error(result.error || "Falha ao definir a conta padrão.");
         }
@@ -354,7 +367,15 @@ export default function FinancialClientPage() {
             <AddEditSupplierModal isOpen={isSupplierModalOpen} onClose={() => { setIsSupplierModalOpen(false); setSelectedSupplier(null); }} onSubmit={selectedSupplier?.id ? handleUpdateSupplier : handleAddSupplier} supplier={selectedSupplier} isLoading={isSubmitting} />
             <AddEditCovenantModal isOpen={isCovenantModalOpen} onClose={() => { setIsCovenantModalOpen(false); setSelectedCovenant(null); }} onSubmit={selectedCovenant?.id ? handleUpdateCovenant : handleAddCovenant} covenant={selectedCovenant} isLoading={isSubmitting} />
             <AddEditBankAccountModal isOpen={isBankAccountModalOpen} onClose={() => { setIsBankAccountModalOpen(false); setSelectedBankAccount(null); }} onSubmit={selectedBankAccount?.id ? handleUpdateBankAccount : handleAddBankAccount} bankAccount={selectedBankAccount} isLoading={isSubmitting} />
-            <FinancialReportModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} onGenerate={handleGenerateReport} reportType={reportType} costCenters={costCenters} bankAccounts={bankAccounts} />
+            <FinancialReportModal 
+                isOpen={isReportModalOpen} 
+                onClose={() => setIsReportModalOpen(false)} 
+                onGenerate={handleGenerateReport} 
+                reportType={reportType} 
+                costCenters={costCenters} 
+                bankAccounts={bankAccounts}
+                patients={patients}
+            />
             <FluxoDeCaixaModal isOpen={isFluxoDeCaixaModalOpen} onClose={() => setIsFluxoDeCaixaModalOpen(false)} />
             <FutureForecastsModal isOpen={isFutureForecastsModalOpen} onClose={() => setIsFutureForecastsModalOpen(false)} />
             <FinancialGoalsModal isOpen={isFinancialGoalsModalOpen} onClose={() => setIsFinancialGoalsModalOpen(false)} />

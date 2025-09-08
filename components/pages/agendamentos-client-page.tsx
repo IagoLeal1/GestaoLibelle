@@ -16,7 +16,7 @@ import { getPatients, Patient } from "@/services/patientService"
 import { getRooms, Room } from "@/services/roomService"
 import { ReportModal } from "@/components/modals/report-modal"
 import { EditAppointmentModal } from "@/components/modals/edit-appointment-modal"
-import { RenewalNotificationButton } from "@/components/features/RenewalNotificationButton"; // Importa o novo botão
+import { RenewalNotificationButton } from "@/components/features/RenewalNotificationButton";
 import { MultiSelectFilter, MultiSelectOption } from "@/components/ui/multi-select-filter"
 import Link from "next/link"
 import { format } from "date-fns"
@@ -248,8 +248,10 @@ export function AgendamentosClientPage() {
   const TabelaDeAgendamentos = ({ agendamentos, loading }: { agendamentos: Appointment[], loading: boolean }) => (
     <div className="overflow-x-auto">
       <Table>
+        {/* --- ALTERAÇÃO 1: Adicionar cabeçalho da coluna --- */}
         <TableHeader><TableRow>
           <TableHead>Período</TableHead><TableHead>Paciente</TableHead><TableHead>Profissional</TableHead>
+          <TableHead>Terapia</TableHead> {/* <-- NOVA COLUNA AQUI */}
           <TableHead>Horário</TableHead><TableHead>Sala</TableHead><TableHead>Status</TableHead>
           <TableHead>Status Sec.</TableHead><TableHead className="text-right">Ações</TableHead>
         </TableRow></TableHeader>
@@ -257,7 +259,8 @@ export function AgendamentosClientPage() {
           {loading ? (
             Array.from({ length: 5 }).map((_, i) => (
               <TableRow key={i}>
-                <TableCell colSpan={8}><Skeleton className="h-5 w-full" /></TableCell>
+                {/* --- ALTERAÇÃO 3: Ajustar colSpan para o skeleton --- */}
+                <TableCell colSpan={9}><Skeleton className="h-5 w-full" /></TableCell>
               </TableRow>
             ))
           ) : agendamentos.length > 0 ? agendamentos.map((appointment) => (
@@ -269,6 +272,8 @@ export function AgendamentosClientPage() {
               <TableCell><div className="flex items-center gap-1 text-xs">{getPeriodoIcon(getPeriodoFromDate(appointment.start.toDate()))} <span>{getPeriodoLabel(getPeriodoFromDate(appointment.start.toDate()))}</span></div></TableCell>
               <TableCell className="font-medium">{appointment.patientName}</TableCell>
               <TableCell>{appointment.professionalName}</TableCell>
+              {/* --- ALTERAÇÃO 2: Adicionar célula com o tipo de terapia --- */}
+              <TableCell className="text-muted-foreground">{appointment.tipo}</TableCell> {/* <-- NOVA CÉLULA AQUI */}
               <TableCell>{format(appointment.start.toDate(), 'HH:mm')} - {format(appointment.end.toDate(), 'HH:mm')}</TableCell>
               <TableCell><Badge variant="outline">{getRoomNameById(appointment.sala)}</Badge></TableCell>
               <TableCell onClick={(e) => e.stopPropagation()}>
@@ -318,7 +323,7 @@ export function AgendamentosClientPage() {
                 </DropdownMenu>
               </TableCell>
             </TableRow>
-          )) : <TableRow><TableCell colSpan={8} className="text-center h-24">Nenhum agendamento encontrado.</TableCell></TableRow>}
+          )) : <TableRow><TableCell colSpan={9} className="text-center h-24">Nenhum agendamento encontrado.</TableCell></TableRow>} {/* --- ALTERAÇÃO 3: Ajustar colSpan para a mensagem --- */}
         </TableBody>
       </Table>
     </div>

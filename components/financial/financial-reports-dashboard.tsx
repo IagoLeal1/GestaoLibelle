@@ -29,7 +29,6 @@ const ReportCard = ({ title, description, icon: Icon, iconColor, actionText, act
       <CardTitle className="flex items-center gap-2 text-lg">
         <Icon className={`h-5 w-5 ${iconColor}`} />
         {title}
-        {/* Renderiza o badge apenas se houver texto/número */}
         {badgeText !== undefined && <Badge variant={badgeVariant || 'destructive'} className="ml-auto">{badgeText}</Badge>}
       </CardTitle>
     </CardHeader>
@@ -62,7 +61,7 @@ export function FinancialReportsDashboard({ onGenerateReport, onOpenVisualizer, 
           iconColor="text-secondary-red" 
           actionText="Ver Contas Vencidas" 
           actionIcon={Eye}
-          badgeText={overdueCount > 0 ? overdueCount : 0} // Mostra 0 se não houver nenhuma
+          badgeText={overdueCount > 0 ? overdueCount : 0}
           badgeVariant={overdueCount > 0 ? "destructive" : "secondary"}
           onClick={onOpenOverdueModal}
         />
@@ -91,6 +90,26 @@ export function FinancialReportsDashboard({ onGenerateReport, onOpenVisualizer, 
           title="Por Centro de Custo" description="Análise financeira detalhada por centro de custo e departamento."
           icon={Building2} iconColor="text-primary-dark-blue" actionText="Gerar Relatório" actionIcon={Download}
           onClick={() => onGenerateReport('despesas_por_centro_custo')}
+        />
+        {/* --- NOVO CARD: POR CATEGORIA --- */}
+        <ReportCard 
+          title="Por Categoria" 
+          description="Agrupamento de receitas e despesas por categoria do plano de contas."
+          icon={Building2} 
+          iconColor="text-primary-dark-blue" 
+          actionText="Gerar Relatório" 
+          actionIcon={Download}
+          onClick={() => onGenerateReport('despesas_por_categoria')}
+        />
+        {/* --- NOVO CARD: RENTABILIDADE POR PACIENTE --- */}
+        <ReportCard 
+          title="Rentabilidade por Paciente" 
+          description="Análise de receitas, despesas e saldo final para cada paciente."
+          icon={TrendingUp} 
+          iconColor="text-green-600" 
+          actionText="Gerar Relatório" 
+          actionIcon={Download}
+          onClick={() => onGenerateReport('rentabilidade_paciente')}
         />
         <ReportCard 
           title="Por Banco" description="Movimentações financeiras agrupadas por instituição bancária."

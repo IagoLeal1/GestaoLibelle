@@ -1,3 +1,4 @@
+// components/pages/grade-agendamentos-client-page.tsx
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -15,7 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QuickAppointmentModal } from "@/components/modals/quick-appointment-modal";
-import { EditAppointmentModal } from "@/components/modals/edit-appointment-modal"; // <-- Importado o modal de edição
+import { EditAppointmentModal } from "@/components/modals/edit-appointment-modal";
 
 // Icons
 import { ChevronLeft, ChevronRight, User, Calendar, Save } from "lucide-react";
@@ -50,8 +51,8 @@ export function GradeAgendamentosClientPage() {
     const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
     const [currentDate, setCurrentDate] = useState(new Date());
     
-    // Estados para agendamentos temporários
-    const [pendingAppointments, setPendingAppointments] = useState<Map<string, QuickAppointmentData>>(new Map());
+    // --- CORREÇÃO 1: Mudar estado para suportar múltiplos agendamentos pendentes ---
+    const [pendingAppointments, setPendingAppointments] = useState<Map<string, QuickAppointmentData[]>>(new Map());
 
     // Estados dos modais
     const [isQuickModalOpen, setIsQuickModalOpen] = useState(false);
@@ -123,20 +124,26 @@ export function GradeAgendamentosClientPage() {
         setIsEditModalOpen(true);
     };
 
-    // Funções de CRUD
+    // --- CORREÇÃO 2: Salvar múltiplos agendamentos pendentes no mesmo horário ---
     const handleSaveQuickAppointment = (data: QuickAppointmentData) => {
         const key = `${format(data.start, 'yyyy-MM-dd-HH-mm')}`;
-        setPendingAppointments(prev => new Map(prev).set(key, data));
+        setPendingAppointments(prev => {
+            const newMap = new Map(prev);
+            const existing = newMap.get(key) || [];
+            newMap.set(key, [...existing, data]);
+            return newMap;
+        });
         setIsQuickModalOpen(false);
     };
     
     const handleSaveAllAppointments = async () => {
-        if (!selectedPatientId || pendingAppointments.size === 0) {
+        const allPending = Array.from(pendingAppointments.values()).flat();
+        if (!selectedPatientId || allPending.length === 0) {
             toast.info("Nenhum novo agendamento para salvar.");
             return;
         }
         setLoading(true);
-        const result = await createMultipleAppointments(selectedPatientId, Array.from(pendingAppointments.values()));
+        const result = await createMultipleAppointments(selectedPatientId, allPending);
         if (result.success) {
             toast.success("Agenda da semana salva com sucesso!");
             setPendingAppointments(new Map());
@@ -165,6 +172,7 @@ export function GradeAgendamentosClientPage() {
         fetchWeekAppointments();
     };
 
+    const totalPending = Array.from(pendingAppointments.values()).flat().length;
     const weekLabel = `${format(weekDays[0], 'd MMM', { locale: ptBR })} - ${format(weekDays[6], 'd MMM yyyy', { locale: ptBR })}`;
 
     return (
@@ -186,8 +194,8 @@ export function GradeAgendamentosClientPage() {
                     </div>
 
                     <div className="w-full md:w-1/3 flex justify-end">
-                        <Button onClick={handleSaveAllAppointments} disabled={loading || pendingAppointments.size === 0}>
-                            <Save className="mr-2 h-4 w-4" /> Salvar Agenda ({pendingAppointments.size})
+                        <Button onClick={handleSaveAllAppointments} disabled={loading || totalPending === 0}>
+                            <Save className="mr-2 h-4 w-4" /> Salvar Agenda ({totalPending})
                         </Button>
                     </div>
                 </CardContent>
@@ -217,38 +225,40 @@ export function GradeAgendamentosClientPage() {
                                         const slotDate = new Date(`${format(day, 'yyyy-MM-dd')}T${time}`);
                                         const slotKey = format(slotDate, 'yyyy-MM-dd-HH-mm');
                                         
-                                        const existingAppointment = appointments.find(a => format(a.start.toDate(), 'HH:mm') === time && format(a.start.toDate(), 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd'));
-                                        const pendingAppointment = pendingAppointments.get(slotKey);
+                                        // --- CORREÇÃO 3: Usar .filter() para pegar todos os agendamentos no horário ---
+                                        const existingAppointments = appointments.filter(a => format(a.start.toDate(), 'HH:mm') === time && format(a.start.toDate(), 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd'));
+                                        const pendingAppointmentsInSlot = pendingAppointments.get(slotKey) || [];
 
-                                        if (existingAppointment) {
-                                            return (
-                                                <td key={day.toISOString()} className="p-1 border align-top bg-gray-200 cursor-pointer" onClick={() => handleOpenEditModal(existingAppointment)}>
-                                                    <div className="p-2 rounded bg-white shadow-sm text-xs">
-                                                        <p className="font-bold">{existingAppointment.professionalName}</p>
-                                                        <p className="text-muted-foreground">{existingAppointment.tipo}</p>
-                                                        <p className="text-blue-600">Sala: {getRoomNameById(existingAppointment.sala)}</p>
-                                                    </div>
-                                                </td>
-                                            );
-                                        }
-
-                                        if (pendingAppointment) {
-                                            const prof = professionals.find(p => p.id === pendingAppointment.professionalId);
-                                            return (
-                                                <td key={day.toISOString()} className="p-1 border align-top bg-yellow-100 cursor-pointer" onClick={() => handleOpenQuickModal(day, time)}>
-                                                    <div className="p-2 rounded bg-white shadow-sm text-xs border-l-4 border-yellow-500">
-                                                        <p className="font-bold">{prof?.fullName}</p>
-                                                        <p className="text-muted-foreground">{pendingAppointment.specialty}</p>
-                                                        <p className="text-blue-600">Sala: {getRoomNameById(pendingAppointment.roomId)}</p>
-                                                        {pendingAppointment.isRecurring && <Badge variant="secondary" className="mt-1">Repete {pendingAppointment.sessions}x</Badge>}
-                                                    </div>
-                                                </td>
-                                            );
-                                        }
+                                        // Combina agendamentos existentes e pendentes para renderização
+                                        const allAppointmentsInSlot = [...existingAppointments, ...pendingAppointmentsInSlot];
 
                                         return (
                                             <td key={day.toISOString()} className="p-1 border align-top hover:bg-green-50 transition-colors cursor-pointer" onClick={() => handleOpenQuickModal(day, time)}>
-                                                {/* Célula Vazia Clicável */}
+                                                <div className="space-y-1">
+                                                {/* --- CORREÇÃO 4: Mapear e renderizar múltiplos agendamentos --- */}
+                                                {allAppointmentsInSlot.map((app, index) => {
+                                                    const isExisting = 'id' in app; // Verifica se é um agendamento já salvo
+                                                    const professional = professionals.find(p => p.id === (isExisting ? (app as Appointment).professionalId : (app as QuickAppointmentData).professionalId));
+                                                    
+                                                    return (
+                                                        <div 
+                                                          key={isExisting ? (app as Appointment).id : `${slotKey}-${index}`} 
+                                                          className={`p-2 rounded shadow-sm text-xs ${isExisting ? 'bg-white' : 'bg-yellow-100 border-l-4 border-yellow-500'}`}
+                                                          onClick={(e) => {
+                                                              if(isExisting) {
+                                                                  e.stopPropagation();
+                                                                  handleOpenEditModal(app as Appointment);
+                                                              }
+                                                          }}
+                                                        >
+                                                            <p className="font-bold">{professional?.fullName}</p>
+                                                            <p className="text-muted-foreground">{isExisting ? (app as Appointment).tipo : (app as QuickAppointmentData).specialty}</p>
+                                                            <p className="text-blue-600">Sala: {getRoomNameById(isExisting ? (app as Appointment).sala : (app as QuickAppointmentData).roomId)}</p>
+                                                            {!isExisting && (app as QuickAppointmentData).isRecurring && <Badge variant="secondary" className="mt-1">Repete {(app as QuickAppointmentData).sessions}x</Badge>}
+                                                        </div>
+                                                    );
+                                                })}
+                                                </div>
                                             </td>
                                         );
                                     })}

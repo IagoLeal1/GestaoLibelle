@@ -1,3 +1,4 @@
+// components/modals/edit-appointment-modal.tsx
 "use client"
 
 import { useState, useEffect } from "react";
@@ -50,9 +51,12 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
   const [rooms, setRooms] = useState<Room[]>([]);
   const [occupiedRoomIds, setOccupiedRoomIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(true);
 
+  // Efeito para carregar dados essenciais (especialidades e salas) quando o modal abre
   useEffect(() => {
     if (isOpen) {
+        setIsLoadingData(true);
         const fetchDropdownData = async () => {
             const [specialtiesData, roomsData] = await Promise.all([
                 getSpecialties(),
@@ -60,17 +64,19 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
             ]);
             setSpecialties(specialtiesData);
             setRooms(roomsData.filter(r => r.status === 'ativa'));
+            setIsLoadingData(false);
         };
         fetchDropdownData();
     }
   }, [isOpen]);
 
+  // Efeito para popular o formulário APÓS os dados essenciais serem carregados
   useEffect(() => {
-    if (appointment && specialties.length > 0) {
+    if (isOpen && !isLoadingData && appointment) {
       const startDate = appointment.start.toDate();
       const endDate = appointment.end.toDate();
 
-      const initialFormData = {
+      setFormData({
         patientId: appointment.patientId,
         professionalId: appointment.professionalId,
         data: format(startDate, 'yyyy-MM-dd'),
@@ -83,23 +89,24 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
         observacoes: appointment.observacoes,
         status: appointment.status,
         statusSecundario: appointment.statusSecundario,
-      };
-      setFormData(initialFormData);
+      });
 
+      // Filtra as especialidades com base no paciente selecionado
       const selectedPatient = patients.find(p => p.id === appointment.patientId);
       const patientConvenio = (selectedPatient?.convenio || 'particular').toLowerCase();
       
-      const filteredSpecialties = specialties.filter(spec => {
+      const filtered = specialties.filter(spec => {
           const specNameLower = spec.name.toLowerCase();
           if (patientConvenio === 'particular') {
               return !['unimed', 'bradesco', 'amil', 'sulamerica'].some(conv => specNameLower.includes(conv));
           }
           return specNameLower.includes(patientConvenio);
       });
-      setAvailableSpecialties(filteredSpecialties);
+      setAvailableSpecialties(filtered);
     }
-  }, [appointment, patients, specialties, isOpen]);
-
+  }, [isOpen, isLoadingData, appointment, patients, specialties]);
+  
+  // Efeito para verificar a disponibilidade da sala
   useEffect(() => {
     const checkRoomAvailability = async () => {
       if (formData.data && formData.horaInicio && formData.horaFim) {
@@ -113,6 +120,7 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
         if (endTime <= startTime) return;
 
         const occupiedIds = await getOccupiedRoomIdsByTime(startTime, endTime);
+        // Exclui a sala do próprio agendamento da lista de ocupadas
         setOccupiedRoomIds(occupiedIds.filter(id => id !== appointment?.sala));
       }
     };
@@ -193,6 +201,7 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
           <DialogTitle>Editar Agendamento</DialogTitle>
           <DialogDescription>{appointment.patientName} com {appointment.professionalName}</DialogDescription>
         </DialogHeader>
+        {isLoadingData ? (<div className="py-4">Carregando dados...</div>) : (
         <div className="grid gap-6 py-4">
             <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2"><Label>Paciente</Label><Select value={formData.patientId} onValueChange={handlePatientChange}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{patients.map(p=><SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent></Select></div>
@@ -253,11 +262,12 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
 
             <div className="space-y-2"><Label>Observações</Label><Textarea value={formData.observacoes || ''} onChange={(e) => handleInputChange("observacoes", e.target.value)} /></div>
         </div>
+        )}
         <DialogFooter className="justify-between sm:justify-between">
             <Button variant="destructive" onClick={handleDelete} disabled={isSubmitting}>Excluir Agendamento</Button>
             <div className="flex gap-2">
                 <Button variant="outline" onClick={onClose}>Cancelar</Button>
-                <Button onClick={handleSave} disabled={isSubmitting}>
+                <Button onClick={handleSave} disabled={isSubmitting || isLoadingData}>
                     {isSubmitting ? "Salvando..." : "Salvar Alterações"}
                 </Button>
             </div>

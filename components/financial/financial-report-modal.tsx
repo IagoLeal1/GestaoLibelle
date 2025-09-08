@@ -10,8 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Download } from "lucide-react";
 import { CostCenter } from "@/services/settingsService";
 import { BankAccount } from "@/services/financialService";
+import { Patient } from "@/services/patientService"; // Importando o tipo Patient
 
-// --- TIPO ATUALIZADO PARA INCLUIR OS NOVOS RELATÓRIOS VISUAIS ---
+// Tipos de relatório atualizados para incluir os novos
 export type ReportType =
     | 'receitas'
     | 'despesas'
@@ -19,6 +20,8 @@ export type ReportType =
     | 'contas_a_pagar'
     | 'contas_a_receber'
     | 'despesas_por_centro_custo'
+    | 'despesas_por_categoria' // Novo
+    | 'rentabilidade_paciente' // Novo
     | 'movimentacao_bancaria'
     | 'previsoes_futuras'
     | 'metas_financeiras'
@@ -34,9 +37,10 @@ export interface FinancialReportModalProps {
     reportType: ReportType | null;
     costCenters: CostCenter[];
     bankAccounts: BankAccount[];
+    patients: Patient[]; // Adicionada a prop para receber a lista de pacientes
 }
 
-// --- TÍTULOS ATUALIZADOS ---
+// Títulos atualizados para os novos relatórios
 const reportTitles: Record<ReportType, string> = {
     receitas: "Relatório Geral de Receitas",
     despesas: "Relatório Geral de Despesas",
@@ -44,6 +48,8 @@ const reportTitles: Record<ReportType, string> = {
     contas_a_pagar: "Relatório de Contas a Pagar",
     contas_a_receber: "Relatório de Contas a Receber",
     despesas_por_centro_custo: "Despesas por Centro de Custo",
+    despesas_por_categoria: "Relatório por Categoria", // Novo
+    rentabilidade_paciente: "Relatório de Rentabilidade por Paciente", // Novo
     movimentacao_bancaria: "Movimentação por Conta Bancária",
     contas_pagas: "Relatório de Contas Pagas",
     contas_recebidas: "Relatório de Contas Recebidas",
@@ -53,18 +59,20 @@ const reportTitles: Record<ReportType, string> = {
     comparativo_mensal: "Comparativo Mensal"
 };
 
-export function FinancialReportModal({ isOpen, onClose, onGenerate, reportType, costCenters, bankAccounts }: FinancialReportModalProps) {
+export function FinancialReportModal({ isOpen, onClose, onGenerate, reportType, costCenters, bankAccounts, patients }: FinancialReportModalProps) {
     const [params, setParams] = useState({
         startDate: "",
         endDate: "",
         costCenter: "todos",
         bankAccountId: "todos",
+        patientId: "todos", // Adicionado estado para o filtro de paciente
     });
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
-            setParams({ startDate: "", endDate: "", costCenter: "todos", bankAccountId: "todos" });
+            // Reseta todos os filtros ao abrir o modal
+            setParams({ startDate: "", endDate: "", costCenter: "todos", bankAccountId: "todos", patientId: "todos" });
         }
     }, [isOpen]);
 
@@ -125,6 +133,20 @@ export function FinancialReportModal({ isOpen, onClose, onGenerate, reportType, 
                                 <SelectContent>
                                     <SelectItem value="todos" disabled>Selecione uma conta...</SelectItem>
                                     {bankAccounts.map((account: BankAccount) => <SelectItem key={account.id} value={account.id}>{account.name} - {account.account}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+
+                    {/* Filtro condicional para o relatório de rentabilidade por paciente */}
+                    {reportType === 'rentabilidade_paciente' && (
+                        <div className="space-y-2">
+                            <Label>Paciente</Label>
+                            <Select onValueChange={(v) => setParams(p => ({...p, patientId: v}))} value={params.patientId}>
+                                <SelectTrigger><SelectValue/></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="todos">Todos os Pacientes</SelectItem>
+                                    {patients.map((p: Patient) => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>

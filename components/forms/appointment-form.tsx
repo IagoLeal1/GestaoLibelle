@@ -1,3 +1,4 @@
+// components/forms/appointment-form.tsx
 "use client"
 
 import { useState, useEffect } from "react";
@@ -26,6 +27,7 @@ export function AppointmentForm() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
+  // --- NOVO ESTADO PARA ESPECIALIDADES FILTRADAS ---
   const [availableSpecialties, setAvailableSpecialties] = useState<Specialty[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [occupiedRoomIds, setOccupiedRoomIds] = useState<string[]>([]);
@@ -46,6 +48,8 @@ export function AppointmentForm() {
         setPatients(patientsData);
         setProfessionals(professionalsData);
         setSpecialties(specialtiesData);
+        // Inicialmente, todas as especialidades estão disponíveis
+        setAvailableSpecialties(specialtiesData);
         setRooms(roomsData.filter(r => r.status === 'ativa'));
     };
     fetchData();
@@ -77,12 +81,14 @@ export function AppointmentForm() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  // --- FUNÇÃO CORRIGIDA PARA FILTRAR ESPECIALIDADES ---
   const handlePatientChange = (patientId: string) => {
     const selectedPatient = patients.find(p => p.id === patientId);
     if (!selectedPatient) return;
 
     const patientConvenio = (selectedPatient.convenio || 'particular').toLowerCase();
     
+    // Lógica de filtro idêntica à do modal de edição
     const filteredSpecialties = specialties.filter(spec => {
         const specNameLower = spec.name.toLowerCase();
         
@@ -95,11 +101,12 @@ export function AppointmentForm() {
 
     setAvailableSpecialties(filteredSpecialties);
 
+    // Reseta a especialidade selecionada e o valor ao trocar de paciente
     setFormData(prev => ({
         ...prev,
         patientId: patientId,
-        convenio: selectedPatient.convenio || "",
-        tipo: '',
+        convenio: selectedPatient.convenio || "Particular",
+        tipo: '', 
         valorConsulta: 0,
     }));
   };
@@ -177,6 +184,7 @@ export function AppointmentForm() {
                 </Select>
             </div>
 
+            {/* --- SELECT DE ESPECIALIDADE CORRIGIDO --- */}
             <div className="space-y-2 lg:col-span-2">
                 <Label>Especialidade *</Label>
                 <Select onValueChange={handleSpecialtyChange} value={formData.tipo} disabled={!formData.patientId} required>

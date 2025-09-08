@@ -21,6 +21,7 @@ export interface Transaction {
     appointmentId?: string;
     professionalId?: string;
     patientId?: string;
+    patientName?: string; // Incluído para facilitar relatórios
     supplierId?: string;
     category: string;
     costCenter: string;
@@ -38,6 +39,7 @@ export interface TransactionFormData {
     appointmentId?: string;
     professionalId?: string;
     patientId?: string;
+    patientName?: string; 
     supplierId?: string;
     category: string;
     costCenter: string;
@@ -83,7 +85,7 @@ export interface BankAccount {
     type: 'Conta Corrente' | 'Conta Poupança' | 'Conta Salário';
     initialBalance: number;
     currentBalance: number;
-    isDefault?: boolean; // Campo para identificar a conta padrão
+    isDefault?: boolean;
 }
 
 export interface Budget {
@@ -226,14 +228,11 @@ export const createTransactionBlock = async (data: TransactionBlockFormData) => 
     }
 };
 
-// --- FUNÇÕES DE BUSCA ATUALIZADAS PARA RETROCOMPATIBILIDADE ---
-
 const normalizeTransaction = (doc: any): Transaction => {
     const data = doc.data();
     return {
         id: doc.id,
         ...data,
-        // Garante que dataMovimento exista, usando 'date' como fallback.
         dataMovimento: data.dataMovimento || data.date,
     };
 };
@@ -262,7 +261,7 @@ export const getTransactionsByPeriod = async (startDate: Date, endDate: Date): P
 export const updateTransaction = async (id: string, data: Partial<TransactionFormData>) => {
     try {
         const { dataMovimento, dataEmissao, ...rest } = data;
-        const updateData: any = { ...rest, date: null }; // Remove o campo 'date' legado
+        const updateData: any = { ...rest, date: null }; 
         if (dataMovimento) updateData.dataMovimento = Timestamp.fromDate(dataMovimento);
         if (dataEmissao) updateData.dataEmissao = Timestamp.fromDate(dataEmissao);
         
@@ -323,7 +322,6 @@ export const getOverdueExpenses = async (): Promise<Transaction[]> => {
       where("status", "==", "pendente"),
       where("dataMovimento", "<=", Timestamp.fromDate(fimDoDia))
     );
-
     const qOld = query(collection(db, "transactions"),
       where("type", "==", "despesa"),
       where("status", "==", "pendente"),
@@ -356,8 +354,6 @@ export const getOverdueExpenses = async (): Promise<Transaction[]> => {
   }
 };
 
-// --- PLANO DE CONTAS, FORNECEDORES, CONVÊNIOS ---
-// ... (as funções get/add/update/deleteAccountPlan, get/add/update/deleteSupplier, get/add/update/deleteCovenant continuam aqui, sem alterações)
 export const getAccountPlans = async (): Promise<{ receitas: AccountPlan[], despesas: AccountPlan[] }> => {
     try {
         const q = query(collection(db, "accountPlans"), orderBy("name"));
@@ -383,8 +379,6 @@ export const getCovenants = async (): Promise<Covenant[]> => { try { const q = q
 export const addCovenant = async (data: Omit<Covenant, 'id' | 'status'>) => { try { await addDoc(collection(db, "covenants"), { ...data, status: "Ativo" }); return { success: true }; } catch (e) { return { success: false, error: "Falha ao adicionar convênio." }; }};
 export const updateCovenant = async (id: string, data: Partial<Omit<Covenant, 'id'>>) => { try { await updateDoc(doc(db, "covenants", id), data); return { success: true }; } catch (e) { return { success: false, error: "Falha ao atualizar convênio." }; }};
 export const deleteCovenant = async (id: string) => { try { await deleteDoc(doc(db, "covenants", id)); return { success: true }; } catch (e) { return { success: false, error: "Falha ao excluir convênio." }; }};
-
-// --- CONTAS BANCÁRIAS ---
 
 export const getBankAccounts = async (): Promise<BankAccount[]> => {
     try {
@@ -425,11 +419,6 @@ export const deleteBankAccount = async (id: string) => {
     }
 };
 
-/**
- * --- NOVA FUNÇÃO ---
- * Define uma conta bancária como a padrão para transações.
- * Garante que apenas uma conta possa ser a padrão por vez.
- */
 export const setDefaultBankAccount = async (defaultAccountId: string) => {
     const batch = writeBatch(db);
     try {
@@ -437,7 +426,6 @@ export const setDefaultBankAccount = async (defaultAccountId: string) => {
         
         accountsSnapshot.forEach(docSnapshot => {
             const accountRef = doc(db, "bankAccounts", docSnapshot.id);
-            // Define como padrão se o ID for o escolhido, senão, garante que não seja padrão.
             const isDefault = docSnapshot.id === defaultAccountId;
             batch.update(accountRef, { isDefault: isDefault });
         });
@@ -450,8 +438,68 @@ export const setDefaultBankAccount = async (defaultAccountId: string) => {
     }
 };
 
-// --- ORÇAMENTO E RELATÓRIOS ---
-// ... (as funções getExpensesByCostCenter, getBudgetForMonth, setBudgetForMonth continuam aqui, sem alterações)
 export const getExpensesByCostCenter = async (startDate: Date, endDate: Date) => { try { const despesas = await getTransactionsForReport({ type: 'despesa', startDate, endDate, status: 'pago' }); return despesas.reduce((acc, despesa) => { const center = despesa.costCenter || 'Sem Centro de Custo'; if (!acc[center]) acc[center] = { total: 0, count: 0, transactions: [] }; acc[center].total += despesa.value; acc[center].count += 1; acc[center].transactions.push(despesa); return acc; }, {} as Record<string, { total: number, count: number, transactions: Transaction[] }>); } catch (error) { console.error("Erro ao agrupar despesas por centro de custo:", error); return {}; }};
 export const getBudgetForMonth = async (monthId: string): Promise<Budget | null> => { try { const docRef = doc(db, 'budgets', monthId); const docSnap = await getDoc(docRef); return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as Budget : null; } catch (error) { console.error("Erro ao buscar orçamento do mês:", error); return null; }};
 export const setBudgetForMonth = async (monthId: string, data: Partial<Omit<Budget, 'id'>>) => { try { const docRef = doc(db, 'budgets', monthId); await setDoc(docRef, data, { merge: true }); return { success: true }; } catch (error) { console.error("Erro ao salvar orçamento do mês:", error); return { success: false, error: "Falha ao salvar a meta financeira." }; }};
+
+export const getFinancialSummaryByCategory = async (startDate: Date, endDate: Date) => {
+  try {
+    const paidTransactions = await getTransactionsForReport({ startDate, endDate, status: 'pago' });
+    
+    return paidTransactions.reduce((acc, tx) => {
+      const category = tx.category || 'Sem Categoria';
+      if (!acc[category]) {
+        acc[category] = { receitas: 0, despesas: 0, total: 0, count: 0 };
+      }
+
+      if (tx.type === 'receita') {
+        acc[category].receitas += tx.value;
+        acc[category].total += tx.value;
+      } else {
+        acc[category].despesas += tx.value;
+        acc[category].total -= tx.value;
+      }
+      acc[category].count += 1;
+      
+      return acc;
+    }, {} as Record<string, { receitas: number, despesas: number, total: number, count: number }>);
+
+  } catch (error) {
+    console.error("Erro ao agrupar transações por categoria:", error);
+    return {};
+  }
+};
+
+export const getFinancialSummaryByPatient = async (startDate: Date, endDate: Date, patientId?: string) => {
+  try {
+    const paidTransactions = await getTransactionsForReport({ startDate, endDate, status: 'pago' });
+
+    const filteredTransactions = patientId 
+        ? paidTransactions.filter(tx => tx.patientId === patientId) 
+        : paidTransactions;
+
+    return filteredTransactions.reduce((acc, tx) => {
+      if (!tx.patientId) return acc;
+
+      const id = tx.patientId;
+      if (!acc[id]) {
+        const patientName = tx.patientName || `Paciente (ID: ...${id.slice(-4)})`;
+        acc[id] = { patientName: patientName, receitas: 0, despesas: 0, saldo: 0 };
+      }
+
+      if (tx.type === 'receita') {
+        acc[id].receitas += tx.value;
+      } else if (tx.type === 'despesa') {
+        acc[id].despesas += tx.value;
+      }
+
+      acc[id].saldo = acc[id].receitas - acc[id].despesas;
+      
+      return acc;
+    }, {} as Record<string, { patientName: string, receitas: number, despesas: number, saldo: number }>);
+
+  } catch (error) {
+    console.error("Erro ao calcular rentabilidade por paciente:", error);
+    return {};
+  }
+};

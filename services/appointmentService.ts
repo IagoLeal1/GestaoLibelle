@@ -1,3 +1,4 @@
+// services/appointmentService.ts
 import { db } from "@/lib/firebaseConfig";
 import {
   collection,
@@ -74,10 +75,12 @@ export interface QuickAppointmentData {
 }
 
 
-// --- FUNÇÃO DE REPASSE ATUALIZADA COM TODAS AS NOVAS REGRAS ---
+// --- FUNÇÃO DE REPASSE CORRIGIDA ---
 const handleRepasseTransaction = async (appointment: Appointment) => {
+  // Deleta qualquer transação de repasse anterior ligada a este agendamento
   await deleteTransactionByAppointmentId(appointment.id);
 
+  // Define as condições para gerar um novo repasse
   const shouldGenerateRepasse =
     appointment.status === 'finalizado' ||
     (appointment.status === 'nao_compareceu' && appointment.statusSecundario === 'fnj_paciente');
@@ -91,8 +94,9 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
     return { success: false, error: "Dados financeiros do profissional não encontrados." };
   }
 
-  // Garante que o centro de custo (especialidade) exista antes de prosseguir.
-  await findOrCreateCostCenter(professional.especialidade);
+  // --- ALTERAÇÃO 1: Garante que o centro de custo (baseado na TERAPIA) exista. ---
+  // Em vez de professional.especialidade, usamos appointment.tipo.
+  await findOrCreateCostCenter(appointment.tipo);
   
   // Busca a conta bancária definida como padrão.
   const allBankAccounts = await getBankAccounts();
@@ -138,7 +142,8 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
     dataEmissao: appointment.start.toDate(),
     status: 'pendente',
     category: 'Repasse de Profissional',
-    costCenter: professional.especialidade || 'Não especificado',
+    // --- ALTERAÇÃO 2: Usa a TERAPIA como Centro de Custo. ---
+    costCenter: appointment.tipo || 'Não especificado',
     bankAccountId: defaultAccount ? defaultAccount.id : undefined,
     professionalId: appointment.professionalId,
     patientId: appointment.patientId,
@@ -149,7 +154,7 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
 };
 
 
-// --- Funções de Busca e CRUD ---
+// --- Funções de Busca e CRUD (sem alterações) ---
 
 export const getAppointmentsByDate = async (dateString: string): Promise<Appointment[]> => {
   try {
@@ -349,8 +354,8 @@ export const createMultipleAppointments = async (patientId: string, appointments
 export const updateAppointment = async (id: string, data: Partial<AppointmentFormData & { status: AppointmentStatus }>) => {
   try {
     const docRef = doc(db, 'appointments', id);
+    
     const dataToUpdate: { [key: string]: any } = { ...data };
-    if (dataToUpdate.statusSecundario === 'nenhum') dataToUpdate.statusSecundario = '';
 
     if (data.data && data.horaInicio && data.horaFim) {
       const [year, month, day] = data.data.split('-').map(Number);
@@ -360,8 +365,21 @@ export const updateAppointment = async (id: string, data: Partial<AppointmentFor
       const endDate = new Date(year, month - 1, day, endHour, endMinute);
       dataToUpdate.start = Timestamp.fromDate(startDate);
       dataToUpdate.end = Timestamp.fromDate(endDate);
-      delete dataToUpdate.data; delete dataToUpdate.horaInicio; delete dataToUpdate.horaFim;
+      delete dataToUpdate.data; 
+      delete dataToUpdate.horaInicio; 
+      delete dataToUpdate.horaFim;
     }
+
+    Object.keys(dataToUpdate).forEach(key => {
+      if (dataToUpdate[key] === undefined) {
+        delete dataToUpdate[key];
+      }
+    });
+
+    if (dataToUpdate.statusSecundario === 'nenhum') {
+        dataToUpdate.statusSecundario = '';
+    }
+
     await updateDoc(docRef, dataToUpdate);
 
     const updatedAppointmentDoc = await getDoc(docRef);
@@ -369,10 +387,12 @@ export const updateAppointment = async (id: string, data: Partial<AppointmentFor
         const updatedAppointment = { id: updatedAppointmentDoc.id, ...updatedAppointmentDoc.data() } as Appointment;
         await handleRepasseTransaction(updatedAppointment);
     }
+
     return { success: true };
   } catch (error) {
     console.error("Erro ao atualizar agendamento:", error);
-    return { success: false, error: "Falha ao atualizar agendamento." };
+    const errorMessage = error instanceof Error ? error.message : "Falha ao atualizar agendamento.";
+    return { success: false, error: errorMessage };
   }
 };
 
@@ -487,17 +507,12 @@ export const getOccupiedRoomIdsByTime = async (startTime: Date, endTime: Date): 
     }
 };
 
-// --- NOVA FUNÇÃO ---
 export interface RenewableBlock {
   patientId: string;
   patientName: string;
   appointments: Appointment[];
 }
 
-/**
- * Busca os últimos agendamentos de blocos que estão perto de vencer
- * e os agrupa por paciente.
- */
 export const getRenewableAppointmentsByPatient = async (): Promise<RenewableBlock[]> => {
   try {
     const today = startOfDay(new Date());
@@ -513,7 +528,6 @@ export const getRenewableAppointmentsByPatient = async (): Promise<RenewableBloc
     const snapshot = await getDocs(q);
     const appointments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
 
-    // Agrupando os resultados por paciente no backend
     const groupedByPatient = appointments.reduce((acc, app) => {
       if (!acc[app.patientId]) {
         acc[app.patientId] = {
