@@ -13,7 +13,7 @@ import { Professional } from "@/services/professionalService";
 import { Patient } from "@/services/patientService";
 import { Specialty } from "@/services/specialtyService";
 import { Room } from "@/services/roomService";
-import { QuickAppointmentData } from "@/services/appointmentService";
+import { QuickAppointmentData, RecurrenceFrequency } from "@/services/appointmentService";
 import { toast } from "sonner";
 import { DollarSign } from "lucide-react";
 
@@ -35,16 +35,20 @@ export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patie
     const [roomId, setRoomId] = useState<string | undefined>(undefined);
     const [isRecurring, setIsRecurring] = useState(false);
     const [sessions, setSessions] = useState(4);
+    // --- NOVO ESTADO PARA FREQUÊNCIA ---
+    const [frequency, setFrequency] = useState<RecurrenceFrequency>('weekly');
     const [availableSpecialties, setAvailableSpecialties] = useState<Specialty[]>([]);
 
     useEffect(() => {
         if (isOpen) {
+            // Resetar o estado ao abrir
             setProfessionalId('');
             setSpecialty('');
             setValorConsulta(0);
             setRoomId(undefined);
             setIsRecurring(false);
             setSessions(4);
+            setFrequency('weekly'); // Reseta para o padrão
 
             if (patient) {
                 const patientConvenio = (patient.convenio || 'particular').toLowerCase();
@@ -87,6 +91,7 @@ export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patie
             roomId,
             isRecurring,
             sessions: isRecurring ? sessions : 1,
+            frequency: isRecurring ? frequency : 'weekly', // Inclui a frequência nos dados
         };
         onSave(data);
     };
@@ -102,58 +107,32 @@ export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patie
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="professional">Profissional *</Label>
-                            <Select value={professionalId} onValueChange={setProfessionalId}>
-                                <SelectTrigger id="professional"><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                                <SelectContent>{professionals.map(p => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="specialty">Especialidade *</Label>
-                            <Select value={specialty} onValueChange={handleSpecialtyChange} disabled={!patient}>
-                                <SelectTrigger id="specialty"><SelectValue placeholder={!patient ? "Selecione um paciente" : "Selecione..."} /></SelectTrigger>
-                                <SelectContent>{availableSpecialties.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
-                            </Select>
-                        </div>
+                        <div className="space-y-2"><Label htmlFor="professional">Profissional *</Label><Select value={professionalId} onValueChange={setProfessionalId}><SelectTrigger id="professional"><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{professionals.map(p => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent></Select></div>
+                        <div className="space-y-2"><Label htmlFor="specialty">Especialidade *</Label><Select value={specialty} onValueChange={handleSpecialtyChange} disabled={!patient}><SelectTrigger id="specialty"><SelectValue placeholder={!patient ? "Selecione um paciente" : "Selecione..."} /></SelectTrigger><SelectContent>{availableSpecialties.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="room">Sala</Label>
-                            <Select value={roomId} onValueChange={(value) => setRoomId(value === "none" ? undefined : value)}>
-                                <SelectTrigger id="room"><SelectValue placeholder="Opcional..." /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">Nenhuma</SelectItem>
-                                    {rooms.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="valorConsulta">Valor da Consulta (R$)</Label>
-                            <div className="relative">
-                                <DollarSign className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                                <Input 
-                                    id="valorConsulta" 
-                                    type="number" 
-                                    step="0.01"
-                                    value={valorConsulta} 
-                                    onChange={(e) => setValorConsulta(parseFloat(e.target.value) || 0)} 
-                                    className="pl-8" 
-                                />
-                            </div>
-                        </div>
+                        <div className="space-y-2"><Label htmlFor="room">Sala</Label><Select value={roomId} onValueChange={(value) => setRoomId(value === "none" ? undefined : value)}><SelectTrigger id="room"><SelectValue placeholder="Opcional..." /></SelectTrigger><SelectContent><SelectItem value="none">Nenhuma</SelectItem>{rooms.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent></Select></div>
+                        <div className="space-y-2"><Label htmlFor="valorConsulta">Valor da Consulta (R$)</Label><div className="relative"><DollarSign className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input id="valorConsulta" type="number" step="0.01" value={valorConsulta} onChange={(e) => setValorConsulta(parseFloat(e.target.value) || 0)} className="pl-8" /></div></div>
                     </div>
                     
+                    {/* --- BLOCO DE RECORRÊNCIA ATUALIZADO --- */}
                     <div className="space-y-4 rounded-lg border p-4">
-                        <div className="flex items-center justify-between">
-                            <Label htmlFor="recurring-switch" className="cursor-pointer">Repetir Semanalmente</Label>
-                            <Switch id="recurring-switch" checked={isRecurring} onCheckedChange={setIsRecurring} />
-                        </div>
+                        <div className="flex items-center justify-between"><Label htmlFor="recurring-switch" className="cursor-pointer">Repetir Agendamento</Label><Switch id="recurring-switch" checked={isRecurring} onCheckedChange={setIsRecurring} /></div>
                         {isRecurring && (
-                            <div className="space-y-2 pt-4 border-t">
-                                <Label htmlFor="sessions">Número de Sessões</Label>
-                                <Input id="sessions" type="number" value={sessions} onChange={(e) => setSessions(Number(e.target.value))} min={1} />
+                            <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                                <div className="space-y-2">
+                                    <Label htmlFor="frequency">Frequência</Label>
+                                    <Select value={frequency} onValueChange={(v) => setFrequency(v as RecurrenceFrequency)}>
+                                        <SelectTrigger id="frequency"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="daily">Diariamente</SelectItem>
+                                            <SelectItem value="weekly">Semanalmente</SelectItem>
+                                            <SelectItem value="bi-weekly">Quinzenalmente</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2"><Label htmlFor="sessions">Nº de Sessões</Label><Input id="sessions" type="number" value={sessions} onChange={(e) => setSessions(Number(e.target.value))} min={1} /></div>
                             </div>
                         )}
                     </div>

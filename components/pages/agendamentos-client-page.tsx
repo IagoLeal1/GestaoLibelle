@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Filter, MoreHorizontal, Sun, Sunset, Moon, Download, Plus, AlertCircle, ChevronDown } from "lucide-react"
+import { Search, Filter, MoreHorizontal, Sun, Sunset, Moon, Download, Plus, AlertCircle, ChevronDown, BrainCircuit } from "lucide-react" // Importe o BrainCircuit
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { getAppointmentsByDate, getAppointmentsForReport, Appointment, updateAppointment, AppointmentStatus, AppointmentFormData } from "@/services/appointmentService"
 import { getProfessionals, Professional } from "@/services/professionalService"
@@ -248,10 +248,9 @@ export function AgendamentosClientPage() {
   const TabelaDeAgendamentos = ({ agendamentos, loading }: { agendamentos: Appointment[], loading: boolean }) => (
     <div className="overflow-x-auto">
       <Table>
-        {/* --- ALTERAÇÃO 1: Adicionar cabeçalho da coluna --- */}
         <TableHeader><TableRow>
           <TableHead>Período</TableHead><TableHead>Paciente</TableHead><TableHead>Profissional</TableHead>
-          <TableHead>Terapia</TableHead> {/* <-- NOVA COLUNA AQUI */}
+          <TableHead>Terapia</TableHead>
           <TableHead>Horário</TableHead><TableHead>Sala</TableHead><TableHead>Status</TableHead>
           <TableHead>Status Sec.</TableHead><TableHead className="text-right">Ações</TableHead>
         </TableRow></TableHeader>
@@ -259,7 +258,6 @@ export function AgendamentosClientPage() {
           {loading ? (
             Array.from({ length: 5 }).map((_, i) => (
               <TableRow key={i}>
-                {/* --- ALTERAÇÃO 3: Ajustar colSpan para o skeleton --- */}
                 <TableCell colSpan={9}><Skeleton className="h-5 w-full" /></TableCell>
               </TableRow>
             ))
@@ -272,8 +270,7 @@ export function AgendamentosClientPage() {
               <TableCell><div className="flex items-center gap-1 text-xs">{getPeriodoIcon(getPeriodoFromDate(appointment.start.toDate()))} <span>{getPeriodoLabel(getPeriodoFromDate(appointment.start.toDate()))}</span></div></TableCell>
               <TableCell className="font-medium">{appointment.patientName}</TableCell>
               <TableCell>{appointment.professionalName}</TableCell>
-              {/* --- ALTERAÇÃO 2: Adicionar célula com o tipo de terapia --- */}
-              <TableCell className="text-muted-foreground">{appointment.tipo}</TableCell> {/* <-- NOVA CÉLULA AQUI */}
+              <TableCell className="text-muted-foreground">{appointment.tipo}</TableCell>
               <TableCell>{format(appointment.start.toDate(), 'HH:mm')} - {format(appointment.end.toDate(), 'HH:mm')}</TableCell>
               <TableCell><Badge variant="outline">{getRoomNameById(appointment.sala)}</Badge></TableCell>
               <TableCell onClick={(e) => e.stopPropagation()}>
@@ -323,7 +320,7 @@ export function AgendamentosClientPage() {
                 </DropdownMenu>
               </TableCell>
             </TableRow>
-          )) : <TableRow><TableCell colSpan={9} className="text-center h-24">Nenhum agendamento encontrado.</TableCell></TableRow>} {/* --- ALTERAÇÃO 3: Ajustar colSpan para a mensagem --- */}
+          )) : <TableRow><TableCell colSpan={9} className="text-center h-24">Nenhum agendamento encontrado.</TableCell></TableRow>}
         </TableBody>
       </Table>
     </div>
@@ -345,6 +342,7 @@ export function AgendamentosClientPage() {
             <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => setIsReportModalOpen(true)}>
               <Download className="mr-2 h-4 w-4" /> Exportar Relatório
             </Button>
+            {/* --- BOTÃO ATUALIZADO COM O DROPDOWN --- */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                   <Button className="w-full">
@@ -354,6 +352,13 @@ export function AgendamentosClientPage() {
               <DropdownMenuContent align="end">
                   <Link href="/agendamentos/novo" passHref><DropdownMenuItem>Agendamento Único/Sequencial</DropdownMenuItem></Link>
                   <Link href="/agendamentos/grade" passHref><DropdownMenuItem>Agendamento em Grade</DropdownMenuItem></Link>
+                  <DropdownMenuSeparator />
+                  <Link href="/agendamentos/assistente" passHref>
+                    <DropdownMenuItem>
+                        <BrainCircuit className="mr-2 h-4 w-4" />
+                        Assistente de Agendamento (IA)
+                    </DropdownMenuItem>
+                  </Link>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

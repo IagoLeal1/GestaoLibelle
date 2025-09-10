@@ -14,13 +14,20 @@ import {
   deleteDoc,
   writeBatch
 } from 'firebase/firestore';
-import { addWeeks, startOfDay, endOfDay, differenceInMinutes, addDays, format, getHours, getMinutes, addMonths } from 'date-fns';
-import { getProfessionalById } from "./professionalService";
-import { addTransaction, deleteTransactionByAppointmentId, TransactionFormData, getBankAccounts, BankAccount } from "./financialService";
+import { 
+    addWeeks, startOfDay, endOfDay, differenceInMinutes, addDays, 
+    format, getHours, getMinutes, addMonths, startOfWeek, endOfWeek,
+    eachDayOfInterval, setHours, setMinutes, addMinutes // <-- 'addMinutes' ADICIONADO AQUI
+} from 'date-fns';
+import { ptBR } from "date-fns/locale"; // <-- IMPORTAÇÃO DO 'ptBR' ADICIONADA AQUI
+import { getProfessionalById, getProfessionals, Professional } from "./professionalService"; // <-- 'getProfessionals' ADICIONADO AQUI
+import { addTransaction, deleteTransactionByAppointmentId, TransactionFormData, getBankAccounts } from "./financialService";
 import { findOrCreateCostCenter } from "./settingsService";
+import { Room, getRooms } from "./roomService";
 
 // --- Interfaces ---
 export type AppointmentStatus = 'agendado' | 'finalizado' | 'nao_compareceu' | 'cancelado' | 'em_atendimento';
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'bi-weekly';
 
 export interface Appointment {
   id: string;
@@ -56,11 +63,9 @@ export interface AppointmentFormData {
   statusSecundario?: string;
 }
 
-export interface AppointmentBlockFormData extends Omit<AppointmentFormData, 'data' | 'horaInicio' | 'horaFim'> {
-  data: string;
-  horaInicio: string;
-  horaFim: string;
+export interface AppointmentBlockFormData extends AppointmentFormData {
   sessions: number;
+  frequency: RecurrenceFrequency;
 }
 
 export interface QuickAppointmentData {
@@ -72,15 +77,14 @@ export interface QuickAppointmentData {
   roomId?: string;
   isRecurring: boolean;
   sessions: number;
+  frequency: RecurrenceFrequency;
 }
 
 
-// --- FUNÇÃO DE REPASSE CORRIGIDA ---
+// --- FUNÇÃO DE REPASSE ---
 const handleRepasseTransaction = async (appointment: Appointment) => {
-  // Deleta qualquer transação de repasse anterior ligada a este agendamento
   await deleteTransactionByAppointmentId(appointment.id);
 
-  // Define as condições para gerar um novo repasse
   const shouldGenerateRepasse =
     appointment.status === 'finalizado' ||
     (appointment.status === 'nao_compareceu' && appointment.statusSecundario === 'fnj_paciente');
@@ -94,11 +98,8 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
     return { success: false, error: "Dados financeiros do profissional não encontrados." };
   }
 
-  // --- ALTERAÇÃO 1: Garante que o centro de custo (baseado na TERAPIA) exista. ---
-  // Em vez de professional.especialidade, usamos appointment.tipo.
   await findOrCreateCostCenter(appointment.tipo);
   
-  // Busca a conta bancária definida como padrão.
   const allBankAccounts = await getBankAccounts();
   const defaultAccount = allBankAccounts.find(acc => acc.isDefault);
   
@@ -142,11 +143,11 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
     dataEmissao: appointment.start.toDate(),
     status: 'pendente',
     category: 'Repasse de Profissional',
-    // --- ALTERAÇÃO 2: Usa a TERAPIA como Centro de Custo. ---
     costCenter: appointment.tipo || 'Não especificado',
     bankAccountId: defaultAccount ? defaultAccount.id : undefined,
     professionalId: appointment.professionalId,
     patientId: appointment.patientId,
+    patientName: appointment.patientName,
     appointmentId: appointment.id,
   };
 
@@ -154,7 +155,7 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
 };
 
 
-// --- Funções de Busca e CRUD (sem alterações) ---
+// --- Funções de Busca e CRUD ---
 
 export const getAppointmentsByDate = async (dateString: string): Promise<Appointment[]> => {
   try {
@@ -187,7 +188,6 @@ export const getAppointmentsByProfessional = async (professionalId: string, date
       const dayStart = new Date(year, month - 1, day, 0, 0, 0);
       const dayEnd = new Date(year, month - 1, day, 23, 59, 59);
       if (isNaN(dayStart.getTime()) || isNaN(dayEnd.getTime())) return [];
-
       const q = query(
         collection(db, 'appointments'),
         where('professionalId', '==', professionalId),
@@ -195,7 +195,6 @@ export const getAppointmentsByProfessional = async (professionalId: string, date
         where('start', '<=', Timestamp.fromDate(dayEnd)),
         orderBy('start')
       );
-
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
     } catch (error) {
@@ -213,10 +212,8 @@ export const getAppointmentsForReport = async (options: { professionalId?: strin
           where('start', '<=', Timestamp.fromDate(endOfDay(options.endDate))),
           orderBy('start')
         );
-
         if (options.professionalId) q = query(q, where('professionalId', '==', options.professionalId));
         if (options.patientId) q = query(q, where('patientId', '==', options.patientId));
-
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
     } catch (error) {
@@ -230,7 +227,6 @@ export const createAppointment = async (data: AppointmentFormData) => {
     const patientDoc = await getDoc(doc(db, 'patients', data.patientId));
     const professionalDoc = await getDoc(doc(db, 'professionals', data.professionalId));
     if (!patientDoc.exists() || !professionalDoc.exists()) throw new Error("Paciente ou Profissional não encontrado.");
-
     const patientName = patientDoc.data().fullName;
     const professionalName = professionalDoc.data().fullName;
     const [year, month, day] = data.data.split('-').map(Number);
@@ -238,7 +234,6 @@ export const createAppointment = async (data: AppointmentFormData) => {
     const [endHour, endMinute] = data.horaFim.split(':').map(Number);
     const startDate = new Date(year, month - 1, day, startHour, startMinute);
     const endDate = new Date(year, month - 1, day, endHour, endMinute);
-
     await addDoc(collection(db, "appointments"), {
       title: `${patientName} - ${professionalName}`,
       patientId: data.patientId, patientName,
@@ -259,7 +254,7 @@ export const createAppointment = async (data: AppointmentFormData) => {
 
 export const createAppointmentBlock = async (data: AppointmentBlockFormData) => {
   try {
-    const { patientId, professionalId, data: startDateStr, horaInicio, horaFim, sessions, ...restData } = data;
+    const { patientId, professionalId, data: startDateStr, horaInicio, horaFim, sessions, frequency, ...restData } = data;
     const patientDoc = await getDoc(doc(db, 'patients', patientId));
     const professionalDoc = await getDoc(doc(db, 'professionals', professionalId));
     if (!patientDoc.exists() || !professionalDoc.exists()) throw new Error("Paciente ou profissional não encontrado.");
@@ -277,7 +272,20 @@ export const createAppointmentBlock = async (data: AppointmentBlockFormData) => 
     const blockId = doc(collection(db, 'idGenerator')).id;
 
     for (let i = 0; i < sessions; i++) {
-      const sessionDate = addWeeks(firstAppointmentDate, i);
+      let sessionDate;
+      switch (frequency) {
+        case 'daily':
+          sessionDate = addDays(firstAppointmentDate, i);
+          break;
+        case 'bi-weekly':
+          sessionDate = addWeeks(firstAppointmentDate, i * 2);
+          break;
+        case 'weekly':
+        default:
+          sessionDate = addWeeks(firstAppointmentDate, i);
+          break;
+      }
+
       const sessionEndDate = new Date(sessionDate.getTime() + durationInMinutes * 60000);
       const newAppointmentRef = doc(collection(db, "appointments"));
       batch.set(newAppointmentRef, {
@@ -331,7 +339,19 @@ export const createMultipleAppointments = async (patientId: string, appointments
         const durationInMinutes = differenceInMinutes(appData.end, appData.start);
         for (let i = 1; i < appData.sessions; i++) {
           const futureSessionRef = doc(collection(db, "appointments"));
-          const sessionStartDate = addWeeks(appData.start, i);
+          let sessionStartDate;
+          switch (appData.frequency) {
+            case 'daily':
+              sessionStartDate = addDays(appData.start, i);
+              break;
+            case 'bi-weekly':
+              sessionStartDate = addWeeks(appData.start, i * 2);
+              break;
+            case 'weekly':
+            default:
+              sessionStartDate = addWeeks(appData.start, i);
+              break;
+          }
           const sessionEndDate = new Date(sessionStartDate.getTime() + durationInMinutes * 60000);
           batch.set(futureSessionRef, {
             ...appointmentData,
@@ -354,9 +374,7 @@ export const createMultipleAppointments = async (patientId: string, appointments
 export const updateAppointment = async (id: string, data: Partial<AppointmentFormData & { status: AppointmentStatus }>) => {
   try {
     const docRef = doc(db, 'appointments', id);
-    
     const dataToUpdate: { [key: string]: any } = { ...data };
-
     if (data.data && data.horaInicio && data.horaFim) {
       const [year, month, day] = data.data.split('-').map(Number);
       const [startHour, startMinute] = data.horaInicio.split(':').map(Number);
@@ -369,25 +387,20 @@ export const updateAppointment = async (id: string, data: Partial<AppointmentFor
       delete dataToUpdate.horaInicio; 
       delete dataToUpdate.horaFim;
     }
-
     Object.keys(dataToUpdate).forEach(key => {
       if (dataToUpdate[key] === undefined) {
         delete dataToUpdate[key];
       }
     });
-
     if (dataToUpdate.statusSecundario === 'nenhum') {
         dataToUpdate.statusSecundario = '';
     }
-
     await updateDoc(docRef, dataToUpdate);
-
     const updatedAppointmentDoc = await getDoc(docRef);
     if (updatedAppointmentDoc.exists()) {
         const updatedAppointment = { id: updatedAppointmentDoc.id, ...updatedAppointmentDoc.data() } as Appointment;
         await handleRepasseTransaction(updatedAppointment);
     }
-
     return { success: true };
   } catch (error) {
     console.error("Erro ao atualizar agendamento:", error);
@@ -432,7 +445,6 @@ export const renewAppointmentBlock = async (lastAppointment: Appointment, sessio
     const batch = writeBatch(db);
     const newBlockId = doc(collection(db, 'idGenerator')).id;
     const firstNewDate = addWeeks(lastAppointment.start.toDate(), 1);
-
     for (let i = 0; i < sessionsToRenew; i++) {
       const sessionDate = addWeeks(firstNewDate, i);
       const sessionEndDate = new Date(sessionDate.getTime() + durationInMinutes * 60000);
@@ -447,7 +459,6 @@ export const renewAppointmentBlock = async (lastAppointment: Appointment, sessio
         blockId: newBlockId, isLastInBlock: (i === sessionsToRenew - 1)
       });
     }
-
     batch.update(doc(db, 'appointments', lastAppointment.id), { isLastInBlock: false });
     await batch.commit();
     return { success: true };
@@ -512,7 +523,6 @@ export interface RenewableBlock {
   patientName: string;
   appointments: Appointment[];
 }
-
 export const getRenewableAppointmentsByPatient = async (): Promise<RenewableBlock[]> => {
   try {
     const today = startOfDay(new Date());
@@ -527,7 +537,6 @@ export const getRenewableAppointmentsByPatient = async (): Promise<RenewableBloc
     );
     const snapshot = await getDocs(q);
     const appointments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
-
     const groupedByPatient = appointments.reduce((acc, app) => {
       if (!acc[app.patientId]) {
         acc[app.patientId] = {
@@ -539,11 +548,91 @@ export const getRenewableAppointmentsByPatient = async (): Promise<RenewableBloc
       acc[app.patientId].appointments.push(app);
       return acc;
     }, {} as Record<string, RenewableBlock>);
-
     return Object.values(groupedByPatient);
-
   } catch (error) {
     console.error("Erro ao buscar e agrupar agendamentos para renovação:", error);
     return [];
   }
+};
+
+export interface Slot {
+  dia: Date;
+  horario: string;
+  professional: Professional;
+  sala: Room;
+}
+export interface SlotFinderOptions {
+  semana: Date;
+  terapia: string;
+  duracaoMinutos?: number;
+  turno?: 'manha' | 'tarde' | 'noite';
+  profissionaisPreferidosIds?: string[];
+}
+
+export const findAvailableSlots = async (options: SlotFinderOptions): Promise<Slot[]> => {
+  const { semana, terapia, duracaoMinutos = 50, turno, profissionaisPreferidosIds = [] } = options;
+  const inicioSemana = startOfWeek(semana, { weekStartsOn: 1 });
+  const fimSemana = endOfWeek(semana, { weekStartsOn: 1 });
+  const [profissionais, salas, agendamentosDaSemana] = await Promise.all([
+    getProfessionals(),
+    getRooms(),
+    getAppointmentsForReport({ startDate: inicioSemana, endDate: fimSemana })
+  ]);
+  const profissionaisQualificados = profissionais.filter(
+    p => p.especialidade.toLowerCase() === terapia.toLowerCase() && p.status === 'ativo'
+  );
+  const salasAtivas = salas.filter(s => s.status === 'ativa');
+  const horariosBase = {
+    manha: ['07:20', '08:10', '09:00', '09:50', '10:40', '11:30'],
+    tarde: ['12:20', '13:20', '14:10', '15:00', '15:50'],
+    noite: ['16:40', '17:30']
+  };
+  const horariosPadrao = turno ? horariosBase[turno] : [...horariosBase.manha, ...horariosBase.tarde, ...horariosBase.noite];
+  const diasDaSemana = eachDayOfInterval({ start: inicioSemana, end: fimSemana });
+  const slotsDisponiveis: Slot[] = [];
+  const profissionaisOrdenados = [...profissionaisQualificados].sort((a, b) => {
+      const aIsPreferido = profissionaisPreferidosIds.includes(a.id);
+      const bIsPreferido = profissionaisPreferidosIds.includes(b.id);
+      if (aIsPreferido && !bIsPreferido) return -1;
+      if (!aIsPreferido && bIsPreferido) return 1;
+      return 0;
+  });
+  for (const dia of diasDaSemana) {
+    const diaString = format(dia, 'EEEE', { locale: ptBR }).toLowerCase();
+    for (const profissional of profissionaisOrdenados) {
+      const diaSemanaFormatado = diaString.replace('-feira', '');
+      if (!profissional.diasAtendimento.includes(diaSemanaFormatado)) {
+        continue;
+      }
+      for (const horario of horariosPadrao) {
+        const [hora, minuto] = horario.split(':').map(Number);
+        const inicioSlot = setMinutes(setHours(dia, hora), minuto);
+        const fimSlot = addMinutes(inicioSlot, duracaoMinutos);
+        const [expInicioH, expInicioM] = profissional.horarioInicio.split(':').map(Number);
+        const [expFimH, expFimM] = profissional.horarioFim.split(':').map(Number);
+        if (hora < expInicioH || (hora === expInicioH && minuto < expInicioM) || hora >= expFimH) {
+            continue;
+        }
+        const profissionalOcupado = agendamentosDaSemana.some(ag => 
+            ag.professionalId === profissional.id &&
+            inicioSlot < ag.end.toDate() && fimSlot > ag.start.toDate()
+        );
+        if (profissionalOcupado) continue;
+        const salasOcupadas = agendamentosDaSemana
+            .filter(ag => inicioSlot < ag.end.toDate() && fimSlot > ag.start.toDate())
+            .map(ag => ag.sala);
+        const salaDisponivel = salasAtivas.find(s => !salasOcupadas.includes(s.id));
+        if (salaDisponivel) {
+          slotsDisponiveis.push({
+            dia: inicioSlot,
+            horario: horario,
+            professional: profissional,
+            sala: salaDisponivel
+          });
+          break; 
+        }
+      }
+    }
+  }
+  return slotsDisponiveis;
 };

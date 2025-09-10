@@ -1,4 +1,3 @@
-// components/forms/appointment-form.tsx
 "use client"
 
 import { useState, useEffect } from "react";
@@ -13,7 +12,7 @@ import { Calendar, AlertCircle, Repeat, DollarSign } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 
-import { createAppointment, createAppointmentBlock, getOccupiedRoomIdsByTime, AppointmentFormData, AppointmentBlockFormData } from "@/services/appointmentService";
+import { createAppointment, createAppointmentBlock, getOccupiedRoomIdsByTime, AppointmentFormData, AppointmentBlockFormData, RecurrenceFrequency } from "@/services/appointmentService";
 import { getPatients, Patient } from "@/services/patientService";
 import { getProfessionals, Professional } from "@/services/professionalService";
 import { getSpecialties, Specialty } from "@/services/specialtyService";
@@ -27,7 +26,6 @@ export function AppointmentForm() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
-  // --- NOVO ESTADO PARA ESPECIALIDADES FILTRADAS ---
   const [availableSpecialties, setAvailableSpecialties] = useState<Specialty[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [occupiedRoomIds, setOccupiedRoomIds] = useState<string[]>([]);
@@ -35,6 +33,7 @@ export function AppointmentForm() {
   const [isRecurring, setIsRecurring] = useState(false);
   const [formData, setFormData] = useState<Partial<AppointmentFormData & AppointmentBlockFormData>>({
     sessions: 4,
+    frequency: 'weekly', // <-- Valor padrão para frequência
   });
 
   useEffect(() => {
@@ -48,7 +47,6 @@ export function AppointmentForm() {
         setPatients(patientsData);
         setProfessionals(professionalsData);
         setSpecialties(specialtiesData);
-        // Inicialmente, todas as especialidades estão disponíveis
         setAvailableSpecialties(specialtiesData);
         setRooms(roomsData.filter(r => r.status === 'ativa'));
     };
@@ -80,15 +78,18 @@ export function AppointmentForm() {
   const handleInputChange = (field: keyof typeof formData, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
+  
+  // --- FUNÇÃO DE ATUALIZAÇÃO PARA O SELECT DE FREQUÊNCIA ---
+  const handleSelectChange = (field: keyof typeof formData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
 
-  // --- FUNÇÃO CORRIGIDA PARA FILTRAR ESPECIALIDADES ---
   const handlePatientChange = (patientId: string) => {
     const selectedPatient = patients.find(p => p.id === patientId);
     if (!selectedPatient) return;
 
     const patientConvenio = (selectedPatient.convenio || 'particular').toLowerCase();
     
-    // Lógica de filtro idêntica à do modal de edição
     const filteredSpecialties = specialties.filter(spec => {
         const specNameLower = spec.name.toLowerCase();
         
@@ -101,7 +102,6 @@ export function AppointmentForm() {
 
     setAvailableSpecialties(filteredSpecialties);
 
-    // Reseta a especialidade selecionada e o valor ao trocar de paciente
     setFormData(prev => ({
         ...prev,
         patientId: patientId,
@@ -184,7 +184,6 @@ export function AppointmentForm() {
                 </Select>
             </div>
 
-            {/* --- SELECT DE ESPECIALIDADE CORRIGIDO --- */}
             <div className="space-y-2 lg:col-span-2">
                 <Label>Especialidade *</Label>
                 <Select onValueChange={handleSpecialtyChange} value={formData.tipo} disabled={!formData.patientId} required>
@@ -228,15 +227,29 @@ export function AppointmentForm() {
             </div>
           </div>
           
+          {/* --- BLOCO DE RECORRÊNCIA ATUALIZADO --- */}
           <div className="space-y-4 rounded-lg border p-4">
             <div className="flex items-center space-x-2">
                 <Switch id="recurring-switch" checked={isRecurring} onCheckedChange={setIsRecurring} />
-                <Label htmlFor="recurring-switch" className="cursor-pointer">Repetir Semanalmente</Label>
+                <Label htmlFor="recurring-switch" className="cursor-pointer">Criar agendamento recorrente</Label>
             </div>
             {isRecurring && (
-              <div className="space-y-2 pt-4 border-t mt-4">
-                <Label>Número de Sessões *</Label>
-                <Input type="number" value={formData.sessions} onChange={(e) => handleInputChange("sessions", Number(e.target.value))} required min={1} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t mt-4">
+                <div className="space-y-2">
+                  <Label>Frequência *</Label>
+                  <Select onValueChange={(v) => handleSelectChange("frequency", v)} value={formData.frequency}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                          <SelectItem value="daily">Diariamente</SelectItem>
+                          <SelectItem value="weekly">Semanalmente</SelectItem>
+                          <SelectItem value="bi-weekly">Quinzenalmente</SelectItem>
+                      </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                    <Label>Número de Sessões *</Label>
+                    <Input type="number" value={formData.sessions} onChange={(e) => handleInputChange("sessions", Number(e.target.value))} required min={1} />
+                </div>
               </div>
             )}
           </div>
