@@ -1,4 +1,3 @@
-// components/pages/grade-agendamentos-client-page.tsx
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -51,7 +50,6 @@ export function GradeAgendamentosClientPage() {
     const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
     const [currentDate, setCurrentDate] = useState(new Date());
     
-    // --- CORREÇÃO 1: Mudar estado para suportar múltiplos agendamentos pendentes ---
     const [pendingAppointments, setPendingAppointments] = useState<Map<string, QuickAppointmentData[]>>(new Map());
 
     // Estados dos modais
@@ -124,7 +122,6 @@ export function GradeAgendamentosClientPage() {
         setIsEditModalOpen(true);
     };
 
-    // --- CORREÇÃO 2: Salvar múltiplos agendamentos pendentes no mesmo horário ---
     const handleSaveQuickAppointment = (data: QuickAppointmentData) => {
         const key = `${format(data.start, 'yyyy-MM-dd-HH-mm')}`;
         setPendingAppointments(prev => {
@@ -225,19 +222,16 @@ export function GradeAgendamentosClientPage() {
                                         const slotDate = new Date(`${format(day, 'yyyy-MM-dd')}T${time}`);
                                         const slotKey = format(slotDate, 'yyyy-MM-dd-HH-mm');
                                         
-                                        // --- CORREÇÃO 3: Usar .filter() para pegar todos os agendamentos no horário ---
                                         const existingAppointments = appointments.filter(a => format(a.start.toDate(), 'HH:mm') === time && format(a.start.toDate(), 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd'));
                                         const pendingAppointmentsInSlot = pendingAppointments.get(slotKey) || [];
 
-                                        // Combina agendamentos existentes e pendentes para renderização
                                         const allAppointmentsInSlot = [...existingAppointments, ...pendingAppointmentsInSlot];
 
                                         return (
                                             <td key={day.toISOString()} className="p-1 border align-top hover:bg-green-50 transition-colors cursor-pointer" onClick={() => handleOpenQuickModal(day, time)}>
                                                 <div className="space-y-1">
-                                                {/* --- CORREÇÃO 4: Mapear e renderizar múltiplos agendamentos --- */}
                                                 {allAppointmentsInSlot.map((app, index) => {
-                                                    const isExisting = 'id' in app; // Verifica se é um agendamento já salvo
+                                                    const isExisting = 'id' in app;
                                                     const professional = professionals.find(p => p.id === (isExisting ? (app as Appointment).professionalId : (app as QuickAppointmentData).professionalId));
                                                     
                                                     return (
@@ -251,8 +245,11 @@ export function GradeAgendamentosClientPage() {
                                                               }
                                                           }}
                                                         >
-                                                            <p className="font-bold">{professional?.fullName}</p>
-                                                            <p className="text-muted-foreground">{isExisting ? (app as Appointment).tipo : (app as QuickAppointmentData).specialty}</p>
+                                                            {/* --- ALTERAÇÃO APLICADA AQUI --- */}
+                                                            <p className="font-bold">{isExisting ? (app as Appointment).tipo : (app as QuickAppointmentData).specialty}</p>
+                                                            <p className="text-muted-foreground">{professional?.fullName}</p>
+                                                            {/* --- FIM DA ALTERAÇÃO --- */}
+
                                                             <p className="text-blue-600">Sala: {getRoomNameById(isExisting ? (app as Appointment).sala : (app as QuickAppointmentData).roomId)}</p>
                                                             {!isExisting && (app as QuickAppointmentData).isRecurring && <Badge variant="secondary" className="mt-1">Repete {(app as QuickAppointmentData).sessions}x</Badge>}
                                                         </div>
