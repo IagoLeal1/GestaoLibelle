@@ -8,13 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Patient, getPatients } from "@/services/patientService";
-import { Professional, getProfessionals } from "@/services/professionalService";
+import { Professional, getProfessionals } from "@/services/professionalService"; // Importar Profissionais
 import { getSpecialties, Specialty } from "@/services/specialtyService";
-import { findAvailableSlots, Slot, SlotFinderOptions } from "@/services/appointmentService";
 import { ArrowLeft, BrainCircuit, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter"; // Importar o MultiSelect
 
 interface TherapyNeed {
   terapia: string;
@@ -24,17 +23,19 @@ interface TherapyNeed {
 export default function AssistenteAgendamentoPage() {
     const [patients, setPatients] = useState<Patient[]>([]);
     const [specialties, setSpecialties] = useState<Specialty[]>([]);
-    const [professionals, setProfessionals] = useState<Professional[]>([]);
+    const [professionals, setProfessionals] = useState<Professional[]>([]); // Estado para profissionais
     const [selectedPatientId, setSelectedPatientId] = useState<string>('');
     const [therapyNeeds, setTherapyNeeds] = useState<TherapyNeed[]>([{ terapia: '', frequencia: 1 }]);
     const [loading, setLoading] = useState(false);
     const [aiSuggestion, setAiSuggestion] = useState<string>('');
     
+    // Estados para os novos filtros
     const [turnoPreferencial, setTurnoPreferencial] = useState<'manha' | 'tarde' | 'noite' | undefined>(undefined);
     const [profissionaisPreferidos, setProfissionaisPreferidos] = useState<string[]>([]);
 
     useEffect(() => {
         const loadData = async () => {
+            // Agora também buscamos os profissionais para o filtro
             const [patientsData, specialtiesData, professionalsData] = await Promise.all([
                 getPatients(), 
                 getSpecialties(),
@@ -56,43 +57,30 @@ export default function AssistenteAgendamentoPage() {
         setAiSuggestion('');
 
         try {
-            const allAvailableSlots: Record<string, Slot[]> = {};
-            for (const need of therapyNeeds) {
-                const options: SlotFinderOptions = {
-                    semana: new Date(),
-                    terapia: need.terapia,
-                    turno: turnoPreferencial,
-                    profissionaisPreferidosIds: profissionaisPreferidos
-                };
-                // --- CORREÇÃO APLICADA AQUI ---
-                // Agora, simplesmente atribuímos o resultado completo, sem o `.map()` que causava o erro.
-                allAvailableSlots[need.terapia] = await findAvailableSlots(options);
-            }
-
-            const preferences = {
-                turno: turnoPreferencial || 'Qualquer',
-                profissionais: professionals
-                    .filter(p => profissionaisPreferidos.includes(p.id))
-                    .map(p => p.fullName)
-            };
-
+            // A página agora envia as necessidades e as preferências do usuário.
+            // A API tratará de encontrar os padrões e consultar a IA.
             const response = await fetch('/api/schedule-assistant', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     patientNeeds: therapyNeeds,
-                    availableSlots: allAvailableSlots,
-                    preferences: preferences
+                    preferences: {
+                        turno: turnoPreferencial,
+                        profissionaisIds: profissionaisPreferidos
+                    }
                 }),
             });
 
-            if (!response.ok) throw new Error("A IA não conseguiu gerar uma resposta.");
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || "A IA não conseguiu gerar uma resposta.");
+            }
 
             const data = await response.json();
             setAiSuggestion(data.suggestion);
 
         } catch (error: any) {
-            toast.error(error.message || "Ocorreu um erro ao buscar sugestões.");
+            toast.error(error.message);
         } finally {
             setLoading(false);
         }
@@ -106,6 +94,7 @@ export default function AssistenteAgendamentoPage() {
     const addNeed = () => setTherapyNeeds([...therapyNeeds, { terapia: '', frequencia: 1 }]);
     const removeNeed = (index: number) => setTherapyNeeds(therapyNeeds.filter((_, i) => i !== index));
 
+    // Opções para o MultiSelect de profissionais
     const professionalOptions = professionals.map(p => ({ value: p.id, label: p.fullName }));
 
     return (
@@ -113,16 +102,18 @@ export default function AssistenteAgendamentoPage() {
             <div className="flex items-center gap-4">
                 <Link href="/agendamentos"><Button variant="ghost" size="icon"><ArrowLeft/></Button></Link>
                 <div>
-                    <h2 className="text-2xl font-bold tracking-tight">Assistente de Agendamento</h2>
-                    <p className="text-muted-foreground">Deixe a IA encontrar a melhor grade de horários para seu paciente.</p>
+                    <h2 className="text-2xl font-bold tracking-tight">Planeador de Terapia Contínua</h2>
+                    <p className="text-muted-foreground">Deixe a IA encontrar a melhor grade de horários a longo prazo para o seu paciente.</p>
                 </div>
             </div>
 
             <Card>
                 <CardHeader>
                     <CardTitle>1. Necessidades e Preferências</CardTitle>
+                    <CardDescription>Selecione o paciente, as terapias e as preferências para a montagem da grade.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                    {/* Seleção do Paciente */}
                     <div className="space-y-2">
                         <Label>Paciente *</Label>
                         <Select value={selectedPatientId} onValueChange={setSelectedPatientId}>
@@ -131,6 +122,7 @@ export default function AssistenteAgendamentoPage() {
                         </Select>
                     </div>
 
+                    {/* Necessidades de Terapia */}
                     {therapyNeeds.map((need, index) => (
                         <div key={index} className="flex items-end gap-2 p-2 border rounded-md">
                             <div className="flex-1 space-y-2"><Label>Terapia *</Label><Select value={need.terapia} onValueChange={val => handleNeedChange(index, 'terapia', val)}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{specialties.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
@@ -138,17 +130,17 @@ export default function AssistenteAgendamentoPage() {
                             <Button type="button" variant="ghost" size="icon" onClick={() => removeNeed(index)} disabled={therapyNeeds.length === 1}>✕</Button>
                         </div>
                     ))}
-                    <Button type="button" variant="outline" onClick={addNeed} className="w-full">Adicionar Terapia</Button>
-
+                    <Button type="button" variant="outline" onClick={addNeed} className="w-full">Adicionar Outra Terapia</Button>
+                    
+                    {/* Filtros de Preferência */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
                         <div className="space-y-2">
                             <Label>Turno de Preferência (Opcional)</Label>
                             <Select value={turnoPreferencial} onValueChange={(v) => setTurnoPreferencial(v as any)}>
                                 <SelectTrigger><SelectValue placeholder="Qualquer turno" /></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="manha">Manhã</SelectItem>
-                                    <SelectItem value="tarde">Tarde</SelectItem>
-                                    <SelectItem value="noite">Noite</SelectItem>
+                                    <SelectItem value="manha">Manhã (07:00 - 12:00)</SelectItem>
+                                    <SelectItem value="tarde">Tarde (12:00 - 18:00)</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -158,7 +150,7 @@ export default function AssistenteAgendamentoPage() {
                                 options={professionalOptions}
                                 selectedValues={profissionaisPreferidos}
                                 onSelectionChange={setProfissionaisPreferidos}
-                                placeholder="Qualquer profissional"
+                                placeholder="Todos os profissionais qualificados"
                             />
                         </div>
                     </div>
@@ -168,13 +160,13 @@ export default function AssistenteAgendamentoPage() {
             <div className="text-center">
                 <Button onClick={handleFindSchedules} disabled={loading} size="lg">
                     <BrainCircuit className="mr-2 h-5 w-5"/>
-                    {loading ? 'Analisando possibilidades...' : 'Encontrar Melhores Horários'}
+                    {loading ? 'Analisando padrões...' : 'Encontrar Plano de Terapia Ideal'}
                 </Button>
             </div>
 
             {aiSuggestion && (
                 <Card className="bg-blue-50 border-blue-200">
-                    <CardHeader><CardTitle className="flex items-center gap-2 text-blue-800"><Sparkles className="h-5 w-5"/> Sugestões da LibelleAI</CardTitle></CardHeader>
+                    <CardHeader><CardTitle className="flex items-center gap-2 text-blue-800"><Sparkles className="h-5 w-5"/> Plano de Terapia Sugerido</CardTitle></CardHeader>
                     <CardContent>
                         <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: aiSuggestion.replace(/\n/g, '<br />') }} />
                     </CardContent>

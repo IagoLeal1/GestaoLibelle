@@ -21,7 +21,7 @@ const menuItems = [
   { title: "Pacientes", url: "/pacientes", icon: Users, roles: ['admin', 'profissional', 'funcionario'] },
   { title: "Profissionais", url: "/profissionais", icon: UserCheck, roles: ['admin', 'funcionario'] },
   { title: "Especialidades", url: "/especialidades", icon: BadgeDollarSign, roles: ['admin'] },
-  { title: "Financeiro", url: "/financeiro", icon: DollarSign, roles: ['admin', 'funcionario'] },
+  { title: "Financeiro", url: "/financeiro", icon: DollarSign, roles: ['admin'] },
   // { title: "Relatórios", url: "/relatorios", icon: FileText, roles: ['admin', 'funcionario'] },
   // { title: "Avisos", url: "/avisos", icon: MessageSquare, roles: ['admin', 'profissional', 'funcionario', 'familiar'] },
   // { title: "Tarefas", url: "/tarefas", icon: CheckCircle, roles: ['admin', 'profissional', 'funcionario'] },

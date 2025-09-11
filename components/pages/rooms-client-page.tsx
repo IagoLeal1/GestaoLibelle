@@ -1,27 +1,27 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { MapPin, Clock, User, Settings, CheckCircle, RefreshCw, Plus, Edit } from "lucide-react";
+import { MapPin, User, Settings, CheckCircle, RefreshCw, Plus, Edit, Calendar, AlertTriangle } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Room, getRooms, RoomFormData, createRoom, updateRoom, deleteRoom } from "@/services/roomService";
 import { getAppointmentsByDate, Appointment } from "@/services/appointmentService";
 import { RoomModal } from "@/components/modals/room-modal";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
-import { format, setHours, setMinutes, setSeconds, setMilliseconds, addMinutes, isWithinInterval } from "date-fns";
+import { format, setHours, setMinutes, setSeconds, setMilliseconds, addMinutes, isWithinInterval, parseISO } from "date-fns";
 import { Timestamp } from "firebase/firestore";
 
-// --- NOVAS INTERFACES ESPECÍFICAS PARA ESTA PÁGINA ---
-interface RoomOccupation {
-    professionalName: string;
-    patientName: string;
-    start: Timestamp;
-    end: Timestamp;
+// --- INTERFACES ATUALIZADAS ---
+interface AppointmentDetails {
+  patientName?: string;
+  professionalName?: string;
+  terapia?: string; // <-- 1. CAMPO ADICIONADO
 }
 
 interface TimeSlot {
@@ -29,19 +29,16 @@ interface TimeSlot {
   start: Date;
   end: Date;
   status: 'livre' | 'ocupada';
-  appointmentDetails?: {
-    patientName?: string;
-    professionalName?: string;
-  }
+  isConflict: boolean;
+  appointments: AppointmentDetails[];
 }
 
 interface ProcessedRoom extends Room {
   dynamicStatus: 'livre' | 'ocupada' | 'manutencao';
   schedule: TimeSlot[];
 }
-// --------------------------------------------------------
 
-// --- Funções de Ajuda (Helpers) ---
+// --- FUNÇÕES DE AJUDA ---
 const getStatusInfo = (status?: string) => {
     const defaultConfig = { label: "Inativa", color: "bg-gray-400", textColor: "text-white", icon: Settings, borderColor: "border-gray-400" };
     if (!status) return defaultConfig;
@@ -53,27 +50,21 @@ const getStatusInfo = (status?: string) => {
     return statusConfig[status as keyof typeof statusConfig] || defaultConfig;
 };
 
-const generateTimeSlots = (): TimeSlot[] => {
+const generateTimeSlots = (forDate: Date): Omit<TimeSlot, 'status' | 'isConflict' | 'appointments'>[] => {
   const specificStartTimes = [
     '07:20', '08:10', '09:00', '09:50', '10:40', '11:30', '12:20',
     '13:20', '14:10', '15:00', '15:50', '16:40', '17:30'
   ];
-  const today = new Date();
-  const slots: TimeSlot[] = [];
-
-  for (const timeStr of specificStartTimes) {
+  return specificStartTimes.map(timeStr => {
     const [hour, minute] = timeStr.split(':').map(Number);
-    const startTime = setMilliseconds(setSeconds(setMinutes(setHours(today, hour), minute), 0), 0);
+    const startTime = setMilliseconds(setSeconds(setMinutes(setHours(forDate, hour), minute), 0), 0);
     const endTime = addMinutes(startTime, 50);
-
-    slots.push({
+    return {
       time: format(startTime, 'HH:mm'),
       start: startTime,
       end: endTime,
-      status: 'livre',
-    });
-  }
-  return slots;
+    };
+  });
 };
 
 // --- Componente Principal ---
@@ -87,62 +78,61 @@ export function RoomsClientPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [andarSelecionado, setAndarSelecionado] = useState("todos");
   const [tipoSelecionado, setTipoSelecionado] = useState("todos");
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
-    const todayString = new Date().toISOString().split('T')[0];
     const [roomsData, appointmentsData] = await Promise.all([
       getRooms(),
-      getAppointmentsByDate(todayString)
+      getAppointmentsByDate(selectedDate)
     ]);
     setBaseRooms(roomsData);
     setAppointments(appointmentsData);
     setLoading(false);
-  };
+  }, [selectedDate]);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   useEffect(() => {
-    const dayTimeSlots = generateTimeSlots();
+    const dateForSlots = parseISO(`${selectedDate}T00:00:00`);
+    const dayTimeSlots = generateTimeSlots(dateForSlots);
     
     const updatedRooms: ProcessedRoom[] = baseRooms.map(room => {
-      let dynamicStatus: ProcessedRoom['dynamicStatus'] = 'livre';
-      if (room.status !== 'ativa') {
-        dynamicStatus = 'manutencao';
-      }
-      
       const appointmentsForRoom = appointments.filter(a => a.sala === room.id && a.status !== 'cancelado');
       const now = new Date();
-      const isCurrentlyOccupied = appointmentsForRoom.some(a => isWithinInterval(now, { start: a.start.toDate(), end: a.end.toDate() }));
-      if (isCurrentlyOccupied) {
-        dynamicStatus = 'ocupada';
-      }
+      const isToday = selectedDate === new Date().toISOString().split('T')[0];
+      const isCurrentlyOccupied = isToday && appointmentsForRoom.some(a => isWithinInterval(now, { start: a.start.toDate(), end: a.end.toDate() }));
+      
+      const dynamicStatus = room.status !== 'ativa' ? 'manutencao' : isCurrentlyOccupied ? 'ocupada' : 'livre';
 
       const schedule: TimeSlot[] = dayTimeSlots.map(slot => {
-        const occupyingAppointment = appointmentsForRoom.find(app => 
+        const occupyingAppointments = appointmentsForRoom.filter(app => 
           isWithinInterval(slot.start, { start: app.start.toDate(), end: app.end.toDate() }) ||
           isWithinInterval(app.start.toDate(), { start: slot.start, end: slot.end })
         );
 
-        if (occupyingAppointment) {
-          return {
-            ...slot,
-            status: 'ocupada',
-            appointmentDetails: {
-              patientName: occupyingAppointment.patientName,
-              professionalName: occupyingAppointment.professionalName
-            }
-          };
-        }
-        return { ...slot, status: 'livre' };
+        const uniquePatientIds = new Set(occupyingAppointments.map(app => app.patientId));
+        const isConflict = uniquePatientIds.size > 1;
+
+        return {
+          ...slot,
+          status: occupyingAppointments.length > 0 ? 'ocupada' : 'livre',
+          isConflict: isConflict,
+          // --- 2. DADOS DA TERAPIA SÃO ADICIONADOS AQUI ---
+          appointments: occupyingAppointments.map(app => ({
+            patientName: app.patientName,
+            professionalName: app.professionalName,
+            terapia: app.tipo // Adiciona a terapia aos detalhes
+          }))
+        };
       });
 
       return { ...room, dynamicStatus, schedule };
     });
     setProcessedRooms(updatedRooms);
-  }, [baseRooms, appointments]);
+  }, [baseRooms, appointments, selectedDate]);
 
   const handleFormSubmit = async (data: RoomFormData) => {
     setIsSubmitting(true);
@@ -183,12 +173,7 @@ export function RoomsClientPage() {
     }, {} as Record<number, ProcessedRoom[]>),
   [salasFiltradas]);
   
-  if (loading) return <p className="p-4 text-center">Carregando mapeamento das salas...</p>;
-
-  const allowedRoles = ['admin', 'funcionario'];
-  if (!firestoreUser || !allowedRoles.includes(firestoreUser.profile.role)) {
-      return <p className="p-4">Você não tem permissão para acessar esta página.</p>
-  }
+  if (loading) return <p className="p-4 text-center">A carregar o mapeamento das salas...</p>;
 
   return (
     <>
@@ -200,21 +185,25 @@ export function RoomsClientPage() {
               </div>
               <div className="flex w-full sm:w-auto gap-2">
                   <Button variant="outline" onClick={fetchData} className="w-full"><RefreshCw className="mr-2 h-4 w-4" /> Atualizar</Button>
-                  <Button onClick={() => setEditModalState({ isOpen: true, data: null })} className="w-full"><Plus className="mr-2 h-4 w-4" /> Gerenciar Salas</Button>
+                  <Button onClick={() => setEditModalState({ isOpen: true, data: null })} className="w-full"><Plus className="mr-2 h-4 w-4" /> Gerir Salas</Button>
               </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Total de Salas</p><p className="text-2xl font-bold">{estatisticas.total}</p></CardContent></Card>
-            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Ocupadas</p><p className="text-2xl font-bold">{estatisticas.ocupadas}</p></CardContent></Card>
-            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Livres</p><p className="text-2xl font-bold">{estatisticas.livres}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Ocupadas (Agora)</p><p className="text-2xl font-bold">{estatisticas.ocupadas}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Livres (Agora)</p><p className="text-2xl font-bold">{estatisticas.livres}</p></CardContent></Card>
             <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Em Manutenção</p><p className="text-2xl font-bold">{estatisticas.manutencao}</p></CardContent></Card>
           </div>
 
           <Card>
             <CardHeader><CardTitle>Filtros</CardTitle></CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="date-filter" className="flex items-center gap-2"><Calendar className="h-4 w-4"/>Data de Visualização</Label>
+                  <Input id="date-filter" type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />
+                </div>
                 <div className="space-y-2">
                   <Label>Andar</Label>
                   <Select value={andarSelecionado} onValueChange={setAndarSelecionado}>
@@ -262,7 +251,7 @@ export function RoomsClientPage() {
                                     <Label className="text-xs">Agenda do Dia</Label>
                                     <div className="flex flex-wrap gap-1">
                                         {sala.schedule.slice(0, 6).map(slot => (
-                                            <Badge key={slot.time} variant="outline" className={`font-semibold ${slot.status === 'ocupada' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                                            <Badge key={slot.time} variant="outline" className={`font-semibold ${slot.isConflict ? 'bg-yellow-100 text-yellow-800 border-yellow-400' : slot.status === 'ocupada' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
                                                 {slot.time}
                                             </Badge>
                                         ))}
@@ -272,14 +261,14 @@ export function RoomsClientPage() {
                             </CardContent>
                           </Card>
                         </DialogTrigger>
-                        <DialogContent className="max-w-md">
+                        <DialogContent className="sm:max-w-2xl">
                           <DialogHeader>
                             <DialogTitle>Sala {sala.number} - {sala.name}</DialogTitle>
                           </DialogHeader>
                           <div className="py-4 space-y-4">
                             <div className="flex justify-between items-center">
                                 <div className="space-y-1">
-                                    <Label>Status Atual</Label>
+                                    <Label>Status (Agora)</Label>
                                     <div><Badge className={`${statusInfo.color} ${statusInfo.textColor}`}>{statusInfo.label}</Badge></div>
                                 </div>
                                 <Button variant="outline" size="sm" onClick={() => setEditModalState({ isOpen: true, data: sala })}>
@@ -287,16 +276,26 @@ export function RoomsClientPage() {
                                 </Button>
                             </div>
                             <div>
-                                <Label>Agenda do Dia</Label>
-                                <div className="grid grid-cols-3 gap-2 mt-2 max-h-60 overflow-y-auto pr-2">
+                                <Label>Agenda para {format(parseISO(`${selectedDate}T00:00:00`), 'dd/MM/yyyy')}</Label>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2 max-h-72 overflow-y-auto pr-2">
                                     {sala.schedule.map(slot => (
-                                        <div key={slot.time} className={`p-2 rounded-md ${slot.status === 'ocupada' ? 'bg-red-50' : 'bg-green-50'}`}>
-                                            <p className={`font-semibold text-sm ${slot.status === 'ocupada' ? 'text-red-800' : 'text-green-800'}`}>
-                                                {slot.time}
-                                            </p>
-                                            <p className={`text-xs truncate ${slot.status === 'ocupada' ? 'text-red-700' : 'text-green-700'}`}>
-                                                {slot.status === 'ocupada' ? (slot.appointmentDetails?.patientName || 'Ocupada') : 'Livre'}
-                                            </p>
+                                        <div key={slot.time} className={`p-2 rounded-md ${slot.isConflict ? 'bg-yellow-100 border border-yellow-400' : slot.status === 'ocupada' ? 'bg-red-50' : 'bg-green-50'}`}>
+                                            <div className="flex justify-between items-center">
+                                                <p className={`font-semibold text-sm ${slot.isConflict ? 'text-yellow-800' : slot.status === 'ocupada' ? 'text-red-800' : 'text-green-800'}`}>
+                                                    {slot.time}
+                                                </p>
+                                                {slot.isConflict && <AlertTriangle className="h-4 w-4 text-yellow-600"/>}
+                                            </div>
+                                            {slot.appointments.length > 0 ? slot.appointments.map((app, index) => (
+                                                <div key={index} className="mt-1 border-t pt-1 space-y-1">
+                                                    {/* --- 3. EXIBIÇÃO DA TERAPIA, PACIENTE E PROFISSIONAL --- */}
+                                                    <p className="text-xs truncate font-bold text-gray-900">{app.terapia?.split(' ').slice(0, 2).join(' ')}</p>
+                                                    <p className="text-xs truncate font-medium text-gray-800">{app.patientName}</p>
+                                                    <p className="text-xs text-muted-foreground truncate">{app.professionalName}</p>
+                                                </div>
+                                            )) : (
+                                                <p className="text-xs text-green-700">Livre</p>
+                                            )}
                                         </div>
                                     ))}
                                 </div>

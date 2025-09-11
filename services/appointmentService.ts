@@ -17,10 +17,10 @@ import {
 import { 
     addWeeks, startOfDay, endOfDay, differenceInMinutes, addDays, 
     format, getHours, getMinutes, addMonths, startOfWeek, endOfWeek,
-    eachDayOfInterval, setHours, setMinutes, addMinutes // <-- 'addMinutes' ADICIONADO AQUI
+    eachDayOfInterval, setHours, setMinutes, addMinutes
 } from 'date-fns';
-import { ptBR } from "date-fns/locale"; // <-- IMPORTAÇÃO DO 'ptBR' ADICIONADA AQUI
-import { getProfessionalById, getProfessionals, Professional } from "./professionalService"; // <-- 'getProfessionals' ADICIONADO AQUI
+import { ptBR } from "date-fns/locale";
+import { getProfessionalById, getProfessionals, Professional } from "./professionalService";
 import { addTransaction, deleteTransactionByAppointmentId, TransactionFormData, getBankAccounts } from "./financialService";
 import { findOrCreateCostCenter } from "./settingsService";
 import { Room, getRooms } from "./roomService";
@@ -80,33 +80,25 @@ export interface QuickAppointmentData {
   frequency: RecurrenceFrequency;
 }
 
-
 // --- FUNÇÃO DE REPASSE ---
 const handleRepasseTransaction = async (appointment: Appointment) => {
   await deleteTransactionByAppointmentId(appointment.id);
-
   const shouldGenerateRepasse =
     appointment.status === 'finalizado' ||
     (appointment.status === 'nao_compareceu' && appointment.statusSecundario === 'fnj_paciente');
-
   if (!shouldGenerateRepasse) {
     return { success: true, message: "Nenhuma condição para repasse atendida." };
   }
-
   const professional = await getProfessionalById(appointment.professionalId);
   if (!professional?.financeiro) {
     return { success: false, error: "Dados financeiros do profissional não encontrados." };
   }
-
   await findOrCreateCostCenter(appointment.tipo);
-  
   const allBankAccounts = await getBankAccounts();
   const defaultAccount = allBankAccounts.find(acc => acc.isDefault);
-  
   let valorRepasse = 0;
   const { tipoPagamento, percentualRepasse, horarioFixoInicio, horarioFixoFim } = professional.financeiro;
   const valorConsulta = appointment.valorConsulta || 0;
-
   if (tipoPagamento === 'fixo') {
     valorRepasse = 0;
   } 
@@ -118,23 +110,19 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
     const appointmentHour = getHours(appointmentTime);
     const appointmentMinute = getMinutes(appointmentTime);
     const appointmentTotalMinutes = appointmentHour * 60 + appointmentMinute;
-
     const [startHour = 0, startMinute = 0] = horarioFixoInicio?.split(':').map(Number) || [];
     const [endHour = 0, endMinute = 0] = horarioFixoFim?.split(':').map(Number) || [];
     const fixedStartTotalMinutes = startHour * 60 + startMinute;
     const fixedEndTotalMinutes = endHour * 60 + endMinute;
-
     if (appointmentTotalMinutes >= fixedStartTotalMinutes && appointmentTotalMinutes < fixedEndTotalMinutes) {
       valorRepasse = 0;
     } else {
       valorRepasse = (valorConsulta * (percentualRepasse || 0)) / 100;
     }
   }
-
   if (valorRepasse <= 0) {
     return { success: true, message: "Valor de repasse é zero, nenhuma transação criada." };
   }
-
   const transactionData: TransactionFormData = {
     type: 'despesa',
     description: `Repasse ${professional.fullName} - Sessão ${appointment.patientName} ${format(appointment.start.toDate(), 'dd/MM')}`,
@@ -150,13 +138,11 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
     patientName: appointment.patientName,
     appointmentId: appointment.id,
   };
-
   return addTransaction(transactionData);
 };
 
 
 // --- Funções de Busca e CRUD ---
-
 export const getAppointmentsByDate = async (dateString: string): Promise<Appointment[]> => {
   try {
     if (!dateString) return [];
@@ -180,7 +166,6 @@ export const getAppointmentsByDate = async (dateString: string): Promise<Appoint
     return [];
   }
 };
-
 export const getAppointmentsByProfessional = async (professionalId: string, dateString: string): Promise<Appointment[]> => {
     try {
       if (!dateString) return [];
@@ -202,7 +187,6 @@ export const getAppointmentsByProfessional = async (professionalId: string, date
       return [];
     }
 };
-
 export const getAppointmentsForReport = async (options: { professionalId?: string, patientId?: string, startDate: Date, endDate: Date }): Promise<Appointment[]> => {
     try {
         const appointmentsRef = collection(db, 'appointments');
@@ -221,7 +205,6 @@ export const getAppointmentsForReport = async (options: { professionalId?: strin
         return [];
     }
 };
-
 export const createAppointment = async (data: AppointmentFormData) => {
   try {
     const patientDoc = await getDoc(doc(db, 'patients', data.patientId));
@@ -251,7 +234,6 @@ export const createAppointment = async (data: AppointmentFormData) => {
     return { success: false, error: "Falha ao criar agendamento." };
   }
 };
-
 export const createAppointmentBlock = async (data: AppointmentBlockFormData) => {
   try {
     const { patientId, professionalId, data: startDateStr, horaInicio, horaFim, sessions, frequency, ...restData } = data;
@@ -285,7 +267,6 @@ export const createAppointmentBlock = async (data: AppointmentBlockFormData) => 
           sessionDate = addWeeks(firstAppointmentDate, i);
           break;
       }
-
       const sessionEndDate = new Date(sessionDate.getTime() + durationInMinutes * 60000);
       const newAppointmentRef = doc(collection(db, "appointments"));
       batch.set(newAppointmentRef, {
@@ -295,7 +276,6 @@ export const createAppointmentBlock = async (data: AppointmentBlockFormData) => 
         blockId: blockId, isLastInBlock: (i === sessions - 1)
       });
     }
-
     await batch.commit();
     return { success: true };
   } catch (error) {
@@ -303,7 +283,6 @@ export const createAppointmentBlock = async (data: AppointmentBlockFormData) => 
     return { success: false, error: "Falha ao criar o bloco de agendamentos." };
   }
 };
-
 export const createMultipleAppointments = async (patientId: string, appointmentsData: QuickAppointmentData[]) => {
   const patientDocRef = doc(db, 'patients', patientId);
   try {
@@ -332,9 +311,7 @@ export const createMultipleAppointments = async (patientId: string, appointments
         status: 'agendado' as AppointmentStatus,
         blockId: newAppointmentRef.id, isLastInBlock: !appData.isRecurring,
       };
-      
       batch.set(newAppointmentRef, appointmentData);
-
       if (appData.isRecurring && appData.sessions > 1) {
         const durationInMinutes = differenceInMinutes(appData.end, appData.start);
         for (let i = 1; i < appData.sessions; i++) {
@@ -361,7 +338,6 @@ export const createMultipleAppointments = async (patientId: string, appointments
         }
       }
     }
-
     await batch.commit();
     return { success: true };
   } catch (error) {
@@ -370,7 +346,6 @@ export const createMultipleAppointments = async (patientId: string, appointments
     return { success: false, error: errorMessage };
   }
 };
-
 export const updateAppointment = async (id: string, data: Partial<AppointmentFormData & { status: AppointmentStatus }>) => {
   try {
     const docRef = doc(db, 'appointments', id);
@@ -408,7 +383,6 @@ export const updateAppointment = async (id: string, data: Partial<AppointmentFor
     return { success: false, error: errorMessage };
   }
 };
-
 export const deleteAppointment = async (id: string) => {
   try {
     await deleteTransactionByAppointmentId(id);
@@ -419,7 +393,6 @@ export const deleteAppointment = async (id: string) => {
     return { success: false, error: "Falha ao deletar agendamento." };
   }
 };
-
 export const getRenewableAppointments = async (): Promise<Appointment[]> => {
   try {
     const today = startOfDay(new Date());
@@ -437,7 +410,6 @@ export const getRenewableAppointments = async (): Promise<Appointment[]> => {
     return [];
   }
 };
-
 export const renewAppointmentBlock = async (lastAppointment: Appointment, sessionsToRenew: number) => {
   try {
     if (!sessionsToRenew || sessionsToRenew <= 0) return { success: false, error: "O número de sessões para renovação deve ser maior que zero." };
@@ -467,7 +439,6 @@ export const renewAppointmentBlock = async (lastAppointment: Appointment, sessio
     return { success: false, error: "Falha ao renovar o bloco." };
   }
 };
-
 export const dismissRenewal = async (appointmentId: string) => {
   try {
     await updateDoc(doc(db, 'appointments', appointmentId), { isLastInBlock: false });
@@ -477,7 +448,6 @@ export const dismissRenewal = async (appointmentId: string) => {
     return { success: false, error: "Falha ao dispensar o aviso de renovação." };
   }
 };
-
 export const deleteFutureAppointmentsInBlock = async (appointment: Appointment) => {
   try {
     if (!appointment.blockId) return { success: false, error: "Este agendamento não faz parte de um bloco." };
@@ -500,7 +470,6 @@ export const deleteFutureAppointmentsInBlock = async (appointment: Appointment) 
     return { success: false, error: "Falha ao excluir o bloco de agendamentos." };
   }
 };
-
 export const getOccupiedRoomIdsByTime = async (startTime: Date, endTime: Date): Promise<string[]> => {
     try {
       const q = query(
@@ -517,7 +486,6 @@ export const getOccupiedRoomIdsByTime = async (startTime: Date, endTime: Date): 
       return [];
     }
 };
-
 export interface RenewableBlock {
   patientId: string;
   patientName: string;
@@ -554,7 +522,6 @@ export const getRenewableAppointmentsByPatient = async (): Promise<RenewableBloc
     return [];
   }
 };
-
 export interface Slot {
   dia: Date;
   horario: string;
@@ -568,7 +535,6 @@ export interface SlotFinderOptions {
   turno?: 'manha' | 'tarde' | 'noite';
   profissionaisPreferidosIds?: string[];
 }
-
 export const findAvailableSlots = async (options: SlotFinderOptions): Promise<Slot[]> => {
   const { semana, terapia, duracaoMinutos = 50, turno, profissionaisPreferidosIds = [] } = options;
   const inicioSemana = startOfWeek(semana, { weekStartsOn: 1 });
@@ -635,4 +601,164 @@ export const findAvailableSlots = async (options: SlotFinderOptions): Promise<Sl
     }
   }
   return slotsDisponiveis;
+};
+
+// --- NOVA FUNÇÃO ESTRATÉGICA (COM A CORREÇÃO DO ERRO) ---
+
+export interface SchedulePattern {
+  terapia: string;
+  professional: Professional;
+  diaSemana: string;
+  horario: string;
+  consistencia: number;
+  justificativa: string;
+}
+
+export const findRecurringSchedulePatterns = async (
+  terapiasNecessarias: { terapia: string, frequencia: number }[],
+  preferences: { turno?: 'manha' | 'tarde' | 'noite', profissionaisIds?: string[] }
+): Promise<SchedulePattern[]> => {
+  
+  const { turno, profissionaisIds = [] } = preferences;
+
+  const inicioPeriodo = startOfDay(new Date());
+  const fimPeriodo = endOfDay(addMonths(new Date(), 3));
+
+  const [todosProfissionais, agendamentosFuturos] = await Promise.all([
+    getProfessionals(),
+    getAppointmentsForReport({ startDate: inicioPeriodo, endDate: fimPeriodo })
+  ]);
+
+  const patterns: SchedulePattern[] = [];
+  
+  // --- CORREÇÃO APLICADA AQUI ---
+  const horariosBase = {
+    manha: ['07:20', '08:10', '09:00', '09:50', '10:40', '11:30'],
+    tarde: ['12:20', '13:20', '14:10', '15:00', '15:50', '16:40', '17:30'],
+    noite: ['16:40', '17:30'] // Adicionado o turno da noite
+  };
+  const horariosPadrao = turno ? horariosBase[turno] : [...horariosBase.manha, ...horariosBase.tarde, ...horariosBase.noite];
+  // --- FIM DA CORREÇÃO ---
+  
+  const diasDaSemana = ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
+
+  for (const necessidade of terapiasNecessarias) {
+    let profissionaisQualificados = todosProfissionais.filter(
+      p => p.especialidade.toLowerCase() === necessidade.terapia.toLowerCase() && p.status === 'ativo'
+    );
+    
+    if (profissionaisIds.length > 0) {
+        const preferidosQualificados = profissionaisQualificados.filter(p => profissionaisIds.includes(p.id));
+        if (preferidosQualificados.length > 0) {
+            profissionaisQualificados = preferidosQualificados;
+        }
+    }
+
+    for (const prof of profissionaisQualificados) {
+      for (const dia of diasDaSemana) {
+        if (!prof.diasAtendimento.includes(dia)) continue;
+
+        for (const horario of horariosPadrao) {
+          const conflitos = agendamentosFuturos.filter(ag => 
+            ag.professionalId === prof.id &&
+            format(ag.start.toDate(), 'EEEE', { locale: ptBR }).toLowerCase().replace('-feira', '') === dia &&
+            format(ag.start.toDate(), 'HH:mm') === horario
+          ).length;
+
+          const totalSemanasAnalise = 12;
+          const consistencia = 1 - (conflitos / totalSemanasAnalise);
+          
+          if (consistencia > 0.5) {
+            patterns.push({
+              terapia: necessidade.terapia,
+              professional: prof,
+              diaSemana: dia.charAt(0).toUpperCase() + dia.slice(1) + "-feira",
+              horario: horario,
+              consistencia: consistencia,
+              justificativa: `Este horário tem uma alta taxa de disponibilidade (${(consistencia * 100).toFixed(0)}%) para ${prof.fullName} nas próximas semanas.`
+            });
+          }
+        }
+      }
+    }
+  }
+  return patterns;
+};
+
+// --- NOVA INTERFACE E FUNÇÃO PARA SUGESTÃO DE TROCAS ---
+
+export interface SwapCandidate {
+  agendamentoParaMover: {
+    id: string;
+    paciente: string;
+    terapia: string;
+    diaAtual: string;
+    horarioAtual: string;
+  };
+  novoSlotSugerido: {
+    dia: string;
+    horario: string;
+  };
+  profissional: Professional;
+}
+
+/**
+ * Encontra agendamentos existentes que podem ser movidos para libertar espaço
+ * para uma nova terapia.
+ */
+export const findPotentialSwapCandidates = async (
+  terapiaNecessaria: string,
+  profissionaisQualificados: Professional[]
+): Promise<SwapCandidate[]> => {
+  const inicioPeriodo = startOfDay(new Date());
+  const fimPeriodo = endOfDay(addMonths(new Date(), 3));
+
+  const agendamentosFuturos = await getAppointmentsForReport({ startDate: inicioPeriodo, endDate: fimPeriodo });
+  const candidatos: SwapCandidate[] = [];
+
+  // Encontra todos os horários livres de cada profissional qualificado
+  for (const prof of profissionaisQualificados) {
+    const seusAgendamentos = agendamentosFuturos.filter(a => a.professionalId === prof.id);
+    const seusHorariosLivres: { dia: string, horario: string }[] = [];
+
+    // Lógica simplificada para encontrar horários livres (pode ser aprimorada)
+    const diasDaSemana = ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
+    const horariosPadrao = ['09:00', '09:50', '10:40', '11:30', '13:20', '14:10', '15:00', '15:50', '16:40'];
+
+    for (const dia of diasDaSemana) {
+      if (!prof.diasAtendimento.includes(dia)) continue;
+      for (const horario of horariosPadrao) {
+        const ocupado = seusAgendamentos.some(a => 
+            format(a.start.toDate(), 'EEEE', { locale: ptBR }).toLowerCase().replace('-feira', '') === dia &&
+            format(a.start.toDate(), 'HH:mm') === horario
+        );
+        if (!ocupado) {
+          seusHorariosLivres.push({ dia, horario });
+        }
+      }
+    }
+
+    // Para cada agendamento existente, verifica se ele pode ser movido para um horário livre
+    for (const agendamento of seusAgendamentos) {
+      if (seusHorariosLivres.length > 0) {
+        // Encontramos um candidato!
+        const slotDestino = seusHorariosLivres.shift(); // Pega o primeiro horário livre
+        candidatos.push({
+          agendamentoParaMover: {
+            id: agendamento.id,
+            paciente: agendamento.patientName,
+            terapia: agendamento.tipo,
+            diaAtual: format(agendamento.start.toDate(), 'EEEE', { locale: ptBR }),
+            horarioAtual: format(agendamento.start.toDate(), 'HH:mm'),
+          },
+          novoSlotSugerido: {
+            dia: slotDestino!.dia.charAt(0).toUpperCase() + slotDestino!.dia.slice(1) + "-feira",
+            horario: slotDestino!.horario
+          },
+          profissional: prof,
+        });
+      }
+    }
+  }
+  return candidatos;
 };
