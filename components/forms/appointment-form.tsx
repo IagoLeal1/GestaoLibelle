@@ -39,8 +39,8 @@ export function AppointmentForm() {
   useEffect(() => {
     const fetchData = async () => {
         const [patientsData, professionalsData, specialtiesData, roomsData] = await Promise.all([
-            getPatients(), 
-            getProfessionals(),
+            getPatients('ativo'), 
+            getProfessionals('ativo'),
             getSpecialties(),
             getRooms()
         ]);

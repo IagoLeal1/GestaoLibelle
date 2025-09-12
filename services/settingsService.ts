@@ -142,6 +142,33 @@ export const findOrCreateCostCenter = async (name: string) => {
   }
 };
 
+/**
+ * --- NOVA FUNÇÃO ---
+ * Verifica se um plano de contas (categoria) com um nome específico já existe.
+ * Se não existir, cria um novo com um código padrão.
+ */
+export const findOrCreateAccountPlan = async (name: string, category: 'receita' | 'despesa') => {
+  if (!name || name.trim() === '') {
+    return;
+  }
+
+  try {
+    const accountPlansRef = collection(db, "accountPlans");
+    const q = query(accountPlansRef, where("name", "==", name), where("category", "==", category), limit(1));
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+      console.log(`Plano de contas "${name}" não encontrado. Criando...`);
+      // Gera um código simples para identificação
+      const code = `${category.substring(0, 1)}.${name.replace(/\s+/g, '').substring(0, 4).toLowerCase()}.${Date.now().toString().slice(-4)}`;
+      await addDoc(accountPlansRef, { name, category, code });
+    }
+  } catch (error) {
+    console.error(`Erro ao verificar/criar plano de contas "${name}":`, error);
+  }
+};
+
+
 // --- FUNÇÕES DE PROFISSIONAIS (PARA REPASSE) ---
 
 export const getProfessionalsForRepasse = async (): Promise<Professional[]> => {

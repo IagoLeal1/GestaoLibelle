@@ -57,9 +57,14 @@ export interface ProfessionalFormData {
   }
 }
 
-export const getProfessionals = async (): Promise<Professional[]> => {
+export const getProfessionals = async (status?: 'ativo' | 'inativo' | 'licenca'): Promise<Professional[]> => {
   try {
-    const q = query(collection(db, 'professionals'), orderBy('fullName'));
+    let q;
+    if (status) {
+      q = query(collection(db, 'professionals'), where('status', '==', status), orderBy('fullName'));
+    } else {
+      q = query(collection(db, 'professionals'), orderBy('fullName'));
+    }
     const snapshot = await getDocs(q);
     if (snapshot.empty) {
       return [];

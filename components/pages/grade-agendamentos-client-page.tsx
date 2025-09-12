@@ -69,7 +69,10 @@ export function GradeAgendamentosClientPage() {
         const fetchInitialData = async () => {
             setLoading(true);
             const [patientsData, professionalsData, specialtiesData, roomsData] = await Promise.all([
-                getPatients(), getProfessionals(), getSpecialties(), getRooms(),
+                getPatients('ativo'), 
+                getProfessionals('ativo'), 
+                getSpecialties(), 
+                getRooms(),
             ]);
             setPatients(patientsData);
             setProfessionals(professionalsData);

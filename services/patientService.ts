@@ -8,7 +8,8 @@ import {
   Timestamp, 
   doc, 
   getDoc, 
-  updateDoc 
+  updateDoc,
+  where
 } from "firebase/firestore";
 
 // --- INTERFACES REESTRUTURADAS ---
@@ -85,9 +86,14 @@ export interface PatientFormData {
 
 // --- Funções do Serviço ---
 
-export const getPatients = async (): Promise<Patient[]> => {
+export const getPatients = async (status?: 'ativo' | 'inativo' | 'suspenso'): Promise<Patient[]> => {
   try {
-    const q = query(collection(db, 'patients'), orderBy('fullName'));
+    let q;
+    if (status) {
+      q = query(collection(db, 'patients'), where('status', '==', status), orderBy('fullName'));
+    } else {
+      q = query(collection(db, 'patients'), orderBy('fullName'));
+    }
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Patient));
   } catch (error) {

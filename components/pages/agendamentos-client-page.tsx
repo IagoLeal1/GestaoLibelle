@@ -95,8 +95,8 @@ export function AgendamentosClientPage() {
     try {
       if (isInitialLoad) {
         const [professionalsData, patientsData, roomsData] = await Promise.all([ 
-          getProfessionals(),
-          getPatients(),
+          getProfessionals('ativo'),
+          getPatients('ativo'),
           getRooms()
         ]);
         setProfessionals(professionalsData);

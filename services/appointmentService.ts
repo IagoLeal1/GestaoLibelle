@@ -22,7 +22,7 @@ import {
 import { ptBR } from "date-fns/locale";
 import { getProfessionalById, getProfessionals, Professional } from "./professionalService";
 import { addTransaction, deleteTransactionByAppointmentId, TransactionFormData, getBankAccounts } from "./financialService";
-import { findOrCreateCostCenter } from "./settingsService";
+import { findOrCreateCostCenter, findOrCreateAccountPlan } from "./settingsService";
 import { Room, getRooms } from "./roomService";
 
 // --- Interfaces ---
@@ -93,7 +93,10 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
   if (!professional?.financeiro) {
     return { success: false, error: "Dados financeiros do profissional não encontrados." };
   }
+  
   await findOrCreateCostCenter(appointment.tipo);
+  await findOrCreateAccountPlan('Repasse de Profissional', 'despesa');
+
   const allBankAccounts = await getBankAccounts();
   const defaultAccount = allBankAccounts.find(acc => acc.isDefault);
   let valorRepasse = 0;
