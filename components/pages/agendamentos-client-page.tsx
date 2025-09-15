@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Filter, MoreHorizontal, Sun, Sunset, Moon, Download, Plus, AlertCircle, ChevronDown, BrainCircuit } from "lucide-react" // Importe o BrainCircuit
+import { Search, Filter, MoreHorizontal, Sun, Sunset, Moon, Download, Plus, AlertCircle, ChevronDown, BrainCircuit, Clock, User, Mic, Home, DollarSign } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { getAppointmentsByDate, getAppointmentsForReport, Appointment, updateAppointment, AppointmentStatus, AppointmentFormData } from "@/services/appointmentService"
 import { getProfessionals, Professional } from "@/services/professionalService"
@@ -246,84 +246,119 @@ export function AgendamentosClientPage() {
   };
 
   const TabelaDeAgendamentos = ({ agendamentos, loading }: { agendamentos: Appointment[], loading: boolean }) => (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader><TableRow>
-          <TableHead>Período</TableHead><TableHead>Paciente</TableHead><TableHead>Profissional</TableHead>
-          <TableHead>Terapia</TableHead>
-          <TableHead>Horário</TableHead><TableHead>Sala</TableHead><TableHead>Status</TableHead>
-          <TableHead>Status Sec.</TableHead><TableHead className="text-right">Ações</TableHead>
-        </TableRow></TableHeader>
-        <TableBody>
-          {loading ? (
-            Array.from({ length: 5 }).map((_, i) => (
-              <TableRow key={i}>
-                <TableCell colSpan={9}><Skeleton className="h-5 w-full" /></TableCell>
+    <>
+      {/* Visualização em Tabela para Telas Maiores */}
+      <div className="overflow-x-auto hidden md:block">
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>Período</TableHead><TableHead>Paciente</TableHead><TableHead>Profissional</TableHead>
+            <TableHead>Terapia</TableHead>
+            <TableHead>Horário</TableHead><TableHead>Sala</TableHead><TableHead>Status</TableHead>
+            <TableHead>Status Sec.</TableHead><TableHead className="text-right">Ações</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {loading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell colSpan={9}><Skeleton className="h-5 w-full" /></TableCell>
+                </TableRow>
+              ))
+            ) : agendamentos.length > 0 ? agendamentos.map((appointment) => (
+              <TableRow 
+                key={appointment.id} 
+                onClick={() => handleOpenEditModal(appointment)}
+                className="cursor-pointer hover:bg-muted/50"
+              >
+                <TableCell><div className="flex items-center gap-1 text-xs">{getPeriodoIcon(getPeriodoFromDate(appointment.start.toDate()))} <span>{getPeriodoLabel(getPeriodoFromDate(appointment.start.toDate()))}</span></div></TableCell>
+                <TableCell className="font-medium">{appointment.patientName}</TableCell>
+                <TableCell>{appointment.professionalName}</TableCell>
+                <TableCell className="text-muted-foreground">{appointment.tipo}</TableCell>
+                <TableCell>{format(appointment.start.toDate(), 'HH:mm')} - {format(appointment.end.toDate(), 'HH:mm')}</TableCell>
+                <TableCell><Badge variant="outline">{getRoomNameById(appointment.sala)}</Badge></TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className="h-auto p-0 hover:bg-gray-200">
+                        {getStatusBadge(appointment.status)}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuLabel>Alterar Status</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {primaryStatusOptions.map(option => (
+                        <DropdownMenuItem key={option.value} onSelect={() => handleStatusChange(appointment.id, option.value)}>
+                          {option.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className="h-auto p-0 justify-start font-normal text-xs hover:bg-gray-200">
+                        {getStatusSecundarioBadge(appointment.statusSecundario) || <Badge variant="outline">Nenhum</Badge>}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuLabel>Alterar Status Secundário</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {secondaryStatusOptions.map(option => (
+                        <DropdownMenuItem key={option.value} onSelect={() => handleStatusSecundarioChange(appointment.id, option.value)}>
+                          {option.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
+                <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenEditModal(appointment); }}>
+                        Editar / Detalhes
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
               </TableRow>
-            ))
-          ) : agendamentos.length > 0 ? agendamentos.map((appointment) => (
-            <TableRow 
-              key={appointment.id} 
-              onClick={() => handleOpenEditModal(appointment)}
-              className="cursor-pointer hover:bg-muted/50"
-            >
-              <TableCell><div className="flex items-center gap-1 text-xs">{getPeriodoIcon(getPeriodoFromDate(appointment.start.toDate()))} <span>{getPeriodoLabel(getPeriodoFromDate(appointment.start.toDate()))}</span></div></TableCell>
-              <TableCell className="font-medium">{appointment.patientName}</TableCell>
-              <TableCell>{appointment.professionalName}</TableCell>
-              <TableCell className="text-muted-foreground">{appointment.tipo}</TableCell>
-              <TableCell>{format(appointment.start.toDate(), 'HH:mm')} - {format(appointment.end.toDate(), 'HH:mm')}</TableCell>
-              <TableCell><Badge variant="outline">{getRoomNameById(appointment.sala)}</Badge></TableCell>
-              <TableCell onClick={(e) => e.stopPropagation()}>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="h-auto p-0 hover:bg-gray-200">
-                      {getStatusBadge(appointment.status)}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuLabel>Alterar Status</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {primaryStatusOptions.map(option => (
-                      <DropdownMenuItem key={option.value} onSelect={() => handleStatusChange(appointment.id, option.value)}>
-                        {option.label}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </TableCell>
-              <TableCell onClick={(e) => e.stopPropagation()}>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="h-auto p-0 justify-start font-normal text-xs hover:bg-gray-200">
-                      {getStatusSecundarioBadge(appointment.statusSecundario) || <Badge variant="outline">Nenhum</Badge>}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuLabel>Alterar Status Secundário</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {secondaryStatusOptions.map(option => (
-                      <DropdownMenuItem key={option.value} onSelect={() => handleStatusSecundarioChange(appointment.id, option.value)}>
-                        {option.label}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </TableCell>
-              <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenEditModal(appointment); }}>
-                      Editar / Detalhes
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </TableCell>
-            </TableRow>
-          )) : <TableRow><TableCell colSpan={9} className="text-center h-24">Nenhum agendamento encontrado.</TableCell></TableRow>}
-        </TableBody>
-      </Table>
-    </div>
+            )) : <TableRow><TableCell colSpan={9} className="text-center h-24">Nenhum agendamento encontrado.</TableCell></TableRow>}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Visualização em Cards para Mobile */}
+      <div className="grid grid-cols-1 gap-4 md:hidden">
+        {loading ? (
+           Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-40 w-full" />)
+        ) : agendamentos.length > 0 ? (
+          agendamentos.map(appointment => (
+            <Card key={appointment.id} onClick={() => handleOpenEditModal(appointment)} className="cursor-pointer">
+                <CardContent className="p-4 space-y-3">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <p className="font-bold">{appointment.patientName}</p>
+                            <p className="text-sm text-muted-foreground">{appointment.professionalName}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                             {getStatusBadge(appointment.status)}
+                             {getStatusSecundarioBadge(appointment.statusSecundario)}
+                        </div>
+                    </div>
+                    <div className="text-sm text-muted-foreground space-y-2 pt-3 border-t">
+                        <div className="flex items-center gap-2"><Mic className="h-4 w-4"/><span>{appointment.tipo}</span></div>
+                        <div className="flex items-center gap-2"><Clock className="h-4 w-4"/><span>{format(appointment.start.toDate(), 'HH:mm')} - {format(appointment.end.toDate(), 'HH:mm')}</span></div>
+                        <div className="flex items-center gap-2"><Home className="h-4 w-4"/><span>Sala: {getRoomNameById(appointment.sala)}</span></div>
+                        <div className="flex items-center gap-2"><DollarSign className="h-4 w-4"/><span>{appointment.convenio || 'Particular'}</span></div>
+                    </div>
+                </CardContent>
+            </Card>
+          ))
+        ) : (
+          <p className="text-center text-muted-foreground py-8">Nenhum agendamento encontrado.</p>
+        )}
+      </div>
+    </>
   );
 
   if (isPageLoading) return <p className="text-center p-8">Carregando dados da página...</p>;
@@ -342,7 +377,6 @@ export function AgendamentosClientPage() {
             <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => setIsReportModalOpen(true)}>
               <Download className="mr-2 h-4 w-4" /> Exportar Relatório
             </Button>
-            {/* --- BOTÃO ATUALIZADO COM O DROPDOWN --- */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                   <Button className="w-full">
@@ -378,7 +412,8 @@ export function AgendamentosClientPage() {
         </Card>
         
         <Tabs value={periodoAtivo} onValueChange={setPeriodoAtivo} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4">
+          {/* AQUI ESTÁ A CORREÇÃO PRINCIPAL */}
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
               <TabsTrigger value="todos">Todos ({appointmentsFiltrados.length})</TabsTrigger>
               <TabsTrigger value="manha" className="gap-1"><Sun className="h-4 w-4" />Manhã ({appointmentsPorPeriodo.manha.length})</TabsTrigger>
               <TabsTrigger value="tarde" className="gap-1"><Sunset className="h-4 w-4" />Tarde ({appointmentsPorPeriodo.tarde.length})</TabsTrigger>

@@ -11,7 +11,7 @@ import { useAuth } from "@/context/AuthContext"
 
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
-  SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader
+  SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, useSidebar // <-- IMPORTE O HOOK
 } from "@/components/ui/sidebar"
 
 const menuItems = [
@@ -33,6 +33,7 @@ const menuItems = [
 export function AppSidebar() {
   const pathname = usePathname()
   const { firestoreUser, unreadCount } = useAuth() 
+  const { setOpenMobile } = useSidebar(); // <-- USE O HOOK AQUI
 
   const accessibleItems = menuItems.filter(item => {
     if (!firestoreUser?.profile) return false;
@@ -54,7 +55,8 @@ export function AppSidebar() {
               {accessibleItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={pathname === item.url}>
-                    <Link href={item.url} className="flex items-center justify-between w-full">
+                    {/* ADICIONE O onClick AQUI */}
+                    <Link href={item.url} className="flex items-center justify-between w-full" onClick={() => setOpenMobile(false)}>
                       <div className="flex items-center gap-2">
                         <item.icon className="h-4 w-4" />
                         <span>{item.title}</span>
