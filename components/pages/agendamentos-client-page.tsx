@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, Filter, MoreHorizontal, Sun, Sunset, Moon, Download, Plus, AlertCircle, ChevronDown, BrainCircuit, Clock, User, Mic, Home, DollarSign } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
-import { getAppointmentsByDate, getAppointmentsForReport, Appointment, updateAppointment, AppointmentStatus, AppointmentFormData } from "@/services/appointmentService"
+import { getAppointmentsByDate, getAppointmentsForReport, Appointment, updateAppointment, AppointmentStatus, AppointmentFormData, updateAppointmentBlock, } from "@/services/appointmentService"
 import { getProfessionals, Professional } from "@/services/professionalService"
 import { getPatients, Patient } from "@/services/patientService"
 import { getRooms, Room } from "@/services/roomService"
@@ -22,6 +22,7 @@ import Link from "next/link"
 import { format } from "date-fns"
 import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
+import { formatSpecialtyName } from "@/lib/formatters";
 
 // --- Funções de Ajuda (Helpers) ---
 const getStatusBadge = (status: string) => {
@@ -52,12 +53,18 @@ const getAppointmentStats = (appointments: Appointment[]) => ({
     emAtendimento: appointments.filter((a) => a.status === "em_atendimento").length,
 });
 const secondaryStatusOptions = [
-    { value: "confirmado", label: "Confirmado" }, { value: "pendente_confirmacao", label: "Pendente" },
-    { value: "pago", label: "Pago" }, { value: "sem_justificativa", label: "S/ Justificativa" },
-    { value: "reagendado", label: "Reagendado" }, { value: "em_sala", label: "Em Sala" },
-    { value: "fnj_paciente", label: "FNJ Paciente" }, { value: "f_terapeuta", label: "F Terapeuta" },
-    { value: "fj_paciente", label: "FJ Paciente" }, { value: "f_dupla", label: "F Dupla" },
-    { value: "suspenso_plano", label: "Suspenso pelo Plano" }, { value: "nenhum", label: "Nenhum" },
+    // A nova opção que você pediu
+    { value: "substituicao", label: "Substituição" }, 
+
+    // As opções que permaneceram
+    { value: "fnj_paciente", label: "FNJ Paciente" }, 
+    { value: "f_terapeuta", label: "F Terapeuta" }, 
+    { value: "fj_paciente", label: "FJ Paciente" }, 
+    { value: "f_dupla", label: "F Dupla" }, 
+    { value: "suspenso_plano", label: "Suspenso pelo Plano" }, 
+
+    // A opção padrão para limpar o status
+    { value: "nenhum", label: "Nenhum" },
 ];
 const primaryStatusOptions: { value: AppointmentStatus; label: string }[] = [
     { value: "agendado", label: "Agendado" }, { value: "em_atendimento", label: "Em Atendimento" },
@@ -133,17 +140,29 @@ export function AgendamentosClientPage() {
     setIsEditModalOpen(true);
   };
   
-  const handleUpdateAppointment = async (formData: Partial<AppointmentFormData & { status: AppointmentStatus }>) => {
+  // components/pages/agendamentos-client-page.tsx
+
+const handleUpdateAppointment = async (
+    formData: Partial<AppointmentFormData & { status: AppointmentStatus }>,
+    updateType: 'single' | 'block'
+    ) => {
     if (!selectedAppointment) return;
-    const result = await updateAppointment(selectedAppointment.id, formData);
+
+    // Escolhe qual função de serviço chamar com base na escolha do usuário
+    const updateFunction = updateType === 'block'
+        ? updateAppointmentBlock(selectedAppointment, formData)
+        : updateAppointment(selectedAppointment.id, formData);
+
+    const result = await updateFunction;
+
     if (result.success) {
-      toast.success("Agendamento atualizado com sucesso!");
-      setIsEditModalOpen(false);
-      fetchData();
+        toast.success("Agendamento(s) atualizado(s) com sucesso!");
+        setIsEditModalOpen(false);
+        fetchData(); // Recarrega a lista
     } else {
-      toast.error(result.error || "Falha ao atualizar o agendamento.");
+        toast.error(result.error || "Falha ao atualizar o agendamento.");
     }
-  };
+};
   
   const handleDeleteAppointment = (isBlock: boolean) => {
     toast.success("Operação de exclusão concluída.");
@@ -272,7 +291,7 @@ export function AgendamentosClientPage() {
                 <TableCell><div className="flex items-center gap-1 text-xs">{getPeriodoIcon(getPeriodoFromDate(appointment.start.toDate()))} <span>{getPeriodoLabel(getPeriodoFromDate(appointment.start.toDate()))}</span></div></TableCell>
                 <TableCell className="font-medium">{appointment.patientName}</TableCell>
                 <TableCell>{appointment.professionalName}</TableCell>
-                <TableCell className="text-muted-foreground">{appointment.tipo}</TableCell>
+                <TableCell className="text-muted-foreground">{formatSpecialtyName(appointment.tipo)}</TableCell>
                 <TableCell>{format(appointment.start.toDate(), 'HH:mm')} - {format(appointment.end.toDate(), 'HH:mm')}</TableCell>
                 <TableCell><Badge variant="outline">{getRoomNameById(appointment.sala)}</Badge></TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
@@ -346,7 +365,7 @@ export function AgendamentosClientPage() {
                         </div>
                     </div>
                     <div className="text-sm text-muted-foreground space-y-2 pt-3 border-t">
-                        <div className="flex items-center gap-2"><Mic className="h-4 w-4"/><span>{appointment.tipo}</span></div>
+                        <div className="flex items-center gap-2"><Mic className="h-4 w-4"/><span>{formatSpecialtyName(appointment.tipo)}</span></div>
                         <div className="flex items-center gap-2"><Clock className="h-4 w-4"/><span>{format(appointment.start.toDate(), 'HH:mm')} - {format(appointment.end.toDate(), 'HH:mm')}</span></div>
                         <div className="flex items-center gap-2"><Home className="h-4 w-4"/><span>Sala: {getRoomNameById(appointment.sala)}</span></div>
                         <div className="flex items-center gap-2"><DollarSign className="h-4 w-4"/><span>{appointment.convenio || 'Particular'}</span></div>

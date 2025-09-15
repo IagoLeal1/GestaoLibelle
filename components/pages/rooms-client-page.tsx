@@ -16,6 +16,7 @@ import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import { format, setHours, setMinutes, setSeconds, setMilliseconds, addMinutes, isWithinInterval, parseISO } from "date-fns";
 import { Timestamp } from "firebase/firestore";
+import { formatSpecialtyName } from "@/lib/formatters";
 
 // --- INTERFACES ATUALIZADAS ---
 interface AppointmentDetails {
@@ -289,7 +290,7 @@ export function RoomsClientPage() {
                                             {slot.appointments.length > 0 ? slot.appointments.map((app, index) => (
                                                 <div key={index} className="mt-1 border-t pt-1 space-y-1">
                                                     {/* --- 3. EXIBIÇÃO DA TERAPIA, PACIENTE E PROFISSIONAL --- */}
-                                                    <p className="text-xs truncate font-bold text-gray-900">{app.terapia?.split(' ').slice(0, 2).join(' ')}</p>
+                                                    <p className="text-xs truncate font-bold text-gray-900">{formatSpecialtyName(app.terapia || '')}</p>
                                                     <p className="text-xs truncate font-medium text-gray-800">{app.patientName}</p>
                                                     <p className="text-xs text-muted-foreground truncate">{app.professionalName}</p>
                                                 </div>

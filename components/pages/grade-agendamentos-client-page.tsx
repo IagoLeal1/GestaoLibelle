@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QuickAppointmentModal } from "@/components/modals/quick-appointment-modal";
 import { EditAppointmentModal } from "@/components/modals/edit-appointment-modal";
+import { formatSpecialtyName } from "@/lib/formatters";
 
 // Icons
 import { ChevronLeft, ChevronRight, User, Calendar, Save } from "lucide-react";
@@ -249,7 +250,7 @@ export function GradeAgendamentosClientPage() {
                                                           }}
                                                         >
                                                             {/* --- ALTERAÇÃO APLICADA AQUI --- */}
-                                                            <p className="font-bold">{isExisting ? (app as Appointment).tipo : (app as QuickAppointmentData).specialty}</p>
+                                                            <p className="font-bold">{formatSpecialtyName(isExisting ? (app as Appointment).tipo : (app as QuickAppointmentData).specialty)}</p>
                                                             <p className="text-muted-foreground">{professional?.fullName}</p>
                                                             {/* --- FIM DA ALTERAÇÃO --- */}
 

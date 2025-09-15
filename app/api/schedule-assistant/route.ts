@@ -2,83 +2,185 @@
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
-import { findRecurringSchedulePatterns, findPotentialSwapCandidates } from "@/services/appointmentService";
-import { getProfessionals } from "@/services/professionalService";
+import { initAdmin } from "@/lib/firebaseAdmin";
+import { Timestamp } from "firebase-admin/firestore";
+import { startOfDay, endOfDay, addMonths, format, setHours, setMinutes, addMinutes, parse } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
+// --- INTERFACES E TIPOS ---
+interface TherapyNeed { terapia: string; frequencia: number; }
+interface Preferences { turno?: 'manha' | 'tarde' | 'noite'; profissionaisIds?: string[]; }
+interface ProfessionalAdmin {
+    id: string;
+    fullName: string;
+    especialidade: string;
+    diasAtendimento: string[];
+    horarioInicio: string;
+    horarioFim: string;
+    status: string;
+    [key: string]: any;
+}
+interface SchedulePattern {
+    terapia: string;
+    professional: { id: string, fullName: string };
+    diaSemana: string;
+    horario: string;
+    consistencia: number;
+}
+
+// --- LÓGICA DE BUSCA NO SERVIDOR (ADMIN) ---
+const db = initAdmin();
+
+async function getProfessionalsAdmin(status?: string): Promise<ProfessionalAdmin[]> {
+    let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = db.collection('professionals');
+    if (status) {
+        query = query.where('status', '==', status);
+    }
+    const snapshot = await query.orderBy('fullName').get();
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ProfessionalAdmin));
+}
+
+async function getAppointmentsForReportAdmin(startDate: Date, endDate: Date) {
+    const snapshot = await db.collection('appointments')
+        .where('start', '>=', Timestamp.fromDate(startDate))
+        .where('start', '<=', Timestamp.fromDate(endDate))
+        .get();
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
+// FUNÇÃO COM A LÓGICA DE CONFLITO TOTALMENTE CORRIGIDA
+async function findRecurringSchedulePatternsAdmin(terapiasNecessarias: TherapyNeed[], preferences: Preferences): Promise<SchedulePattern[]> {
+    const { turno, profissionaisIds = [] } = preferences;
+    const inicioPeriodo = startOfDay(new Date());
+    const fimPeriodo = endOfDay(addMonths(new Date(), 3));
+
+    const [todosProfissionais, agendamentosFuturos] = await Promise.all([
+        getProfessionalsAdmin('ativo'),
+        getAppointmentsForReportAdmin(inicioPeriodo, fimPeriodo)
+    ]);
+
+    const patterns: SchedulePattern[] = [];
+    const horariosBase = {
+        manha: ['07:20', '08:10', '09:00', '09:50', '10:40', '11:30'],
+        tarde: ['12:20', '13:20', '14:10', '15:00', '15:50', '16:40', '17:30'],
+        noite: []
+    };
+    const horariosPadrao = turno ? horariosBase[turno] : [...horariosBase.manha, ...horariosBase.tarde, ...horariosBase.noite];
+    const diasDaSemana = ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
+    const duracaoSessao = 50; // Duração em minutos
+
+    for (const necessidade of terapiasNecessarias) {
+        let profissionaisQualificados = todosProfissionais.filter(
+          (p) => necessidade.terapia.toLowerCase().includes(p.especialidade.toLowerCase()) && p.status === 'ativo'
+        );
+
+        if (profissionaisIds.length > 0) {
+            const preferidosQualificados = profissionaisQualificados.filter((p) => profissionaisIds.includes(p.id));
+            if (preferidosQualificados.length > 0) {
+                profissionaisQualificados = preferidosQualificados;
+            }
+        }
+
+        for (const prof of profissionaisQualificados) {
+          if (!prof.horarioInicio || prof.horarioInicio.trim() === '' || !prof.horarioFim || prof.horarioFim.trim() === '') {
+              continue;
+          }
+
+          for (const dia of diasDaSemana) {
+            if (!prof.diasAtendimento || !prof.diasAtendimento.includes(dia)) {
+                continue;
+            }
+
+            for (const horario of horariosPadrao) {
+              const [horaSlot, minutoSlot] = horario.split(':').map(Number);
+              const [horaInicioProf, minutoInicioProf] = prof.horarioInicio.split(':').map(Number);
+              const [horaFimProf, minutoFimProf] = prof.horarioFim.split(':').map(Number);
+
+              const slotEmMinutos = horaSlot * 60 + minutoSlot;
+              const inicioProfEmMinutos = horaInicioProf * 60 + minutoInicioProf;
+              const fimProfEmMinutos = horaFimProf * 60 + minutoFimProf;
+
+              if (slotEmMinutos < inicioProfEmMinutos || (slotEmMinutos + duracaoSessao) > fimProfEmMinutos) {
+                  continue;
+              }
+
+              // --- NOVA LÓGICA DE VERIFICAÇÃO DE CONFLITO ---
+              // Verifica se existe algum agendamento que sobreponha o slot de 50 minutos
+              const conflitos = agendamentosFuturos.filter((ag: any) => {
+                  if (ag.professionalId !== prof.id) return false;
+
+                  const diaAgendamento = format(ag.start.toDate(), 'EEEE', { locale: ptBR }).toLowerCase().replace('-feira', '');
+                  if (diaAgendamento !== dia) return false;
+
+                  const inicioAgendamento = ag.start.toDate();
+                  const fimAgendamento = ag.end.toDate();
+
+                  const inicioSlot = setMinutes(setHours(inicioPeriodo, horaSlot), minutoSlot);
+                  const fimSlot = addMinutes(inicioSlot, duracaoSessao);
+
+                  // Verifica sobreposição de intervalos
+                  return (inicioAgendamento < fimSlot && fimAgendamento > inicioSlot);
+              }).length;
+              // --- FIM DA NOVA LÓGICA ---
+
+              const totalSemanasAnalise = 12;
+              const consistencia = 1 - (conflitos / totalSemanasAnalise);
+
+              patterns.push({
+                terapia: necessidade.terapia,
+                professional: { id: prof.id, fullName: prof.fullName },
+                diaSemana: dia.charAt(0).toUpperCase() + dia.slice(1) + "-feira",
+                horario: horario,
+                consistencia: consistencia,
+              });
+            }
+          }
+        }
+    }
+    return patterns;
+}
+
+// --- CÉREBRO DA IA (PROMPT) ---
 const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || "");
-
 const systemInstruction = `
-    Você é a "LibelleAI", a Coordenadora de Terapias virtual da Clínica Casa Libelle. A sua missão é criar um plano de terapia contínuo, eficaz e sustentável, sendo especialista em otimizar agendas complexas.
-
-    Sua resposta DEVE SEMPRE ser estratégica e focada em soluções:
-    - Se receber uma lista de "Padrões de Horário", sua tarefa é montar a melhor grade possível e justificar com base na "consistência" de cada horário.
-    - Se receber uma lista de "Candidatos a Troca", significa que não há vagas diretas. Sua tarefa é criar um **plano de ação passo a passo** para o gestor.
-    
-    **Exemplo de Plano de Ação (quando sugerindo trocas):**
-    "Não encontrei uma grade de horários direta, mas identifiquei uma oportunidade de otimização na agenda. Aqui está um plano de 2 passos para acomodar o novo paciente:
-    
-    * **Passo 1: Remarcar o Paciente Existente.**
-        * **Ação:** Mova o agendamento de Fonoaudiologia de *(Nome do Paciente Existente)* com * (Nome do Profissional)* do horário atual *(Terça-feira às 09:50)* para o novo horário vago *(Quinta-feira às 14:10)*.
-        * **Justificativa:** Esta mudança é de baixo impacto, pois o novo horário também possui alta disponibilidade para o profissional.
-    
-    * **Passo 2: Agendar o Novo Paciente.**
-        * **Ação:** Agora que o horário de *(Terça-feira às 09:50)* com *(Nome do Profissional)* está livre, pode agendar a Fonoaudiologia para o *(Nome do Novo Paciente)*.
-    
-    Este plano garante a continuidade para ambos os pacientes com o mínimo de disrupção."
-
-    Seja sempre claro, profissional e focado em apresentar soluções práticas.
+    Você é a "LibelleAI", uma coordenadora de terapias virtual especialista em otimizar agendas na Clínica Casa Libelle.
+    Sua missão é apresentar as melhores soluções de agendamento recorrente.
+    Você receberá uma lista de "Padrões de Horário Encontrados". Cada padrão tem um score de "consistência" de 0 a 1 (1 = 100% livre nas próximas 12 semanas).
+    Sua tarefa é seguir esta lógica:
+    1.  **Filtre por Padrões IDEAIS:** Considere como "ideal" qualquer padrão com consistência > 0.7 (70%).
+    2.  **Se encontrar padrões IDEAIS:** Monte o "Plano de Terapia Otimizado" usando apenas eles. Justifique a escolha com base na alta consistência, garantindo a continuidade do tratamento.
+    3.  **Se NÃO encontrar padrões IDEAIS:**
+        a. Filtre por padrões ALTERNATIVOS (consistência <= 0.7 mas > 0).
+        b. Se existirem alternativas, apresente-as como "Opções de Encaixe", explicando que são horários com alguma ocupação futura, mas que podem funcionar. Ex: "Encontrei uma opção na Terça-feira às 16:40, porém este horário tem uma consistência de 40%. Isso significa que pode haver necessidade de reagendamentos futuros."
+        c. Se não houver NENHUM padrão (nem ideal, nem alternativo), informe que a agenda está cheia e que não foi possível encontrar uma solução.
+    Seja sempre clara, objetiva e apresente os horários em formato de lista (markdown).
 `;
 
+// --- ROTA DA API ---
 export async function POST(req: NextRequest) {
   try {
     const { patientNeeds, preferences = {} } = await req.json();
 
+    if (!patientNeeds || !Array.isArray(patientNeeds) || patientNeeds.length === 0) {
+      return NextResponse.json({ error: "Necessidades de terapia inválidas." }, { status: 400 });
+    }
+
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash", systemInstruction });
 
-    // FASE 1: Tenta encontrar padrões de horários livres
-    let schedulePatterns = await findRecurringSchedulePatterns(patientNeeds, preferences);
+    let schedulePatterns = await findRecurringSchedulePatternsAdmin(patientNeeds, preferences);
 
-    let prompt;
-
-    if (schedulePatterns.length > 0) {
-      // Se encontrou, monta o prompt padrão
-      prompt = `
-        **Análise de Grade de Horário (Cenário 1: Vagas Diretas Encontradas)**
-
+    const prompt = `
         **Necessidades do Paciente:**
         ${JSON.stringify(patientNeeds, null, 2)}
 
-        **Preferências do Usuário:**
+        **Preferências do Usuário (se houver):**
         ${JSON.stringify(preferences, null, 2)}
 
-        **Padrões de Horário Recorrentes Encontrados:**
+        **Padrões de Horário Encontrados (Dados brutos para sua análise):**
         ${JSON.stringify(schedulePatterns, null, 2)}
 
-        Monte o melhor plano de terapia recorrente com base nos dados acima. Justifique suas escolhas com foco na consistência dos horários.
-      `;
-    } else {
-      // FASE 2: Se não encontrou, busca por candidatos a troca
-      const todosProfissionais = await getProfessionals();
-      const swapCandidates = await findPotentialSwapCandidates(patientNeeds[0].terapia, todosProfissionais);
-
-      if (swapCandidates.length === 0) {
-        return NextResponse.json({ suggestion: "Infelizmente, a agenda está muito cheia e não foi possível encontrar nem mesmo oportunidades de otimização para encaixar este paciente. Recomendo verificar a possibilidade de contratar novos profissionais ou ajustar os horários de atendimento existentes." });
-      }
-
-      prompt = `
-        **Análise de Grade de Horário (Cenário 2: Otimização de Agenda Necessária)**
-
-        **Necessidades do Paciente:**
-        ${JSON.stringify(patientNeeds, null, 2)}
-
-        **Contexto:** Não foram encontradas vagas diretas para um novo plano de terapia recorrente. No entanto, o sistema identificou os seguintes agendamentos que poderiam ser remarcados para abrir espaço.
-
-        **Candidatos a Troca Identificados:**
-        ${JSON.stringify(swapCandidates, null, 2)}
-
-        Crie um plano de ação claro e passo a passo para o gestor, explicando como remarcar um dos agendamentos existentes para abrir uma vaga para o novo paciente. Seja estratégico e convincente.
-      `;
-    }
+        Siga as suas instruções para analisar os dados e fornecer a melhor resposta possível, seja um plano ideal, opções alternativas ou a informação de que não há vagas.
+    `;
 
     const result = await model.generateContent(prompt);
     const text = result.response.text();

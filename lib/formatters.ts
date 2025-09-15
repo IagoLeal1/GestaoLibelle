@@ -45,3 +45,40 @@ export const formatCPF_CNPJ = (value: string) => {
       .replace(/(\d{5})(\d)/, '$1-$2')
       .substring(0, 15);
   };
+
+  // lib/formatters.ts
+
+/**
+ * Formata o nome de uma especialidade para remover nomes de convênios.
+ * Ex: "Psicologia Amil e Unimed Leste" se torna "Psicologia".
+ * Ex: "Fisioterapia Motora Bradesco" se torna "Fisioterapia Motora".
+ * @param specialtyName O nome completo da especialidade que vem do banco de dados.
+ * @returns O nome da especialidade formatado, sem os convênios.
+ */
+export const formatSpecialtyName = (specialtyName: string): string => {
+  if (!specialtyName) return "N/A";
+
+  // Lista de palavras-chave que marcam o início dos nomes dos convênios
+  const keywords = ["unimed", "amil", "bradesco", "sulamérica", "sul américa", "ferj", "particular"];
+
+  const lowerCaseName = specialtyName.toLowerCase();
+  let cutIndex = -1;
+
+  // Encontra a primeira ocorrência de uma das palavras-chave
+  for (const keyword of keywords) {
+    const index = lowerCaseName.indexOf(keyword);
+    if (index !== -1) {
+      if (cutIndex === -1 || index < cutIndex) {
+        cutIndex = index;
+      }
+    }
+  }
+
+  // Se encontrou uma palavra-chave, corta a string antes dela.
+  // Se não, retorna o nome original.
+  if (cutIndex !== -1) {
+    return specialtyName.substring(0, cutIndex).trim();
+  }
+
+  return specialtyName;
+};

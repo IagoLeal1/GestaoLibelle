@@ -765,3 +765,73 @@ export const findPotentialSwapCandidates = async (
   }
   return candidatos;
 };
+
+// Adicione esta função completa ao final do arquivo, substituindo a versão anterior.
+export const updateAppointmentBlock = async (
+  currentAppointment: Appointment, 
+  data: Partial<AppointmentFormData & { status: AppointmentStatus }>
+) => {
+  if (!currentAppointment.blockId) {
+    return { success: false, error: "Este agendamento não faz parte de um bloco." };
+  }
+
+  try {
+    const batch = writeBatch(db);
+
+    const q = query(
+      collection(db, "appointments"),
+      where("blockId", "==", currentAppointment.blockId),
+      where("start", ">=", currentAppointment.start)
+    );
+    const snapshot = await getDocs(q);
+
+    if (snapshot.empty) return { success: true };
+
+    const { data: dateStr, horaInicio, horaFim, ...restData } = data;
+    const [startHour, startMinute] = horaInicio!.split(':').map(Number);
+
+    const durationInMinutes = differenceInMinutes(
+      new Date(0, 0, 0, Number(horaFim!.split(':')[0]), Number(horaFim!.split(':')[1])),
+      new Date(0, 0, 0, startHour, startMinute)
+    );
+
+    snapshot.forEach(docSnap => {
+      const appointmentDocRef = doc(db, 'appointments', docSnap.id);
+      const oldAppointmentData = docSnap.data() as Appointment;
+      const oldStartDate = oldAppointmentData.start.toDate();
+
+      const newStartDate = setMinutes(setHours(oldStartDate, startHour), startMinute);
+      const newEndDate = addMinutes(newStartDate, durationInMinutes);
+
+      const dataToUpdate: { [key: string]: any } = {
+        ...restData,
+        start: Timestamp.fromDate(newStartDate),
+        end: Timestamp.fromDate(newEndDate),
+      };
+
+      // --- CORREÇÃO ADICIONADA AQUI ---
+      // Este bloco remove quaisquer campos com valor 'undefined' antes de salvar.
+      Object.keys(dataToUpdate).forEach(key => {
+        if (dataToUpdate[key] === undefined) {
+          delete dataToUpdate[key];
+        }
+      });
+      // --- FIM DA CORREÇÃO ---
+
+      batch.update(appointmentDocRef, dataToUpdate);
+    });
+
+    await batch.commit();
+
+    const updatedFirstAppointmentDoc = await getDoc(doc(db, 'appointments', currentAppointment.id));
+    if (updatedFirstAppointmentDoc.exists()) {
+        const updatedAppointment = { id: updatedFirstAppointmentDoc.id, ...updatedFirstAppointmentDoc.data() } as Appointment;
+        await handleRepasseTransaction(updatedAppointment);
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Erro ao atualizar agendamentos em bloco:", error);
+    return { success: false, error: "Falha ao atualizar a sequência de agendamentos." };
+  }
+};
