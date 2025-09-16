@@ -83,7 +83,7 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
       setAvailableSpecialties(filtered);
     }
   }, [isOpen, isLoadingData, appointment, patients, specialties]);
-
+  
   useEffect(() => {
     const checkRoomAvailability = async () => {
       if (formData.data && formData.horaInicio && formData.horaFim) {
@@ -104,7 +104,6 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
       setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // --- INÍCIO DO CÓDIGO RESTAURADO ---
   const handlePatientChange = (patientId: string) => {
       const selectedPatient = patients.find(p => p.id === patientId);
       if (!selectedPatient) return;
@@ -131,7 +130,6 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
       }
       handleInputChange("sala", roomId);
   };
-  // --- FIM DO CÓDIGO RESTAURADO ---
 
   const handleSaveClick = async () => {
     setIsSubmitting(true);
@@ -142,8 +140,29 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appoin
     }
     setIsSubmitting(false);
   };
-
-  const handleDelete = async () => { /* ... (lógica de exclusão) ... */ };
+  
+  const handleDelete = async () => {
+      if (!appointment) return;
+      setIsSubmitting(true);
+      if (appointment.blockId) {
+          const userChoice = confirm(`Este agendamento faz parte de uma sequência.\n\nClique em 'OK' para apagar este e todos os futuros agendamentos da sequência.\n\nClique em 'Cancelar' para apagar APENAS o agendamento de ${format(appointment.start.toDate(), 'dd/MM/yyyy')}.`);
+          if (userChoice) {
+              const result = await deleteFutureAppointmentsInBlock(appointment);
+              if(result.success) onDelete(true); else toast.error(result.error);
+          } else {
+              if (confirm("Confirmar a exclusão APENAS deste agendamento?")) {
+                  const result = await deleteAppointment(appointment.id);
+                  if(result.success) onDelete(false); else toast.error(result.error);
+              }
+          }
+      } else {
+          if (window.confirm("Tem certeza que deseja excluir este agendamento?")) {
+              const result = await deleteAppointment(appointment.id);
+              if(result.success) onDelete(false); else toast.error(result.error);
+          }
+      }
+      setIsSubmitting(false);
+  };
 
   if (!appointment) return null;
 

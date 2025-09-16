@@ -10,7 +10,17 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, Filter, MoreHorizontal, Sun, Sunset, Moon, Download, Plus, AlertCircle, ChevronDown, BrainCircuit, Clock, User, Mic, Home, DollarSign } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
-import { getAppointmentsByDate, getAppointmentsForReport, Appointment, updateAppointment, AppointmentStatus, AppointmentFormData, updateAppointmentBlock, } from "@/services/appointmentService"
+import { 
+    getAppointmentsByDate, 
+    getAppointmentsForReport, 
+    Appointment, 
+    updateAppointment, 
+    AppointmentStatus, 
+    AppointmentFormData, 
+    updateAppointmentBlock,
+    deleteAppointment,
+    deleteFutureAppointmentsInBlock
+} from "@/services/appointmentService"
 import { getProfessionals, Professional } from "@/services/professionalService"
 import { getPatients, Patient } from "@/services/patientService"
 import { getRooms, Room } from "@/services/roomService"
@@ -53,17 +63,12 @@ const getAppointmentStats = (appointments: Appointment[]) => ({
     emAtendimento: appointments.filter((a) => a.status === "em_atendimento").length,
 });
 const secondaryStatusOptions = [
-    // A nova opção que você pediu
     { value: "substituicao", label: "Substituição" }, 
-
-    // As opções que permaneceram
     { value: "fnj_paciente", label: "FNJ Paciente" }, 
     { value: "f_terapeuta", label: "F Terapeuta" }, 
     { value: "fj_paciente", label: "FJ Paciente" }, 
     { value: "f_dupla", label: "F Dupla" }, 
     { value: "suspenso_plano", label: "Suspenso pelo Plano" }, 
-
-    // A opção padrão para limpar o status
     { value: "nenhum", label: "Nenhum" },
 ];
 const primaryStatusOptions: { value: AppointmentStatus; label: string }[] = [
@@ -140,15 +145,12 @@ export function AgendamentosClientPage() {
     setIsEditModalOpen(true);
   };
   
-  // components/pages/agendamentos-client-page.tsx
-
-const handleUpdateAppointment = async (
+  const handleUpdateAppointment = async (
     formData: Partial<AppointmentFormData & { status: AppointmentStatus }>,
     updateType: 'single' | 'block'
     ) => {
     if (!selectedAppointment) return;
 
-    // Escolhe qual função de serviço chamar com base na escolha do usuário
     const updateFunction = updateType === 'block'
         ? updateAppointmentBlock(selectedAppointment, formData)
         : updateAppointment(selectedAppointment.id, formData);
@@ -158,16 +160,26 @@ const handleUpdateAppointment = async (
     if (result.success) {
         toast.success("Agendamento(s) atualizado(s) com sucesso!");
         setIsEditModalOpen(false);
-        fetchData(); // Recarrega a lista
+        fetchData();
     } else {
         toast.error(result.error || "Falha ao atualizar o agendamento.");
     }
-};
+  };
   
-  const handleDeleteAppointment = (isBlock: boolean) => {
-    toast.success("Operação de exclusão concluída.");
-    setIsEditModalOpen(false);
-    fetchData();
+  const handleDeleteAppointment = async (isBlockDeletion: boolean) => {
+    if (!selectedAppointment) return;
+
+    const result = isBlockDeletion
+      ? await deleteFutureAppointmentsInBlock(selectedAppointment)
+      : await deleteAppointment(selectedAppointment.id);
+
+    if (result.success) {
+      toast.success(`Agendamento${isBlockDeletion ? 's' : ''} excluído${isBlockDeletion ? 's' : ''} com sucesso!`);
+      setIsEditModalOpen(false);
+      fetchData();
+    } else {
+      toast.error(result.error || "Falha ao excluir.");
+    }
   };
   
   const handleStatusChange = async (appointmentId: string, newStatus: AppointmentStatus) => {
@@ -431,7 +443,6 @@ const handleUpdateAppointment = async (
         </Card>
         
         <Tabs value={periodoAtivo} onValueChange={setPeriodoAtivo} className="w-full">
-          {/* AQUI ESTÁ A CORREÇÃO PRINCIPAL */}
           <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
               <TabsTrigger value="todos">Todos ({appointmentsFiltrados.length})</TabsTrigger>
               <TabsTrigger value="manha" className="gap-1"><Sun className="h-4 w-4" />Manhã ({appointmentsPorPeriodo.manha.length})</TabsTrigger>

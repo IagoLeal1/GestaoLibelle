@@ -14,10 +14,10 @@ import {
   deleteDoc,
   writeBatch
 } from 'firebase/firestore';
-import { 
-    addWeeks, startOfDay, endOfDay, differenceInMinutes, addDays, 
+import {
+    addWeeks, startOfDay, endOfDay, differenceInMinutes, addDays,
     format, getHours, getMinutes, addMonths, startOfWeek, endOfWeek,
-    eachDayOfInterval, setHours, setMinutes, addMinutes
+    eachDayOfInterval, setHours, setMinutes, addMinutes, differenceInCalendarDays
 } from 'date-fns';
 import { ptBR } from "date-fns/locale";
 import { getProfessionalById, getProfessionals, Professional } from "./professionalService";
@@ -93,7 +93,7 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
   if (!professional?.financeiro) {
     return { success: false, error: "Dados financeiros do profissional não encontrados." };
   }
-  
+
   await findOrCreateCostCenter(appointment.tipo);
   await findOrCreateAccountPlan('Repasse de Profissional', 'despesa');
 
@@ -104,7 +104,7 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
   const valorConsulta = appointment.valorConsulta || 0;
   if (tipoPagamento === 'fixo') {
     valorRepasse = 0;
-  } 
+  }
   else if (tipoPagamento === 'repasse') {
     valorRepasse = (valorConsulta * (percentualRepasse || 0)) / 100;
   }
@@ -361,8 +361,8 @@ export const updateAppointment = async (id: string, data: Partial<AppointmentFor
       const endDate = new Date(year, month - 1, day, endHour, endMinute);
       dataToUpdate.start = Timestamp.fromDate(startDate);
       dataToUpdate.end = Timestamp.fromDate(endDate);
-      delete dataToUpdate.data; 
-      delete dataToUpdate.horaInicio; 
+      delete dataToUpdate.data;
+      delete dataToUpdate.horaInicio;
       delete dataToUpdate.horaFim;
     }
     Object.keys(dataToUpdate).forEach(key => {
@@ -463,8 +463,8 @@ export const deleteFutureAppointmentsInBlock = async (appointment: Appointment) 
     if (snapshot.empty) return { success: true };
     const batch = writeBatch(db);
     await Promise.all(snapshot.docs.map(docToDelete => {
-      batch.delete(docToDelete.ref);
-      return deleteTransactionByAppointmentId(docToDelete.id);
+        batch.delete(docToDelete.ref);
+        return deleteTransactionByAppointmentId(docToDelete.id);
     }));
     await batch.commit();
     return { success: true };
@@ -582,7 +582,7 @@ export const findAvailableSlots = async (options: SlotFinderOptions): Promise<Sl
         if (hora < expInicioH || (hora === expInicioH && minuto < expInicioM) || hora >= expFimH) {
             continue;
         }
-        const profissionalOcupado = agendamentosDaSemana.some(ag => 
+        const profissionalOcupado = agendamentosDaSemana.some(ag =>
             ag.professionalId === profissional.id &&
             inicioSlot < ag.end.toDate() && fimSlot > ag.start.toDate()
         );
@@ -598,7 +598,7 @@ export const findAvailableSlots = async (options: SlotFinderOptions): Promise<Sl
             professional: profissional,
             sala: salaDisponivel
           });
-          break; 
+          break;
         }
       }
     }
@@ -621,7 +621,7 @@ export const findRecurringSchedulePatterns = async (
   terapiasNecessarias: { terapia: string, frequencia: number }[],
   preferences: { turno?: 'manha' | 'tarde' | 'noite', profissionaisIds?: string[] }
 ): Promise<SchedulePattern[]> => {
-  
+
   const { turno, profissionaisIds = [] } = preferences;
 
   const inicioPeriodo = startOfDay(new Date());
@@ -633,23 +633,21 @@ export const findRecurringSchedulePatterns = async (
   ]);
 
   const patterns: SchedulePattern[] = [];
-  
-  // --- CORREÇÃO APLICADA AQUI ---
+
   const horariosBase = {
     manha: ['07:20', '08:10', '09:00', '09:50', '10:40', '11:30'],
     tarde: ['12:20', '13:20', '14:10', '15:00', '15:50', '16:40', '17:30'],
-    noite: ['16:40', '17:30'] // Adicionado o turno da noite
+    noite: ['16:40', '17:30']
   };
   const horariosPadrao = turno ? horariosBase[turno] : [...horariosBase.manha, ...horariosBase.tarde, ...horariosBase.noite];
-  // --- FIM DA CORREÇÃO ---
-  
+
   const diasDaSemana = ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
 
   for (const necessidade of terapiasNecessarias) {
     let profissionaisQualificados = todosProfissionais.filter(
       p => p.especialidade.toLowerCase() === necessidade.terapia.toLowerCase() && p.status === 'ativo'
     );
-    
+
     if (profissionaisIds.length > 0) {
         const preferidosQualificados = profissionaisQualificados.filter(p => profissionaisIds.includes(p.id));
         if (preferidosQualificados.length > 0) {
@@ -662,7 +660,7 @@ export const findRecurringSchedulePatterns = async (
         if (!prof.diasAtendimento.includes(dia)) continue;
 
         for (const horario of horariosPadrao) {
-          const conflitos = agendamentosFuturos.filter(ag => 
+          const conflitos = agendamentosFuturos.filter(ag =>
             ag.professionalId === prof.id &&
             format(ag.start.toDate(), 'EEEE', { locale: ptBR }).toLowerCase().replace('-feira', '') === dia &&
             format(ag.start.toDate(), 'HH:mm') === horario
@@ -670,7 +668,7 @@ export const findRecurringSchedulePatterns = async (
 
           const totalSemanasAnalise = 12;
           const consistencia = 1 - (conflitos / totalSemanasAnalise);
-          
+
           if (consistencia > 0.5) {
             patterns.push({
               terapia: necessidade.terapia,
@@ -731,7 +729,7 @@ export const findPotentialSwapCandidates = async (
     for (const dia of diasDaSemana) {
       if (!prof.diasAtendimento.includes(dia)) continue;
       for (const horario of horariosPadrao) {
-        const ocupado = seusAgendamentos.some(a => 
+        const ocupado = seusAgendamentos.some(a =>
             format(a.start.toDate(), 'EEEE', { locale: ptBR }).toLowerCase().replace('-feira', '') === dia &&
             format(a.start.toDate(), 'HH:mm') === horario
         );
@@ -766,9 +764,9 @@ export const findPotentialSwapCandidates = async (
   return candidatos;
 };
 
-// Adicione esta função completa ao final do arquivo, substituindo a versão anterior.
+// --- FUNÇÃO DE ATUALIZAÇÃO EM BLOCO CORRIGIDA E ROBUSTA ---
 export const updateAppointmentBlock = async (
-  currentAppointment: Appointment, 
+  currentAppointment: Appointment,
   data: Partial<AppointmentFormData & { status: AppointmentStatus }>
 ) => {
   if (!currentAppointment.blockId) {
@@ -777,52 +775,64 @@ export const updateAppointmentBlock = async (
 
   try {
     const batch = writeBatch(db);
-
     const q = query(
       collection(db, "appointments"),
       where("blockId", "==", currentAppointment.blockId),
-      where("start", ">=", currentAppointment.start)
+      where("start", ">=", currentAppointment.start) // Pega o atual e todos os futuros
     );
-    const snapshot = await getDocs(q);
 
-    if (snapshot.empty) return { success: true };
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return { success: true }; // Nenhum agendamento futuro para atualizar
 
     const { data: dateStr, horaInicio, horaFim, ...restData } = data;
+
+    // Converte a nova data e hora do formulário em um objeto Date "âncora"
+    const [year, month, day] = dateStr!.split('-').map(Number);
     const [startHour, startMinute] = horaInicio!.split(':').map(Number);
+    const newAnchorDate = new Date(year, month - 1, day, startHour, startMinute);
+    
+    // Calcula a diferença em dias entre a data original do agendamento editado e a nova data
+    const dayDifference = differenceInCalendarDays(newAnchorDate, currentAppointment.start.toDate());
 
     const durationInMinutes = differenceInMinutes(
       new Date(0, 0, 0, Number(horaFim!.split(':')[0]), Number(horaFim!.split(':')[1])),
       new Date(0, 0, 0, startHour, startMinute)
     );
 
-    snapshot.forEach(docSnap => {
+    for (const docSnap of snapshot.docs) {
       const appointmentDocRef = doc(db, 'appointments', docSnap.id);
       const oldAppointmentData = docSnap.data() as Appointment;
       const oldStartDate = oldAppointmentData.start.toDate();
 
-      const newStartDate = setMinutes(setHours(oldStartDate, startHour), startMinute);
-      const newEndDate = addMinutes(newStartDate, durationInMinutes);
+      // 1. Aplica a diferença de dias à data original de cada agendamento da série
+      const newStartDateWithDayShift = addDays(oldStartDate, dayDifference);
+      
+      // 2. Define o novo horário na data já ajustada
+      const finalNewStartDate = setMinutes(setHours(newStartDateWithDayShift, startHour), startMinute);
+      const finalNewEndDate = addMinutes(finalNewStartDate, durationInMinutes);
 
       const dataToUpdate: { [key: string]: any } = {
         ...restData,
-        start: Timestamp.fromDate(newStartDate),
-        end: Timestamp.fromDate(newEndDate),
+        start: Timestamp.fromDate(finalNewStartDate),
+        end: Timestamp.fromDate(finalNewEndDate),
       };
 
-      // --- CORREÇÃO ADICIONADA AQUI ---
-      // Este bloco remove quaisquer campos com valor 'undefined' antes de salvar.
+      // Remove quaisquer campos com valor 'undefined' antes de salvar
       Object.keys(dataToUpdate).forEach(key => {
         if (dataToUpdate[key] === undefined) {
           delete dataToUpdate[key];
         }
       });
-      // --- FIM DA CORREÇÃO ---
+      if (dataToUpdate.statusSecundario === 'nenhum') {
+        dataToUpdate.statusSecundario = '';
+      }
 
       batch.update(appointmentDocRef, dataToUpdate);
-    });
+    }
 
     await batch.commit();
 
+    // Dispara a atualização do repasse para o primeiro agendamento modificado
     const updatedFirstAppointmentDoc = await getDoc(doc(db, 'appointments', currentAppointment.id));
     if (updatedFirstAppointmentDoc.exists()) {
         const updatedAppointment = { id: updatedFirstAppointmentDoc.id, ...updatedFirstAppointmentDoc.data() } as Appointment;
