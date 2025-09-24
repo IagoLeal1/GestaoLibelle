@@ -1,55 +1,74 @@
 // __tests__/services/dashboardService.test.ts
 
 import { getAdminDashboardStats } from '@/services/dashboardService';
-import { getCountFromServer } from 'firebase/firestore';
+import { getCountFromServer, query } from 'firebase/firestore';
 
-jest.mock('firebase/firestore', () => ({
-  ...jest.requireActual('firebase/firestore'),
-  getCountFromServer: jest.fn(),
-}));
+// Simula apenas as funções do Firestore que o serviço realmente utiliza
+jest.mock('firebase/firestore', () => {
+  const originalModule = jest.requireActual('firebase/firestore');
+  return {
+    ...originalModule,
+    collection: jest.fn(),
+    query: jest.fn(),
+    where: jest.fn(),
+    Timestamp: {
+      fromDate: jest.fn((date) => date),
+    },
+    // A simulação mais importante: interceptamos a chamada de contagem
+    getCountFromServer: jest.fn(),
+  };
+});
 
+// Tipos para os mocks
 const mockedGetCountFromServer = getCountFromServer as jest.Mock;
+const mockedQuery = query as jest.Mock;
 
 describe('Dashboard Service', () => {
-
   beforeEach(() => {
-    mockedGetCountFromServer.mockClear();
+    jest.clearAllMocks();
   });
 
   describe('getAdminDashboardStats', () => {
-    it('should fetch and return correct stats for the admin dashboard', async () => {
-      // Arrange
-      // --- CORREÇÃO FINAL ---
-      // Ajustamos a ordem para corresponder à execução real do seu código.
+    it('should calculate all admin stats correctly', async () => {
+      // --- Arrange (Organização) ---
+      // Dizemos ao mock para retornar um valor diferente a cada vez que for chamado.
+      // A ordem é a mesma que aparece em `Promise.all` no seu serviço.
       mockedGetCountFromServer
         .mockResolvedValueOnce({ data: () => ({ count: 15 }) }) // 1. Pacientes Ativos
         .mockResolvedValueOnce({ data: () => ({ count: 4 }) })  // 2. Profissionais Ativos
-        .mockResolvedValueOnce({ data: () => ({ count: 2 }) })  // 3. Usuários Pendentes (executa antes)
-        .mockResolvedValueOnce({ data: () => ({ count: 7 }) }); // 4. Agendamentos de Hoje (executa depois)
+        .mockResolvedValueOnce({ data: () => ({ count: 7 }) })  // 3. Usuários Pendentes
+        .mockResolvedValueOnce({ data: () => ({ count: 2 }) }); // 4. Agendamentos de Hoje
 
-      // Act
-      const data = await getAdminDashboardStats();
+      // --- Act (Ação) ---
+      const stats = await getAdminDashboardStats();
 
-      // Assert
-      // Agora a asserção vai corresponder ao resultado correto
-      expect(data).toEqual({
+      // --- Assert (Verificação) ---
+      
+      // O query foi chamado 4 vezes para cada estatística?
+      expect(mockedQuery).toHaveBeenCalledTimes(4);
+
+      // O resultado final bate com os dados que simulamos?
+      expect(stats).toEqual({
         activePatients: 15,
         activeProfessionals: 4,
-        appointmentsToday: 7,
-        pendingUsers: 2,
+        pendingUsers: 7,
+        appointmentsToday: 2,
       });
-
-      expect(mockedGetCountFromServer).toHaveBeenCalledTimes(4);
     });
 
-    it('should return all zeros if queries return no documents', async () => {
-        mockedGetCountFromServer.mockResolvedValue({ data: () => ({ count: 0 }) });
-        const data = await getAdminDashboardStats();
-        expect(data).toEqual({
+    it('should handle Firestore errors gracefully and return zeros', async () => {
+        // Arrange: Simulamos um erro na chamada ao banco de dados
+        mockedGetCountFromServer.mockRejectedValue(new Error("Firebase permission error"));
+  
+        // Act
+        const stats = await getAdminDashboardStats();
+  
+        // Assert: A função deve capturar o erro e retornar um objeto com zeros
+        expect(stats).toEqual({
           activePatients: 0,
           activeProfessionals: 0,
-          appointmentsToday: 0,
           pendingUsers: 0,
+          appointmentsToday: 0,
         });
       });
   });
