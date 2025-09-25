@@ -21,7 +21,7 @@ import { ChevronLeft, ChevronRight, ChevronsUpDown, Check, Calendar, Search, Pal
 import { Professional, getProfessionals } from "@/services/professionalService";
 import { Specialty, getSpecialties } from "@/services/specialtyService";
 import { Appointment, getAppointmentsBySpecialties } from "@/services/appointmentService";
-import { Room, getRooms } from "@/services/roomService"; // NOVO: Importando o serviço e tipo de salas
+import { Room, getRooms } from "@/services/roomService";
 import { formatSpecialtyName } from "@/lib/formatters";
 
 // Função para gerar uma cor pastel a partir de uma string (nome do profissional)
@@ -38,7 +38,7 @@ export function GradeTerapiasClientPage() {
     const [professionals, setProfessionals] = useState<Professional[]>([]);
     const [specialties, setSpecialties] = useState<Specialty[]>([]);
     const [appointments, setAppointments] = useState<Appointment[]>([]);
-    const [rooms, setRooms] = useState<Room[]>([]); // NOVO: Estado para armazenar as salas
+    const [rooms, setRooms] = useState<Room[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedTherapyGroup, setSelectedTherapyGroup] = useState<string>("");
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -47,7 +47,6 @@ export function GradeTerapiasClientPage() {
     useEffect(() => {
         const fetchInitialData = async () => {
             setLoading(true);
-            // NOVO: Buscando as salas junto com os outros dados iniciais
             const [professionalsData, specialtiesData, roomsData] = await Promise.all([ 
                 getProfessionals('ativo'), 
                 getSpecialties(),
@@ -55,13 +54,12 @@ export function GradeTerapiasClientPage() {
             ]);
             setProfessionals(professionalsData);
             setSpecialties(specialtiesData);
-            setRooms(roomsData); // Armazenando as salas no estado
+            setRooms(roomsData);
             setLoading(false);
         };
         fetchInitialData();
     }, []);
 
-    // NOVO: Criando um mapa de ID da sala para nome da sala para busca rápida
     const roomNameMap = useMemo(() => {
         const map = new Map<string, string>();
         rooms.forEach(room => {
@@ -167,25 +165,32 @@ export function GradeTerapiasClientPage() {
                                         <td className="p-2 border text-sm text-center bg-muted align-middle">{time}</td>
                                         {weekDays.map(day => {
                                             const slotTime = set(day, { hours, minutes });
-                                            const appointmentInSlot = appointments.find(app => format(app.start.toDate(), 'HH:mm') === time && format(app.start.toDate(), 'yyyy-MM-dd') === format(slotTime, 'yyyy-MM-dd'));
+                                            
+                                            // CORREÇÃO: Usando .filter() para encontrar TODOS os agendamentos no slot
+                                            const appointmentsInSlot = appointments.filter(app => 
+                                                format(app.start.toDate(), 'HH:mm') === time && 
+                                                format(app.start.toDate(), 'yyyy-MM-dd') === format(slotTime, 'yyyy-MM-dd')
+                                            );
                                             
                                             return (
                                                 <td key={day.toISOString()} className="p-1 border align-top">
-                                                    {appointmentInSlot && (
-                                                        <div key={appointmentInSlot.id} className="p-2 rounded shadow-sm text-xs bg-white border-l-4" style={{ borderColor: professionalColors.get(appointmentInSlot.professionalId) || '#ccc' }}>
-                                                            <p className="font-bold">{appointmentInSlot.patientName}</p>
-                                                            <p className="text-sm">{appointmentInSlot.professionalName}</p>
-                                                            <p className="text-muted-foreground">{format(appointmentInSlot.start.toDate(), 'HH:mm')} - {format(appointmentInSlot.end.toDate(), 'HH:mm')}</p>
-                                                            <p className="text-blue-600 font-semibold">{formatSpecialtyName(appointmentInSlot.tipo)}</p>
-                                                            {/* CORREÇÃO: Usando o mapa para exibir o nome da sala */}
-                                                            {appointmentInSlot.sala && (
-                                                                <p className="text-muted-foreground flex items-center gap-1 pt-1">
-                                                                    <MapPin className="h-3 w-3" />
-                                                                    {roomNameMap.get(appointmentInSlot.sala) || appointmentInSlot.sala}
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                    )}
+                                                    {/* NOVO: Usando .map() para renderizar cada agendamento encontrado */}
+                                                    <div className="space-y-1">
+                                                        {appointmentsInSlot.map(appointment => (
+                                                            <div key={appointment.id} className="p-2 rounded shadow-sm text-xs bg-white border-l-4" style={{ borderColor: professionalColors.get(appointment.professionalId) || '#ccc' }}>
+                                                                <p className="font-bold">{appointment.patientName}</p>
+                                                                <p className="text-sm">{appointment.professionalName}</p>
+                                                                <p className="text-muted-foreground">{format(appointment.start.toDate(), 'HH:mm')} - {format(appointment.end.toDate(), 'HH:mm')}</p>
+                                                                <p className="text-blue-600 font-semibold">{formatSpecialtyName(appointment.tipo)}</p>
+                                                                {appointment.sala && (
+                                                                    <p className="text-muted-foreground flex items-center gap-1 pt-1">
+                                                                        <MapPin className="h-3 w-3" />
+                                                                        {roomNameMap.get(appointment.sala) || appointment.sala}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 </td>
                                             );
                                         })}
