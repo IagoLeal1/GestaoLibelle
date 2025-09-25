@@ -416,7 +416,8 @@ export function AgendamentosClientPage() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                   <Link href="/agendamentos/novo" passHref><DropdownMenuItem>Agendamento Único/Sequencial</DropdownMenuItem></Link>
-                  <Link href="/agendamentos/grade" passHref><DropdownMenuItem>Agendamento em Grade</DropdownMenuItem></Link>
+                  <Link href="/agendamentos/grade" passHref><DropdownMenuItem>Agendamento em Grade por paciente</DropdownMenuItem></Link>
+                  <Link href="/agendamentos/terapia" passHref><DropdownMenuItem>Agendamento em Grade por terapia</DropdownMenuItem></Link>
                   <DropdownMenuSeparator />
                   <Link href="/agendamentos/assistente" passHref>
                     <DropdownMenuItem>

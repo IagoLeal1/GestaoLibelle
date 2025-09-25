@@ -8,8 +8,17 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Search, Filter, CheckCircle, Clock, AlertCircle } from "lucide-react"
+import { Plus, Search, Filter, CheckCircle, Clock, AlertCircle, User, Users } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+
+const funcionarios = [
+  { id: "todos", nome: "Todos os Funcionários" },
+  { id: "maria", nome: "Maria Silva", setor: "recepcao" },
+  { id: "joao", nome: "João Santos", setor: "coordenacao" },
+  { id: "ana", nome: "Ana Costa", setor: "financeiro" },
+  { id: "carlos", nome: "Carlos Oliveira", setor: "recepcao" },
+  { id: "lucia", nome: "Lúcia Ferreira", setor: "coordenacao" },
+]
 
 const tarefas = [
   {
@@ -18,6 +27,7 @@ const tarefas = [
     descricao: "Ligar para todos os pacientes agendados para o período da manhã",
     setor: "recepcao",
     status: "pendente",
+    funcionario: "maria",
     criadoPor: "Coordenador Geral",
     dataVencimento: "2024-01-16",
     prioridade: "alta",
@@ -28,6 +38,7 @@ const tarefas = [
     descricao: "Separar e organizar prontuários para os atendimentos do dia",
     setor: "recepcao",
     status: "em_andamento",
+    funcionario: "carlos",
     criadoPor: "Coordenador Geral",
     dataVencimento: "2024-01-16",
     prioridade: "media",
@@ -38,6 +49,7 @@ const tarefas = [
     descricao: "Analisar receitas e despesas do mês anterior",
     setor: "coordenacao",
     status: "concluida",
+    funcionario: "joao",
     criadoPor: "Coordenador Geral",
     dataVencimento: "2024-01-15",
     prioridade: "alta",
@@ -48,38 +60,68 @@ const tarefas = [
     descricao: "Calcular e atualizar valores de repasse dos profissionais",
     setor: "financeiro",
     status: "pendente",
+    funcionario: "ana",
     criadoPor: "Coordenador Geral",
     dataVencimento: "2024-01-17",
     prioridade: "alta",
   },
+  {
+    id: 5,
+    titulo: "Preparar relatório mensal",
+    descricao: "Compilar dados de atendimentos do mês",
+    setor: "coordenacao",
+    status: "em_andamento",
+    funcionario: "lucia",
+    criadoPor: "Coordenador Geral",
+    dataVencimento: "2024-01-18",
+    prioridade: "media",
+  },
+  {
+    id: 6,
+    titulo: "Conferir estoque de materiais",
+    descricao: "Verificar materiais de limpeza e reposição",
+    setor: "recepcao",
+    status: "concluida",
+    funcionario: "maria",
+    criadoPor: "Coordenador Geral",
+    dataVencimento: "2024-01-14",
+    prioridade: "baixa",
+  },
 ]
 
-const getStatusBadge = (status: string) => {
-  const statusConfig = {
-    pendente: {
-      label: "Pendente",
-      className: "bg-secondary-orange/20 text-secondary-orange",
-      icon: AlertCircle,
-    },
-    em_andamento: {
-      label: "Em Andamento",
-      className: "bg-primary-teal/20 text-primary-teal",
-      icon: Clock,
-    },
-    concluida: {
-      label: "Concluída",
-      className: "bg-primary-medium-green/20 text-primary-medium-green",
-      icon: CheckCircle,
-    },
+const colunas = [
+  {
+    id: "pendente",
+    titulo: "Pendente",
+    cor: "bg-red-50 border-red-200",
+    corHeader: "bg-red-100 text-red-800",
+    icon: AlertCircle,
+  },
+  {
+    id: "em_andamento",
+    titulo: "Em Andamento",
+    cor: "bg-yellow-50 border-yellow-200",
+    corHeader: "bg-yellow-100 text-yellow-800",
+    icon: Clock,
+  },
+  {
+    id: "concluida",
+    titulo: "Concluída",
+    cor: "bg-green-50 border-green-200",
+    corHeader: "bg-green-100 text-green-800",
+    icon: CheckCircle,
+  },
+]
+
+const getPrioridadeBadge = (prioridade: string) => {
+  const prioridadeConfig = {
+    baixa: { label: "Baixa", className: "bg-gray-100 text-gray-800" },
+    media: { label: "Média", className: "bg-blue-100 text-blue-800" },
+    alta: { label: "Alta", className: "bg-red-100 text-red-800" },
   }
 
-  const config = statusConfig[status as keyof typeof statusConfig]
-  return (
-    <Badge className={`${config.className} flex items-center gap-1`}>
-      <config.icon className="h-3 w-3" />
-      {config.label}
-    </Badge>
-  )
+  const config = prioridadeConfig[prioridade as keyof typeof prioridadeConfig]
+  return <Badge className={config.className}>{config.label}</Badge>
 }
 
 const getSetorBadge = (setor: string) => {
@@ -96,34 +138,55 @@ const getSetorBadge = (setor: string) => {
 
 export default function Tarefas() {
   const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState("todos")
-  const [setorFilter, setSetorFilter] = useState("todos")
+  const [funcionarioFilter, setFuncionarioFilter] = useState("todos")
   const [novaTarefa, setNovaTarefa] = useState({
     titulo: "",
     descricao: "",
     setor: "",
+    funcionario: "",
     dataVencimento: "",
     prioridade: "media",
   })
 
   const handleNovaTarefa = () => {
     console.log("Nova tarefa:", novaTarefa)
-    // Implementar lógica para criar nova tarefa
     setNovaTarefa({
       titulo: "",
       descricao: "",
       setor: "",
+      funcionario: "",
       dataVencimento: "",
       prioridade: "media",
     })
+  }
+
+  const tarefasFiltradas = tarefas.filter((tarefa) => {
+    const matchFuncionario = funcionarioFilter === "todos" || tarefa.funcionario === funcionarioFilter
+    const matchSearch =
+      tarefa.titulo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      tarefa.descricao.toLowerCase().includes(searchTerm.toLowerCase())
+    return matchFuncionario && matchSearch
+  })
+
+  const tarefasPorStatus = colunas.reduce(
+    (acc, coluna) => {
+      acc[coluna.id] = tarefasFiltradas.filter((tarefa) => tarefa.status === coluna.id)
+      return acc
+    },
+    {} as Record<string, typeof tarefas>,
+  )
+
+  const getFuncionarioNome = (funcionarioId: string) => {
+    const funcionario = funcionarios.find((f) => f.id === funcionarioId)
+    return funcionario?.nome || "Não atribuído"
   }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-primary-dark-blue">Tarefas</h2>
-          <p className="text-muted-foreground">Gerencie tarefas por setor e acompanhe o progresso</p>
+          <h2 className="text-2xl font-bold tracking-tight text-primary-dark-blue">Sistema de Tarefas</h2>
+          <p className="text-muted-foreground">Gerencie tarefas em formato de funil por funcionário</p>
         </div>
 
         <Dialog>
@@ -176,6 +239,28 @@ export default function Tarefas() {
                   </Select>
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="funcionario">Funcionário</Label>
+                  <Select
+                    value={novaTarefa.funcionario}
+                    onValueChange={(value) => setNovaTarefa({ ...novaTarefa, funcionario: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o funcionário" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {funcionarios
+                        .filter((f) => f.id !== "todos")
+                        .map((funcionario) => (
+                          <SelectItem key={funcionario.id} value={funcionario.id}>
+                            {funcionario.nome}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
                   <Label htmlFor="prioridade">Prioridade</Label>
                   <Select
                     value={novaTarefa.prioridade}
@@ -191,15 +276,15 @@ export default function Tarefas() {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="dataVencimento">Data de Vencimento</Label>
-                <Input
-                  id="dataVencimento"
-                  type="date"
-                  value={novaTarefa.dataVencimento}
-                  onChange={(e) => setNovaTarefa({ ...novaTarefa, dataVencimento: e.target.value })}
-                />
+                <div className="space-y-2">
+                  <Label htmlFor="dataVencimento">Data de Vencimento</Label>
+                  <Input
+                    id="dataVencimento"
+                    type="date"
+                    value={novaTarefa.dataVencimento}
+                    onChange={(e) => setNovaTarefa({ ...novaTarefa, dataVencimento: e.target.value })}
+                  />
+                </div>
               </div>
               <Button onClick={handleNovaTarefa} className="w-full">
                 Criar Tarefa
@@ -209,7 +294,6 @@ export default function Tarefas() {
         </Dialog>
       </div>
 
-      {/* Filtros */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -218,14 +302,14 @@ export default function Tarefas() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="search">Buscar tarefa</Label>
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="search"
-                  placeholder="Título da tarefa..."
+                  placeholder="Título ou descrição da tarefa..."
                   className="pl-8"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -233,31 +317,20 @@ export default function Tarefas() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Setor</Label>
-              <Select value={setorFilter} onValueChange={setSetorFilter}>
+              <Label>Funcionário</Label>
+              <Select value={funcionarioFilter} onValueChange={setFuncionarioFilter}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="todos">Todos os setores</SelectItem>
-                  <SelectItem value="recepcao">Recepção</SelectItem>
-                  <SelectItem value="coordenacao">Coordenação</SelectItem>
-                  <SelectItem value="financeiro">Financeiro</SelectItem>
-                  <SelectItem value="geral">Geral</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos os status</SelectItem>
-                  <SelectItem value="pendente">Pendente</SelectItem>
-                  <SelectItem value="em_andamento">Em Andamento</SelectItem>
-                  <SelectItem value="concluida">Concluída</SelectItem>
+                  {funcionarios.map((funcionario) => (
+                    <SelectItem key={funcionario.id} value={funcionario.id}>
+                      <div className="flex items-center gap-2">
+                        {funcionario.id === "todos" ? <Users className="h-4 w-4" /> : <User className="h-4 w-4" />}
+                        {funcionario.nome}
+                      </div>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -265,33 +338,62 @@ export default function Tarefas() {
         </CardContent>
       </Card>
 
-      {/* Lista de Tarefas */}
-      <div className="grid gap-4">
-        {tarefas.map((tarefa) => (
-          <Card key={tarefa.id} className="hover:shadow-md transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-start gap-3 mb-3">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-lg text-primary-dark-blue">{tarefa.titulo}</h3>
-                      <p className="text-muted-foreground mt-1">{tarefa.descricao}</p>
-                    </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {colunas.map((coluna) => {
+          const Icon = coluna.icon
+          const tarefasColuna = tarefasPorStatus[coluna.id] || []
+
+          return (
+            <div key={coluna.id} className={`rounded-lg border-2 ${coluna.cor} min-h-[600px]`}>
+              <div className={`p-4 rounded-t-lg ${coluna.corHeader} border-b`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Icon className="h-5 w-5" />
+                    <h3 className="font-semibold">{coluna.titulo}</h3>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                    <span>Criado por: {tarefa.criadoPor}</span>
-                    <span>•</span>
-                    <span>Vencimento: {new Date(tarefa.dataVencimento).toLocaleDateString("pt-BR")}</span>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-2">
-                  {getStatusBadge(tarefa.status)}
-                  {getSetorBadge(tarefa.setor)}
+                  <Badge variant="secondary" className="bg-white/50">
+                    {tarefasColuna.length}
+                  </Badge>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        ))}
+
+              <div className="p-4 space-y-3">
+                {tarefasColuna.map((tarefa) => (
+                  <Card key={tarefa.id} className="hover:shadow-md transition-shadow cursor-pointer">
+                    <CardContent className="p-4">
+                      <div className="space-y-3">
+                        <div>
+                          <h4 className="font-semibold text-sm text-primary-dark-blue line-clamp-2">{tarefa.titulo}</h4>
+                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{tarefa.descricao}</p>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1">
+                          {getPrioridadeBadge(tarefa.prioridade)}
+                          {getSetorBadge(tarefa.setor)}
+                        </div>
+
+                        <div className="space-y-1 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <User className="h-3 w-3" />
+                            <span>{getFuncionarioNome(tarefa.funcionario)}</span>
+                          </div>
+                          <div>Vencimento: {new Date(tarefa.dataVencimento).toLocaleDateString("pt-BR")}</div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+
+                {tarefasColuna.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Icon className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">Nenhuma tarefa {coluna.titulo.toLowerCase()}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

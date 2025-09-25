@@ -845,3 +845,39 @@ export const updateAppointmentBlock = async (
     return { success: false, error: "Falha ao atualizar a sequência de agendamentos." };
   }
 };
+
+/**
+ * NOVO E OTIMIZADO: Busca agendamentos para múltiplas especialidades de uma vez.
+ * @param specialtyNames - Um array com os nomes completos das especialidades (terapias).
+ * @param startDate - A data de início para a busca.
+ * @param endDate - A data de fim para a busca.
+ * @returns Uma lista de agendamentos.
+ */
+export const getAppointmentsBySpecialties = async (
+  specialtyNames: string[],
+  startDate: Date,
+  endDate: Date
+): Promise<Appointment[]> => {
+  // Se não houver especialidades, retorna um array vazio para não fazer uma consulta desnecessária.
+  if (specialtyNames.length === 0) {
+    return [];
+  }
+
+  const appointmentsRef = collection(db, "appointments");
+  
+  // A consulta agora é feita diretamente no campo 'tipo', que armazena o nome da terapia.
+  const q = query(
+    appointmentsRef,
+    where("tipo", "in", specialtyNames), // Esta é a chave da correção!
+    where("start", ">=", startDate),
+    where("start", "<=", endDate)
+  );
+
+  const querySnapshot = await getDocs(q);
+  const appointments: Appointment[] = [];
+  querySnapshot.forEach((doc) => {
+    appointments.push({ id: doc.id, ...doc.data() } as Appointment);
+  });
+
+  return appointments;
+};
