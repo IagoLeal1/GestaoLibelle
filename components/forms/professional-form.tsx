@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { useForm, Controller, useWatch } from "react-hook-form";
+import { useForm, Controller, useWatch, useFieldArray } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getProfessionalById, updateProfessional, createProfessional, ProfessionalFormData } from "@/services/professionalService";
+import { Trash2 } from "lucide-react";
 
 const DIAS_SEMANA = [
   { id: 'segunda', label: 'Seg' }, { id: 'terca', label: 'Ter' },
@@ -23,10 +24,37 @@ export function ProfessionalForm() {
   const params = useParams();
   const id = params.id as string | undefined;
 
-  const { register, handleSubmit, control, reset, formState: { errors } } = useForm<ProfessionalFormData>();
+  const { register, handleSubmit, control, reset, formState: { errors } } = useForm<ProfessionalFormData>({
+    defaultValues: {
+      fullName: '',
+      especialidade: '',
+      email: '',
+      cpf: '',
+      celular: '',
+      telefone: '',
+      conselho: '',
+      numeroConselho: '',
+      diasAtendimento: [],
+      horarioInicio: '08:00',
+      horarioFim: '18:00',
+      financeiro: {
+        tipoPagamento: 'repasse',
+        percentualRepasse: 70,
+        horarioFixoInicio: '',
+        horarioFixoFim: '',
+        regrasEspeciais: []
+      }
+    }
+  });
+  
   const [loading, setLoading] = useState(!!id);
   const [serverError, setServerError] = useState<string | null>(null);
   const isEditMode = !!id;
+
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: "financeiro.regrasEspeciais",
+  });
 
   const tipoPagamento = useWatch({
     control,
@@ -56,6 +84,12 @@ export function ProfessionalForm() {
     
     if (data.financeiro.percentualRepasse) {
         data.financeiro.percentualRepasse = Number(data.financeiro.percentualRepasse);
+    }
+    if (data.financeiro.regrasEspeciais) {
+      data.financeiro.regrasEspeciais = data.financeiro.regrasEspeciais.map(rule => ({
+        ...rule,
+        percentual: Number(rule.percentual)
+      }));
     }
 
     const result = isEditMode && id
@@ -99,7 +133,6 @@ export function ProfessionalForm() {
             </div>
             
             <div className="border-t pt-4">
-                {/* --- LAYOUT CORRIGIDO AQUI --- */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="space-y-2">
                         <Label>Tipo de Pagamento</Label>
@@ -122,7 +155,7 @@ export function ProfessionalForm() {
                     
                     {(tipoPagamento === 'repasse' || tipoPagamento === 'ambos') && (
                         <div className="space-y-2">
-                            <Label>Repasse (%)</Label>
+                            <Label>Repasse Padrão (%)</Label>
                             <Input type="number" {...register("financeiro.percentualRepasse")} />
                         </div>
                     )}
@@ -135,6 +168,43 @@ export function ProfessionalForm() {
                     </div>
                 )}
             </div>
+
+            {(tipoPagamento === 'repasse' || tipoPagamento === 'ambos') && (
+              <div className="border-t pt-4">
+                <h3 className="text-md font-medium mb-2">Regras Especiais de Repasse</h3>
+                <div className="space-y-2">
+                  {fields.map((field, index) => (
+                    <div key={field.id} className="flex items-end gap-2">
+                      <div className="flex-1 space-y-2">
+                        <Label>Especialidade</Label>
+                        <Input 
+                          {...register(`financeiro.regrasEspeciais.${index}.especialidade` as const)}
+                          placeholder="Ex: Acompanhante Terapêutico"
+                        />
+                      </div>
+                      <div className="w-32 space-y-2">
+                        <Label>Percentual (%)</Label>
+                        <Input 
+                          type="number"
+                          {...register(`financeiro.regrasEspeciais.${index}.percentual` as const)}
+                        />
+                      </div>
+                      <Button type="button" variant="destructive" size="icon" onClick={() => remove(index)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  className="mt-4"
+                  onClick={() => append({ especialidade: '', percentual: 100 })}>
+                  Adicionar Regra
+                </Button>
+              </div>
+            )}
+            
         </CardContent>
       </Card>
       

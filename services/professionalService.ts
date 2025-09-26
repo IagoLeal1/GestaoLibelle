@@ -13,6 +13,12 @@ import {
   orderBy
 } from 'firebase/firestore';
 
+// Define a estrutura para uma regra de repasse especial
+export interface RegraRepasseEspecial {
+  especialidade: string;
+  percentual: number;
+}
+
 export interface Professional {
   id: string;
   userId?: string;
@@ -34,6 +40,7 @@ export interface Professional {
     percentualRepasse?: number;
     horarioFixoInicio?: string;
     horarioFixoFim?: string;
+    regrasEspeciais?: RegraRepasseEspecial[]; // ✅ NOVO CAMPO ADICIONADO AQUI
   }
 }
 
@@ -54,6 +61,7 @@ export interface ProfessionalFormData {
     percentualRepasse?: number;
     horarioFixoInicio?: string;
     horarioFixoFim?: string;
+    regrasEspeciais?: RegraRepasseEspecial[]; // ✅ E AQUI TAMBÉM
   }
 }
 
@@ -133,7 +141,6 @@ export const deleteProfessional = async (id: string) => {
   }
 };
 
-// --- NOVA FUNÇÃO ADICIONADA AQUI ---
 export const updateProfessionalStatus = async (id: string, status: 'ativo' | 'inativo' | 'licenca') => {
   try {
     const docRef = doc(db, 'professionals', id);

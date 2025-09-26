@@ -80,52 +80,73 @@ export interface QuickAppointmentData {
   frequency: RecurrenceFrequency;
 }
 
-// --- FUNÇÃO DE REPASSE ---
+// --- ✅ FUNÇÃO DE REPASSE ATUALIZADA ✅ ---
 const handleRepasseTransaction = async (appointment: Appointment) => {
+  // 1. Limpa qualquer repasse antigo associado a este agendamento
   await deleteTransactionByAppointmentId(appointment.id);
+
+  // 2. Verifica se as condições para gerar um novo repasse são atendidas
   const shouldGenerateRepasse =
     appointment.status === 'finalizado' ||
     (appointment.status === 'nao_compareceu' && appointment.statusSecundario === 'fnj_paciente');
+
   if (!shouldGenerateRepasse) {
     return { success: true, message: "Nenhuma condição para repasse atendida." };
   }
+
   const professional = await getProfessionalById(appointment.professionalId);
   if (!professional?.financeiro) {
     return { success: false, error: "Dados financeiros do profissional não encontrados." };
   }
 
-  await findOrCreateCostCenter(appointment.tipo);
-  await findOrCreateAccountPlan('Repasse de Profissional', 'despesa');
+  // 3. Determina o percentual de repasse (LÓGICA NOVA AQUI)
+  const { tipoPagamento, percentualRepasse, horarioFixoInicio, horarioFixoFim, regrasEspeciais } = professional.financeiro;
+  let percentualAplicado = percentualRepasse || 0; // Começa com o percentual padrão
 
-  const allBankAccounts = await getBankAccounts();
-  const defaultAccount = allBankAccounts.find(acc => acc.isDefault);
+  // Verifica se existe uma regra especial que se aplique a esta terapia
+  if (regrasEspeciais && regrasEspeciais.length > 0 && appointment.tipo) {
+    const regraAplicavel = regrasEspeciais.find(regra =>
+      appointment.tipo.startsWith(regra.especialidade)
+    );
+    // Se encontrou uma regra, usa o percentual dela
+    if (regraAplicavel) {
+      percentualAplicado = regraAplicavel.percentual;
+    }
+  }
+
+  // 4. Calcula o valor final do repasse
   let valorRepasse = 0;
-  const { tipoPagamento, percentualRepasse, horarioFixoInicio, horarioFixoFim } = professional.financeiro;
   const valorConsulta = appointment.valorConsulta || 0;
-  if (tipoPagamento === 'fixo') {
-    valorRepasse = 0;
-  }
-  else if (tipoPagamento === 'repasse') {
-    valorRepasse = (valorConsulta * (percentualRepasse || 0)) / 100;
-  }
-  else if (tipoPagamento === 'ambos') {
+
+  if (tipoPagamento === 'repasse') {
+    valorRepasse = (valorConsulta * percentualAplicado) / 100;
+  } else if (tipoPagamento === 'ambos') {
     const appointmentTime = appointment.start.toDate();
     const appointmentHour = getHours(appointmentTime);
     const appointmentMinute = getMinutes(appointmentTime);
     const appointmentTotalMinutes = appointmentHour * 60 + appointmentMinute;
+
     const [startHour = 0, startMinute = 0] = horarioFixoInicio?.split(':').map(Number) || [];
     const [endHour = 0, endMinute = 0] = horarioFixoFim?.split(':').map(Number) || [];
     const fixedStartTotalMinutes = startHour * 60 + startMinute;
     const fixedEndTotalMinutes = endHour * 60 + endMinute;
-    if (appointmentTotalMinutes >= fixedStartTotalMinutes && appointmentTotalMinutes < fixedEndTotalMinutes) {
-      valorRepasse = 0;
-    } else {
-      valorRepasse = (valorConsulta * (percentualRepasse || 0)) / 100;
+
+    if (appointmentTotalMinutes < fixedStartTotalMinutes || appointmentTotalMinutes >= fixedEndTotalMinutes) {
+      // Fora do horário fixo, aplica o repasse
+      valorRepasse = (valorConsulta * percentualAplicado) / 100;
     }
   }
+
+  // 5. Cria a transação de despesa se o valor for positivo
   if (valorRepasse <= 0) {
     return { success: true, message: "Valor de repasse é zero, nenhuma transação criada." };
   }
+  
+  await findOrCreateCostCenter(appointment.tipo);
+  await findOrCreateAccountPlan('Repasse de Profissional', 'despesa');
+  const allBankAccounts = await getBankAccounts();
+  const defaultAccount = allBankAccounts.find(acc => acc.isDefault);
+
   const transactionData: TransactionFormData = {
     type: 'despesa',
     description: `Repasse ${professional.fullName} - Sessão ${appointment.patientName} ${format(appointment.start.toDate(), 'dd/MM')}`,
@@ -141,6 +162,7 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
     patientName: appointment.patientName,
     appointmentId: appointment.id,
   };
+
   return addTransaction(transactionData);
 };
 
