@@ -14,8 +14,9 @@ import { AccountPlan, Supplier, Covenant, BankAccount } from "@/services/financi
 import { CostCenter, CompanyData } from "@/services/settingsService";
 import { Skeleton } from "../ui/skeleton";
 import { formatCEP, formatCPF_CNPJ, formatPhone } from "@/lib/formatters";
+import { ScrollArea } from "../ui/scroll-area"; // Importe o componente ScrollArea
 
-// --- Sub-componente: Dados da Empresa ---
+// --- Sub-componente: Dados da Empresa (sem alterações) ---
 const CompanyInfoManager = ({ initialData, onSave, loading }: { initialData: CompanyData | null, onSave: (data: CompanyData) => Promise<void>, loading: boolean }) => {
     const [formData, setFormData] = useState<CompanyData>({});
     const [isSaving, setIsSaving] = useState(false);
@@ -70,7 +71,7 @@ const CompanyInfoManager = ({ initialData, onSave, loading }: { initialData: Com
     );
 };
 
-// --- Interfaces de Props Corrigidas ---
+// --- Interfaces de Props (sem alterações) ---
 interface PlanoContasManagerProps {
     accountPlans: { receitas: AccountPlan[]; despesas: AccountPlan[] };
     loading: boolean;
@@ -84,31 +85,33 @@ const PlanoContasManager = ({ accountPlans, loading, onAdd, onEdit, onDelete }: 
         <Card>
             <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>{title}</CardTitle>
-                <Button size="sm" onClick={() => onAdd(title === "Categorias de Receita" ? "receita" : "despesa")}><Plus className="mr-2 h-4 w-4" /> Adicionar Categoria</Button>
+                <Button size="sm" onClick={() => onAdd(title === "Categorias de Receita" ? "receita" : "despesa")}><Plus className="mr-2 h-4 w-4" /> Adicionar</Button>
             </CardHeader>
             <CardContent>
-                <Table>
-                    <TableHeader><TableRow><TableHead>Código</TableHead><TableHead>Nome da Conta</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                        {loading ? (<TableRow><TableCell colSpan={3} className="text-center h-24">Carregando...</TableCell></TableRow>) : (
-                            plans.map((plan) => (
-                                <TableRow key={plan.id}>
-                                    <TableCell>{plan.code}</TableCell>
-                                    <TableCell className="font-medium">{plan.name}</TableCell>
-                                    <TableCell className="text-right">
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuItem onClick={() => onEdit(plan)}>Editar</DropdownMenuItem>
-                                                <DropdownMenuItem className="text-red-600" onClick={() => onDelete(plan.id)}>Excluir</DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </TableCell>
-                                </TableRow>
-                            ))
-                        )}
-                    </TableBody>
-                </Table>
+                <ScrollArea className="h-[350px]">
+                    <Table>
+                        <TableHeader><TableRow><TableHead>Código</TableHead><TableHead>Nome</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+                        <TableBody>
+                            {loading ? (<TableRow><TableCell colSpan={3} className="text-center h-24">Carregando...</TableCell></TableRow>) : (
+                                plans.map((plan) => (
+                                    <TableRow key={plan.id}>
+                                        <TableCell>{plan.code}</TableCell>
+                                        <TableCell className="font-medium">{plan.name}</TableCell>
+                                        <TableCell className="text-right">
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem onClick={() => onEdit(plan)}>Editar</DropdownMenuItem>
+                                                    <DropdownMenuItem className="text-red-600" onClick={() => onDelete(plan.id)}>Excluir</DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </ScrollArea>
             </CardContent>
         </Card>
     );
@@ -120,6 +123,7 @@ const PlanoContasManager = ({ accountPlans, loading, onAdd, onEdit, onDelete }: 
         </Card>
     );
 };
+
 const CostCenterManager = ({ costCenters, loading, onAdd, onEdit, onDelete }: { costCenters: CostCenter[], loading: boolean, onAdd: () => void, onEdit: (center: CostCenter) => void, onDelete: (id: string) => void }) => ( 
     <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -127,29 +131,32 @@ const CostCenterManager = ({ costCenters, loading, onAdd, onEdit, onDelete }: { 
             <Button size="sm" onClick={onAdd}><Plus className="mr-2 h-4 w-4" /> Novo Centro</Button>
         </CardHeader>
         <CardContent>
-             <Table>
-                <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
-                <TableBody>
-                    {loading ? <TableRow><TableCell colSpan={2} className="text-center h-24">Carregando...</TableCell></TableRow> :
-                    costCenters.map((center) => (
-                        <TableRow key={center.id}>
-                            <TableCell className="font-medium">{center.name}</TableCell>
-                            <TableCell className="text-right">
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                        <DropdownMenuItem onClick={() => onEdit(center)}>Editar</DropdownMenuItem>
-                                        <DropdownMenuItem className="text-red-600" onClick={() => onDelete(center.id)}>Excluir</DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
+             <ScrollArea className="h-[350px]">
+                 <Table>
+                    <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                        {loading ? <TableRow><TableCell colSpan={2} className="text-center h-24">Carregando...</TableCell></TableRow> :
+                        costCenters.map((center) => (
+                            <TableRow key={center.id}>
+                                <TableCell className="font-medium">{center.name}</TableCell>
+                                <TableCell className="text-right">
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuItem onClick={() => onEdit(center)}>Editar</DropdownMenuItem>
+                                            <DropdownMenuItem className="text-red-600" onClick={() => onDelete(center.id)}>Excluir</DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+             </ScrollArea>
         </CardContent>
     </Card>
 );
+
 const SupplierManager = ({ suppliers, loading, onAdd, onEdit, onDelete }: { suppliers: Supplier[], loading: boolean, onAdd: () => void, onEdit: (supplier: Supplier) => void, onDelete: (id: string) => void }) => (
     <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -157,31 +164,34 @@ const SupplierManager = ({ suppliers, loading, onAdd, onEdit, onDelete }: { supp
             <Button size="sm" onClick={onAdd}><Plus className="mr-2 h-4 w-4" /> Novo Fornecedor</Button>
         </CardHeader>
         <CardContent>
-             <Table>
-                <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>CNPJ</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
-                <TableBody>
-                    {loading ? <TableRow><TableCell colSpan={4} className="text-center h-24">Carregando...</TableCell></TableRow> :
-                    suppliers.map((supplier) => (
-                        <TableRow key={supplier.id}>
-                            <TableCell className="font-medium">{supplier.name}</TableCell>
-                            <TableCell>{supplier.cnpj}</TableCell>
-                            <TableCell><Badge variant={supplier.status === "Ativo" ? "default" : "secondary"}>{supplier.status}</Badge></TableCell>
-                            <TableCell className="text-right">
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                        <DropdownMenuItem onClick={() => onEdit(supplier)}>Editar</DropdownMenuItem>
-                                        <DropdownMenuItem className="text-red-600" onClick={() => onDelete(supplier.id)}>Excluir</DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
+             <ScrollArea className="h-[350px]">
+                 <Table>
+                    <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>CNPJ</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                        {loading ? <TableRow><TableCell colSpan={4} className="text-center h-24">Carregando...</TableCell></TableRow> :
+                        suppliers.map((supplier) => (
+                            <TableRow key={supplier.id}>
+                                <TableCell className="font-medium">{supplier.name}</TableCell>
+                                <TableCell>{supplier.cnpj}</TableCell>
+                                <TableCell><Badge variant={supplier.status === "Ativo" ? "default" : "secondary"}>{supplier.status}</Badge></TableCell>
+                                <TableCell className="text-right">
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuItem onClick={() => onEdit(supplier)}>Editar</DropdownMenuItem>
+                                            <DropdownMenuItem className="text-red-600" onClick={() => onDelete(supplier.id)}>Excluir</DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+             </ScrollArea>
         </CardContent>
     </Card>
 );
+
 const CovenantManager = ({ covenants, loading, onAdd, onEdit, onDelete }: { covenants: Covenant[], loading: boolean, onAdd: () => void, onEdit: (covenant: Covenant) => void, onDelete: (id: string) => void }) => (
     <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -189,28 +199,30 @@ const CovenantManager = ({ covenants, loading, onAdd, onEdit, onDelete }: { cove
             <Button size="sm" onClick={onAdd}><Plus className="mr-2 h-4 w-4" /> Novo Convênio</Button>
         </CardHeader>
         <CardContent>
-            <Table>
-                <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Valor/Consulta</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
-                <TableBody>
-                    {loading ? <TableRow><TableCell colSpan={4} className="text-center h-24">Carregando...</TableCell></TableRow> :
-                    covenants.map((covenant) => (
-                        <TableRow key={covenant.id}>
-                            <TableCell className="font-medium">{covenant.name}</TableCell>
-                            <TableCell>R$ {covenant.valuePerConsult.toLocaleString("pt-BR")}</TableCell>
-                            <TableCell><Badge variant={covenant.status === "Ativo" ? "default" : "secondary"}>{covenant.status}</Badge></TableCell>
-                            <TableCell className="text-right">
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                        <DropdownMenuItem onClick={() => onEdit(covenant)}>Editar</DropdownMenuItem>
-                                        <DropdownMenuItem className="text-red-600" onClick={() => onDelete(covenant.id)}>Excluir</DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
+            <ScrollArea className="h-[350px]">
+                <Table>
+                    <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Valor/Consulta</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                        {loading ? <TableRow><TableCell colSpan={4} className="text-center h-24">Carregando...</TableCell></TableRow> :
+                        covenants.map((covenant) => (
+                            <TableRow key={covenant.id}>
+                                <TableCell className="font-medium">{covenant.name}</TableCell>
+                                <TableCell>R$ {covenant.valuePerConsult.toLocaleString("pt-BR")}</TableCell>
+                                <TableCell><Badge variant={covenant.status === "Ativo" ? "default" : "secondary"}>{covenant.status}</Badge></TableCell>
+                                <TableCell className="text-right">
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuItem onClick={() => onEdit(covenant)}>Editar</DropdownMenuItem>
+                                            <DropdownMenuItem className="text-red-600" onClick={() => onDelete(covenant.id)}>Excluir</DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </ScrollArea>
         </CardContent>
     </Card>
 );
@@ -229,39 +241,40 @@ const BankAccountManager = ({ bankAccounts, loading, onAdd, onEdit, onDelete, on
             <Button size="sm" onClick={onAdd}><Plus className="mr-2 h-4 w-4" /> Nova Conta</Button>
         </CardHeader>
         <CardContent>
-            <Table>
-                <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Agência</TableHead><TableHead>Conta</TableHead><TableHead>Saldo Inicial</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
-                <TableBody>
-                    {loading ? <TableRow><TableCell colSpan={5} className="text-center h-24">Carregando...</TableCell></TableRow> :
-                    bankAccounts.map((account) => (
-                        <TableRow key={account.id}>
-                            <TableCell className="font-medium flex items-center gap-2">
-                                {account.isDefault && <Star className="h-4 w-4 text-yellow-500 fill-yellow-400" />}
-                                {account.name}
-                            </TableCell>
-                            <TableCell>{account.agency}</TableCell>
-                            <TableCell>{account.account}</TableCell>
-                            <TableCell>R$ {account.initialBalance.toLocaleString("pt-BR")}</TableCell>
-                            <TableCell className="text-right">
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                        {!account.isDefault && <DropdownMenuItem onClick={() => onSetDefault(account.id)}>Definir como Padrão</DropdownMenuItem>}
-                                        <DropdownMenuItem onClick={() => onEdit(account)}>Editar</DropdownMenuItem>
-                                        <DropdownMenuItem className="text-red-600" onClick={() => onDelete(account.id)}>Excluir</DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
+            <ScrollArea className="h-[350px]">
+                <Table>
+                    <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Agência</TableHead><TableHead>Conta</TableHead><TableHead>Saldo Inicial</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                        {loading ? <TableRow><TableCell colSpan={5} className="text-center h-24">Carregando...</TableCell></TableRow> :
+                        bankAccounts.map((account) => (
+                            <TableRow key={account.id}>
+                                <TableCell className="font-medium flex items-center gap-2">
+                                    {account.isDefault && <Star className="h-4 w-4 text-yellow-500 fill-yellow-400" />}
+                                    {account.name}
+                                </TableCell>
+                                <TableCell>{account.agency}</TableCell>
+                                <TableCell>{account.account}</TableCell>
+                                <TableCell>R$ {account.initialBalance.toLocaleString("pt-BR")}</TableCell>
+                                <TableCell className="text-right">
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            {!account.isDefault && <DropdownMenuItem onClick={() => onSetDefault(account.id)}>Definir como Padrão</DropdownMenuItem>}
+                                            <DropdownMenuItem onClick={() => onEdit(account)}>Editar</DropdownMenuItem>
+                                            <DropdownMenuItem className="text-red-600" onClick={() => onDelete(account.id)}>Excluir</DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </ScrollArea>
         </CardContent>
     </Card>
 );
 
 
-// --- INTERFACE DE PROPS COMPLETA ---
 interface SettingsDashboardProps {
     companyData: CompanyData | null;
     onUpdateCompanyData: (data: CompanyData) => Promise<void>;
