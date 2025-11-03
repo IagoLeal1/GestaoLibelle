@@ -30,11 +30,26 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { CommunicationDetailsModal } from "../modals/communication-details-modal";
 import { toast } from "sonner";
 
+// --- Tipos Locais ---
+type AllUsersState = {
+  profissionais: UserDetails[],
+  familiares: UserDetails[],
+  funcionarios: UserDetails[],
+  admins: UserDetails[],
+  coordenadores: UserDetails[] 
+};
+
 // --- Componente Principal ---
 export function CommunicationsClientPage() {
     const { firestoreUser, fetchUnreadCount } = useAuth();
+    const [allUsers, setAllUsers] = useState<AllUsersState>({ 
+      profissionais: [], 
+      familiares: [], 
+      funcionarios: [], 
+      admins: [], 
+      coordenadores: [] 
+    });
     const [allComms, setAllComms] = useState<Communication[]>([]);
-    const [allUsers, setAllUsers] = useState<{ profissionais: UserDetails[], familiares: UserDetails[], funcionarios: UserDetails[], admins: UserDetails[] }>({ profissionais: [], familiares: [], funcionarios: [], admins: [] });
     const [loading, setLoading] = useState(true);
     
     const [selectedComm, setSelectedComm] = useState<Communication | null>(null);
@@ -43,15 +58,22 @@ export function CommunicationsClientPage() {
     const fetchData = useCallback(async () => {
         if (firestoreUser?.profile.role) {
             setLoading(true);
-            const [commsData, profUsers, famUsers, funcUsers, adminUsers] = await Promise.all([
+            const [commsData, profUsers, famUsers, funcUsers, adminUsers, coordUsers] = await Promise.all([
                 getCommunications(firestoreUser.profile.role),
                 getUsersByRole('profissional'),
                 getUsersByRole('familiar'),
                 getUsersByRole('funcionario'),
-                getUsersByRole('admin') 
+                getUsersByRole('admin'),
+                getUsersByRole('coordenador') 
             ]);
             setAllComms(commsData);
-            setAllUsers({ profissionais: profUsers, familiares: famUsers, funcionarios: funcUsers, admins: adminUsers });
+            setAllUsers({ 
+              profissionais: profUsers, 
+              familiares: famUsers, 
+              funcionarios: funcUsers, 
+              admins: adminUsers, 
+              coordenadores: coordUsers 
+            });
             setLoading(false);
             fetchUnreadCount();
         }
@@ -74,18 +96,32 @@ export function CommunicationsClientPage() {
             targets = [...allUsers.familiares];
         } else if (comm.targetRole === 'profissional') {
             targets = [...allUsers.profissionais, ...allUsers.funcionarios];
+        } else if (comm.targetRole === 'coordenador') {
+            targets = [...allUsers.coordenadores];
+        } else if (comm.targetRole === 'funcionario') { 
+            targets = [...allUsers.funcionarios];
         }
         
-        const allTargets = [...targets, ...allUsers.admins];
-        return Array.from(new Map(allTargets.map(item => [item.uid, item])).values());
+        // Admins e Coordenadores veem todos os comunicados internos
+        if (comm.targetRole === 'profissional' || comm.targetRole === 'funcionario' || comm.targetRole === 'coordenador') {
+          targets.push(...allUsers.admins, ...allUsers.coordenadores);
+        }
+        // Admins também veem comunicados de familiares
+        if (comm.targetRole === 'familiar') {
+          targets.push(...allUsers.admins);
+        }
+
+        return Array.from(new Map(targets.map(item => [item.uid, item])).values());
     };
     
-    const avisosInternos = allComms.filter(c => c.targetRole === 'profissional' || c.targetRole === 'funcionario');
+    const avisosInternos = allComms.filter(c => c.targetRole === 'profissional' || c.targetRole === 'funcionario' || c.targetRole === 'coordenador');
     const comunicadosFamiliares = allComms.filter(c => c.targetRole === 'familiar');
-    const canManage = firestoreUser?.profile.role === 'admin' || firestoreUser?.profile.role === 'funcionario';
+    
+    const canManage = firestoreUser?.profile.role === 'admin' || firestoreUser?.profile.role === 'funcionario' || firestoreUser?.profile.role === 'coordenador';
+    const hasDeletePermission = firestoreUser?.profile.role === 'admin' || firestoreUser?.profile.role === 'coordenador';
 
-    // Sub-componente para o Card de Comunicação
-    const CommunicationCard = ({ comm }: { comm: Communication }) => {
+    // --- Sub-componente para o Card de Comunicação ---
+    const CommunicationCard = ({ comm, hasDeletePermission, onDeleted }: { comm: Communication, hasDeletePermission: boolean, onDeleted: () => void }) => {
         const targetUsers = getTargetUsersForComm(comm);
         const totalDestinatarios = targetUsers.length;
         const readCount = Object.keys(comm.readBy).length;
@@ -102,7 +138,25 @@ export function CommunicationsClientPage() {
             e.stopPropagation();
             if (!firestoreUser) return;
             await markCommunicationAsRead(comm.id, firestoreUser.uid);
-            fetchData();
+            onDeleted(); 
+        };
+
+        const handleDelete = async (e: React.MouseEvent) => {
+            e.stopPropagation(); 
+            if (!hasDeletePermission) return;
+
+            if (!window.confirm("Tem certeza que deseja excluir este comunicado? Esta ação é irreversível.")) {
+                return;
+            }
+
+            try {
+                await deleteCommunication(comm.id);
+                toast.success("Comunicado excluído com sucesso!");
+                onDeleted(); 
+            } catch (error) {
+                console.error("Erro ao excluir comunicado:", error);
+                toast.error("Falha ao excluir comunicado.");
+            }
         };
 
         const getProgressColor = (leituras: number, total: number) => {
@@ -124,15 +178,25 @@ export function CommunicationsClientPage() {
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                             {canManage && <Badge>{readCount}/{totalDestinatarios} leram</Badge>}
+                            
+                            {hasDeletePermission && (
+                                <Button
+                                    variant="destructive"
+                                    size="icon"
+                                    className="h-7 w-7" 
+                                    onClick={handleDelete}
+                                    title="Excluir Comunicado"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            )}
                         </div>
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <p className="text-gray-700 line-clamp-2">{comm.message}</p>
                     
-                    {/* --- LÓGICA DE EXIBIÇÃO CORRIGIDA --- */}
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                        {/* Botão ou status de leitura sempre aparece */}
                         {!hasRead ? (
                             <Button onClick={handleConfirmReadClick} size="sm">
                                 <CheckCircle className="mr-2 h-4 w-4" />
@@ -145,19 +209,18 @@ export function CommunicationsClientPage() {
                             </div>
                         )}
 
-                        {/* Barra de progresso aparece APENAS para admins/funcionários */}
                         {canManage && (
                              <div className="flex items-center gap-2 w-full sm:w-1/3">
-                                <div className="flex-1 bg-gray-200 rounded-full h-2">
-                                    <div 
-                                        className={`h-2 rounded-full ${getProgressColor(readCount, totalDestinatarios)}`} 
-                                        style={{ width: `${totalDestinatarios > 0 ? (readCount / totalDestinatarios) * 100 : 0}%` }}
-                                    ></div>
-                                </div>
-                                <span className="text-xs text-muted-foreground">
-                                    {Math.round(totalDestinatarios > 0 ? (readCount / totalDestinatarios) * 100 : 0)}%
-                                </span>
-                            </div>
+                                 <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                     <div 
+                                         className={`h-2 rounded-full ${getProgressColor(readCount, totalDestinatarios)}`} 
+                                         style={{ width: `${totalDestinatarios > 0 ? (readCount / totalDestinatarios) * 100 : 0}%` }}
+                                     ></div>
+                                 </div>
+                                 <span className="text-xs text-muted-foreground">
+                                     {Math.round(totalDestinatarios > 0 ? (readCount / totalDestinatarios) * 100 : 0)}%
+                                 </span>
+                             </div>
                         )}
                     </div>
                 </CardContent>
@@ -176,13 +239,27 @@ export function CommunicationsClientPage() {
                 </TabsList>
                 <TabsContent value="internos" className="space-y-4 pt-4">
                     {avisosInternos.length > 0 ? 
-                        avisosInternos.map((aviso) => <CommunicationCard key={aviso.id} comm={aviso} />) :
+                        avisosInternos.map((aviso) => (
+                            <CommunicationCard 
+                                key={aviso.id} 
+                                comm={aviso} 
+                                hasDeletePermission={hasDeletePermission} 
+                                onDeleted={fetchData} 
+                            />
+                        )) :
                         <p className="text-center text-muted-foreground py-8">Nenhum aviso interno no momento.</p>
                     }
                 </TabsContent>
                 <TabsContent value="familiares" className="space-y-4 pt-4">
                     {comunicadosFamiliares.length > 0 ?
-                        comunicadosFamiliares.map((comunicado) => <CommunicationCard key={comunicado.id} comm={comunicado} />) :
+                        comunicadosFamiliares.map((comunicado) => (
+                            <CommunicationCard 
+                                key={comunicado.id} 
+                                comm={comunicado} 
+                                hasDeletePermission={hasDeletePermission} 
+                                onDeleted={fetchData} 
+                            />
+                        )) :
                         <p className="text-center text-muted-foreground py-8">Nenhum comunicado para familiares no momento.</p>
                     }
                 </TabsContent>
@@ -200,16 +277,17 @@ export function CommunicationsClientPage() {
     );
 }
 
-// Sub-componente para o Modal de Criação (sem alterações)
+// Sub-componente para o Modal de Criação
 CommunicationsClientPage.CreateCommunicationModal = function CreateCommunicationModal() {
     const { firestoreUser, fetchUnreadCount } = useAuth();
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
+    
     const [formData, setFormData] = useState<CommunicationFormData>({
         title: "",
         message: "",
         isImportant: false,
-        targetRole: "profissional"
+        targetRole: "profissional" 
     });
 
     const handleCreate = async () => {
@@ -223,9 +301,19 @@ CommunicationsClientPage.CreateCommunicationModal = function CreateCommunication
         if (result.success) {
             toast.success("Comunicado enviado!");
             setOpen(false);
-            fetchUnreadCount();
+            setFormData({
+                title: "",
+                message: "",
+                isImportant: false,
+                targetRole: "profissional"
+            });
+            fetchUnreadCount(); 
+            // NOTA: A lista de comunicados não será atualizada
+            // automaticamente aqui sem passar uma função de 'refetch'
+            // do componente pai (page.tsx).
+            // O ideal é o page.tsx controlar o 'fetchData' e passá-lo para cá.
         } else {
-            toast.error(result.error);
+            toast.error(result.error || "Falha ao criar comunicado.");
         }
     };
     
@@ -243,6 +331,8 @@ CommunicationsClientPage.CreateCommunicationModal = function CreateCommunication
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="profissional">Aviso Interno (Profissionais/Funcionários)</SelectItem>
+                                {/* --- ERRO CORRIGIDO AQUI --- */}
+                                <SelectItem value="coordenador">Aviso para Coordenadores</SelectItem>
                                 <SelectItem value="familiar">Comunicado para Familiares</SelectItem>
                             </SelectContent>
                         </Select>

@@ -23,14 +23,14 @@ export interface Communication {
   authorName: string;
   createdAt: Timestamp;
   isImportant: boolean;
-  targetRole: 'profissional' | 'funcionario' | 'familiar';
+  targetRole: 'profissional' | 'funcionario' | 'familiar' | 'coordenador';
   readBy: { [key: string]: Timestamp };
 }
 export interface CommunicationFormData {
     title: string;
     message: string;
     isImportant: boolean;
-    targetRole: 'profissional' | 'funcionario' | 'familiar';
+    targetRole: 'profissional' | 'funcionario' | 'familiar' | 'coordenador';
 }
 
 // Interface para buscar detalhes básicos dos usuários
@@ -90,7 +90,7 @@ export const updateCommunication = async (id: string, data: { title: string, mes
 /**
  * Busca todos os usuários aprovados de um determinado perfil para a lista de leitura.
  */
-export const getUsersByRole = async (role: 'profissional' | 'familiar' | 'funcionario' | 'admin'): Promise<UserDetails[]> => {
+export const getUsersByRole = async (role: 'profissional' | 'familiar' | 'funcionario' | 'admin' | 'coordenador'): Promise<UserDetails[]> => {
     try {
         const q = query(
             collection(db, 'users'), 
@@ -122,7 +122,7 @@ export const markCommunicationAsRead = async (communicationId: string, userId: s
 
 // --- FUNÇÃO CORRIGIDA ---
 // Adicionamos 'admin' aos tipos de perfis que a função aceita.
-export const countUsersByRole = async (role: 'profissional' | 'funcionario' | 'familiar' | 'admin'): Promise<number> => {
+export const countUsersByRole = async (role: 'profissional' | 'funcionario' | 'familiar' | 'admin' | 'coordenador'): Promise<number> => {
     try {
         const q = query(collection(db, 'users'), where('profile.role', '==', role), where('profile.status', '==', 'aprovado'));
         const snapshot = await getCountFromServer(q);

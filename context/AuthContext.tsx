@@ -13,7 +13,7 @@ export interface FirestoreUser {
   displayName: string;
   email: string;
   profile: {
-    role: 'familiar' | 'profissional' | 'funcionario' | 'admin';
+    role: 'familiar' | 'profissional' | 'funcionario' | 'admin' | 'coordenador';
     status: 'pendente' | 'aprovado' | 'rejeitado';
     [key: string]: any;
   };
