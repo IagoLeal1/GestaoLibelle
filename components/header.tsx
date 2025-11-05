@@ -37,7 +37,7 @@ export function Header() {
     <header className="flex h-16 items-center justify-between border-b bg-support-off-white px-4 md:px-6">
       <div className="flex items-center gap-4">
         <SidebarTrigger />
-        <h1 className="text-lg font-semibold hidden md:block">Sistema de Agendamento</h1>
+        <h1 className="text-lg font-semibold hidden md:block"></h1>
       </div>
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" className="relative">

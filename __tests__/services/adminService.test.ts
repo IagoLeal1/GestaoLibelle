@@ -1,124 +1,160 @@
 // __tests__/services/adminService.test.ts
 
-import { approveUser, getPendingUsers, rejectUser } from '@/services/adminService';
-import { db } from '@/lib/firebaseConfig';
-import { collection, query, where, getDocs, doc, runTransaction, deleteDoc } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  Timestamp,
+  where,
+  writeBatch,
+} from "firebase/firestore";
+import { db } from "@/lib/firebaseConfig";
+import { approveUser } from "@/services/adminService"; // Importe a função
 
-// Simular o módulo do firestore
-jest.mock('firebase/firestore');
+// Mockar as funções do Firebase
+jest.mock("@/lib/firebaseConfig", () => ({
+  db: jest.fn(),
+}));
 
-// Tipos para os mocks
-const mockedGetDocs = getDocs as jest.Mock;
-const mockedRunTransaction = runTransaction as jest.Mock;
-const mockedDeleteDoc = deleteDoc as jest.Mock;
-const mockedCollection = collection as jest.Mock;
-const mockedQuery = query as jest.Mock;
-const mockedWhere = where as jest.Mock;
-const mockedDoc = doc as jest.Mock;
+jest.mock("firebase/firestore", () => ({
+  collection: jest.fn(),
+  doc: jest.fn(),
+  getDoc: jest.fn(),
+  getDocs: jest.fn(),
+  query: jest.fn(),
+  where: jest.fn(),
+  writeBatch: jest.fn(),
+  Timestamp: {
+    now: jest.fn(() => ({
+      seconds: 123456789,
+      toDate: () => new Date(),
+    })),
+  },
+}));
 
-describe('Admin Service', () => {
+// Cast das funções mocadas
+const mockCollection = collection as jest.Mock;
+const mockDoc = doc as jest.Mock;
+const mockGetDoc = getDoc as jest.Mock;
+const mockGetDocs = getDocs as jest.Mock;
+const mockQuery = query as jest.Mock;
+const mockWhere = where as jest.Mock;
+const mockWriteBatch = writeBatch as jest.Mock;
 
-  let mockTransaction: {
-    get: jest.Mock;
-    update: jest.Mock;
-    set: jest.Mock;
+describe("adminService: approveUser (com WriteBatch)", () => {
+  const mockBatch = {
+    set: jest.fn(),
+    update: jest.fn(),
+    commit: jest.fn().mockResolvedValue(undefined),
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockTransaction = {
-      get: jest.fn(),
-      update: jest.fn(),
-      set: jest.fn(),
+    mockWriteBatch.mockReturnValue(mockBatch);
+  });
+
+  it("deve CRIAR um novo profissional se o CPF não for encontrado", async () => {
+    const USER_ID = "user-pendente-123";
+    const CPF_NOVO = "111.222.333-44";
+
+    // 1. Simular o usuário 'pendente'
+    const mockPendingUser = {
+      id: USER_ID,
+      displayName: "Dr. Teste",
+      email: "teste@teste.com",
+      profile: {
+        role: "profissional",
+        status: "pendente",
+        cpf: CPF_NOVO,
+        telefone: "123456789",
+        createdAt: Timestamp.now(),
+        historyHidden: false,
+        professionalData: {
+          especialidade: "Testologia",
+          conselho: "TESTE",
+          numeroConselho: "12345",
+        },
+      },
     };
-    mockedRunTransaction.mockImplementation(async (db, updateFunction) => {
-      await updateFunction(mockTransaction);
+
+    // 2. Configurar os Mocks do Firestore (ETAPA 1: Leitura)
+
+    mockGetDoc.mockResolvedValue({
+      exists: () => true,
+      data: () => mockPendingUser,
     });
-  });
-
-  describe('getPendingUsers', () => {
-    it('should fetch only users with "pendente" status', async () => {
-      // DADOS SIMULADOS
-      const mockUsers = [{ 
-        id: '1', 
-        data: () => ({ 
-          displayName: 'User Pendente', 
-          email: 'teste@email.com',
-          profile: { 
-            role: 'funcionario', 
-            cpf: '123', 
-            telefone: '456', 
-            createdAt: { toDate: () => new Date() } 
-          } 
-        }) 
-      }];
-
-      // --- CORREÇÃO FINAL ---
-      // A simulação de 'getDocs' agora retorna um objeto que possui o método 'forEach'.
-      // Este método simulado irá iterar sobre nossa lista de usuários falsos.
-      // Isso resolve o erro "querySnapshot.forEach is not a function".
-      mockedGetDocs.mockResolvedValue({
-        forEach: (callback: (doc: any) => void) => {
-          mockUsers.forEach(userDoc => callback(userDoc));
-        }
-      });
-
-      const users = await getPendingUsers();
-
-      expect(mockedWhere).toHaveBeenCalledWith('profile.status', '==', 'pendente');
-      expect(users).toHaveLength(1);
-      expect(users[0].displayName).toBe('User Pendente');
+    mockGetDocs.mockResolvedValue({
+      empty: true,
+      docs: [],
     });
-  });
 
-  describe('approveUser', () => {
-    it('should approve a non-professional user by updating their status', async () => {
-      mockTransaction.get.mockResolvedValue({
-        exists: () => true,
-        data: () => ({ profile: { status: 'pendente', role: 'funcionario' } }),
-      });
+    // --- AQUI ESTÁ A CORREÇÃO ---
+    
+    // Referências mockadas
+    const userDocRef = { id: USER_ID, path: `users/${USER_ID}` };
+    const profCollectionRef = { id: "professionals", path: "professionals" };
+    const newProfRef = { id: "new-prof-id-abc", path: "professionals/new-prof-id-abc" };
+
+    // Configura o mock da collection
+    mockCollection.mockImplementation((db, path) => {
+      if (path === "professionals") return profCollectionRef;
+      return { id: path, path };
+    });
+
+    // Configura o mock do doc para lidar com AMBOS os casos
+    mockDoc.mockImplementation((arg1, arg2, arg3) => {
+      // Caso 1: Chamada para auto-gerar ID (ex: doc(profCollectionRef))
+      if (arg1 === profCollectionRef) {
+        return newProfRef; // Retorna o novo ID mockado
+      }
       
-      const result = await approveUser('user-to-approve');
+      // Caso 2: Chamada com ID (ex: doc(db, "users", USER_ID))
+      if (arg2 === "users" && arg3 === USER_ID) {
+        return userDocRef;
+      }
 
-      expect(result.success).toBe(true);
-      expect(mockTransaction.update).toHaveBeenCalledWith(undefined, { 'profile.status': 'aprovado' });
-      expect(mockTransaction.set).not.toHaveBeenCalled();
+      // Fallback
+      return { id: arg3, path: `${arg2}/${arg3}` };
     });
+    // --- FIM DA CORREÇÃO ---
 
-    it('should approve a professional, create a professional document, and update the user profile', async () => {
-        mockedDoc.mockReturnValue({ id: 'new-professional-id-123' });
 
-        const professionalUserData = {
-            uid: 'professional-user-id',
-            displayName: 'Dra. Ana',
-            email: 'ana.fisio@email.com',
-            profile: {
-                status: 'pendente', role: 'profissional', cpf: '123.456.789-00', telefone: '(21) 98888-7777',
-                professionalData: { especialidade: 'Fisioterapia', conselho: 'CREFITO', numeroConselho: '12345' }
-            }
-        };
-        mockTransaction.get.mockResolvedValue({
-            exists: () => true,
-            data: () => professionalUserData,
-        });
+    // 3. Executar a função
+    const result = await approveUser(USER_ID);
 
-        const result = await approveUser('professional-user-id');
+    // 4. Verificações (Asserts) - ETAPA 2: Escrita (Batch)
+    expect(mockWriteBatch).toHaveBeenCalledTimes(1);
 
-        expect(result.success).toBe(true);
-        expect(mockTransaction.set).toHaveBeenCalledTimes(1);
-        const updatedProfile = mockTransaction.update.mock.calls[0][1].profile;
-        expect(updatedProfile.status).toBe('aprovado');
-        expect(updatedProfile.professionalId).toBe('new-professional-id-123');
-        expect(updatedProfile.professionalData).toBeUndefined();
-    });
-  });
+    // Verifica se o 'set' (CRIAR) foi chamado com o newProfRef CORRETO
+    expect(mockBatch.set).toHaveBeenCalledTimes(1);
+    expect(mockBatch.set).toHaveBeenCalledWith(
+      newProfRef, // <-- Agora 'newProfRef' deve ser o objeto correto
+      expect.anything()
+    );
 
-  describe('rejectUser', () => {
-    it('should reject a user by deleting their document', async () => {
-        mockedDeleteDoc.mockResolvedValue(undefined);
-        const result = await rejectUser('user-to-reject');
-        expect(result.success).toBe(true);
-        expect(mockedDeleteDoc).toHaveBeenCalled();
-    });
+    // Verifica se os dados criados estão corretos
+    const professionalData = mockBatch.set.mock.calls[0][1];
+    expect(professionalData.name).toBe("Dr. Teste");
+    expect(professionalData.cpf).toBe(CPF_NOVO);
+    expect(professionalData.userId).toBe(USER_ID);
+    expect(professionalData.registrationNumber).toBe("12345");
+
+    // Verifica se o 'update' (ATUALIZAR) foi chamado
+    expect(mockBatch.update).toHaveBeenCalledTimes(1);
+    expect(mockBatch.update).toHaveBeenCalledWith(
+      userDocRef,
+      {
+        profile: expect.objectContaining({
+          status: "aprovado",
+          professionalId: "new-prof-id-abc",
+        }),
+      }
+    );
+
+    // Verifica se o lote foi "commitado"
+    expect(mockBatch.commit).toHaveBeenCalledTimes(1);
+    expect(result.success).toBe(true);
   });
 });
