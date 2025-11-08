@@ -24,7 +24,7 @@ export default function DashboardPage() {
     case 'familiar':
       return <FamilyDashboard />; 
     case 'funcionario':
-      return <div>Painel do Funcionário em construção.</div>;
+      return <AdminDashboard />;
     default:
       return <div>Seu perfil não tem um dashboard associado.</div>;
   }
