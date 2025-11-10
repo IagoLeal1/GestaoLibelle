@@ -1,4 +1,3 @@
-// components/financial/financial-reports-dashboard.tsx
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
     Download, FileText, Calendar, AlertTriangle, Building2, BarChart3, 
-    CreditCard, TrendingUp, Target, Activity, LineChart, Eye, Flag
+    CreditCard, TrendingUp, Target, Activity, LineChart, Eye, Flag,
+    PieChart // 1. ÍCONE ADICIONADO
 } from "lucide-react";
 import { ReportType } from "./financial-report-modal";
 
@@ -47,9 +47,16 @@ interface FinancialReportsDashboardProps {
   onOpenVisualizer: (type: ReportType) => void;
   overdueCount: number;
   onOpenOverdueModal: () => void;
+  onOpenApuracaoModal: () => void; // 2. NOVA PROP ADICIONADA
 }
 
-export function FinancialReportsDashboard({ onGenerateReport, onOpenVisualizer, overdueCount, onOpenOverdueModal }: FinancialReportsDashboardProps) {
+export function FinancialReportsDashboard({ 
+  onGenerateReport, 
+  onOpenVisualizer, 
+  overdueCount, 
+  onOpenOverdueModal,
+  onOpenApuracaoModal // 3. NOVA PROP RECEBIDA
+}: FinancialReportsDashboardProps) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -91,7 +98,6 @@ export function FinancialReportsDashboard({ onGenerateReport, onOpenVisualizer, 
           icon={Building2} iconColor="text-primary-dark-blue" actionText="Gerar Relatório" actionIcon={Download}
           onClick={() => onGenerateReport('despesas_por_centro_custo')}
         />
-        {/* --- NOVO CARD: POR CATEGORIA --- */}
         <ReportCard 
           title="Por Categoria" 
           description="Agrupamento de receitas e despesas por categoria do plano de contas."
@@ -101,7 +107,6 @@ export function FinancialReportsDashboard({ onGenerateReport, onOpenVisualizer, 
           actionIcon={Download}
           onClick={() => onGenerateReport('despesas_por_categoria')}
         />
-        {/* --- NOVO CARD: RENTABILIDADE POR PACIENTE --- */}
         <ReportCard 
           title="Rentabilidade por Paciente" 
           description="Análise de receitas, despesas e saldo final para cada paciente."
@@ -115,6 +120,17 @@ export function FinancialReportsDashboard({ onGenerateReport, onOpenVisualizer, 
           title="Por Banco" description="Movimentações financeiras agrupadas por instituição bancária."
           icon={CreditCard} iconColor="text-purple-600" actionText="Gerar Relatório" actionIcon={Download}
           onClick={() => onGenerateReport('movimentacao_bancaria')}
+        />
+
+        {/* --- 4. NOVO CARD ADICIONADO AQUI --- */}
+        <ReportCard 
+          title="Apuração de Resultados" 
+          description="Resultado líquido por paciente ou terapia, com impostos e repasses."
+          icon={PieChart} 
+          iconColor="text-primary-medium-green" 
+          actionText="Gerar Apuração" 
+          actionIcon={Download}
+          onClick={onOpenApuracaoModal}
         />
         
         {/* Relatórios de Visualização */}

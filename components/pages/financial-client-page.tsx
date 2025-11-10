@@ -1,4 +1,3 @@
-// components/pages/financial-client-page.tsx
 "use client"
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
@@ -48,6 +47,7 @@ import { AnaliseTendenciasModal } from "@/components/financial/analise-tendencia
 import { ComparativoMensalModal } from "@/components/financial/comparativo-mensal-modal";
 import { BankBalancesModal } from "@/components/financial/bank-balances-modal";
 import { OverdueExpensesModal } from "@/components/financial/overdue-expenses-modal";
+import { ApuracaoResultadosModal } from "@/components/financial/apuracao-resultados-modal";
 
 // Componentes Refatorados
 import { FinancialSummaryCards } from "@/components/financial/financial-summary-cards";
@@ -90,6 +90,7 @@ export default function FinancialClientPage() {
     const [isAnaliseTendenciasModalOpen, setIsAnaliseTendenciasModalOpen] = useState(false);
     const [isComparativoMensalModalOpen, setIsComparativoMensalModalOpen] = useState(false);
     const [isBankBalancesModalOpen, setIsBankBalancesModalOpen] = useState(false);
+    const [isApuracaoModalOpen, setIsApuracaoModalOpen] = useState(false);
     const [isAddTransactionModalOpen, setIsAddTransactionModalOpen] = useState(false);
     const [isEditTransactionModalOpen, setIsEditTransactionModalOpen] = useState(false);
     const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
@@ -307,6 +308,7 @@ export default function FinancialClientPage() {
                             onOpenVisualizer={handleOpenVisualizer}
                             overdueCount={overdueExpenses.length}
                             onOpenOverdueModal={() => setIsOverdueModalOpen(true)}
+                            onOpenApuracaoModal={() => setIsApuracaoModalOpen(true)}
                         />
                     </TabsContent>
                     <TabsContent value="configuracoes" className="mt-6">
@@ -387,6 +389,11 @@ export default function FinancialClientPage() {
                 onClose={() => setIsBankBalancesModalOpen(false)}
                 accounts={bankAccounts}
                 loading={loading}
+            />
+
+            <ApuracaoResultadosModal
+              isOpen={isApuracaoModalOpen}
+              onClose={() => setIsApuracaoModalOpen(false)}
             />
         </>
     );

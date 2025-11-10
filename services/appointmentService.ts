@@ -438,25 +438,45 @@ export const getRenewableAppointments = async (): Promise<Appointment[]> => {
 export const renewAppointmentBlock = async (lastAppointment: Appointment, sessionsToRenew: number) => {
   try {
     if (!sessionsToRenew || sessionsToRenew <= 0) return { success: false, error: "O número de sessões para renovação deve ser maior que zero." };
+    
     const durationInMinutes = differenceInMinutes(lastAppointment.end.toDate(), lastAppointment.start.toDate());
     const batch = writeBatch(db);
     const newBlockId = doc(collection(db, 'idGenerator')).id;
     const firstNewDate = addWeeks(lastAppointment.start.toDate(), 1);
+
     for (let i = 0; i < sessionsToRenew; i++) {
       const sessionDate = addWeeks(firstNewDate, i);
       const sessionEndDate = new Date(sessionDate.getTime() + durationInMinutes * 60000);
       const newAppointmentRef = doc(collection(db, "appointments"));
+      
       batch.set(newAppointmentRef, {
-        title: lastAppointment.title, patientId: lastAppointment.patientId, patientName: lastAppointment.patientName,
-        professionalId: lastAppointment.professionalId, professionalName: lastAppointment.professionalName,
-        tipo: lastAppointment.tipo, sala: lastAppointment.sala, convenio: lastAppointment.convenio,
-        observacoes: lastAppointment.observacoes, valorConsulta: lastAppointment.valorConsulta,
-        start: Timestamp.fromDate(sessionDate), end: Timestamp.fromDate(sessionEndDate),
-        status: 'agendado', statusSecundario: lastAppointment.statusSecundario,
-        blockId: newBlockId, isLastInBlock: (i === sessionsToRenew - 1)
+        title: lastAppointment.title, 
+        patientId: lastAppointment.patientId, 
+        patientName: lastAppointment.patientName,
+        professionalId: lastAppointment.professionalId, 
+        professionalName: lastAppointment.professionalName,
+        tipo: lastAppointment.tipo, 
+        
+        // --- CORREÇÃO APLICADA AQUI ---
+        // Garante que campos opcionais não sejam 'undefined'
+        sala: lastAppointment.sala ?? null,
+        convenio: lastAppointment.convenio ?? "",
+        observacoes: lastAppointment.observacoes ?? "", // Este era o campo do erro
+        valorConsulta: lastAppointment.valorConsulta ?? 0,
+        statusSecundario: lastAppointment.statusSecundario ?? "",
+        // --- FIM DA CORREÇÃO ---
+
+        start: Timestamp.fromDate(sessionDate), 
+        end: Timestamp.fromDate(sessionEndDate),
+        status: 'agendado',
+        blockId: newBlockId, 
+        isLastInBlock: (i === sessionsToRenew - 1)
       });
     }
+
+    // Atualiza o agendamento antigo para não ser mais o último
     batch.update(doc(db, 'appointments', lastAppointment.id), { isLastInBlock: false });
+    
     await batch.commit();
     return { success: true };
   } catch (error) {
