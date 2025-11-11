@@ -14,13 +14,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
-// 1. ADICIONADO addMonths
+// Importa addMonths
 import { format, startOfDay, endOfDay, addMonths } from "date-fns";
 import { getAppointmentsForReport, Appointment } from "@/services/appointmentService";
-// CORREÇÃO: Importar getTransactionsForReport
+// Importa a função correta
 import { getTransactionsForReport, Transaction } from "@/services/financialService";
 import { Loader2 } from "lucide-react";
-// (Vou assumir que você tem/quer formatadores, mas vou usar .toFixed() para garantir)
 
 // Funções de exportação (pode mover para /lib/utils se preferir)
 const downloadCSV = (content: string, fileName: string) => {
@@ -34,6 +33,51 @@ const downloadCSV = (content: string, fileName: string) => {
   link.click();
   document.body.removeChild(link);
 };
+
+// --- LÓGICA DE AGRUPAMENTO INTELIGENTE ---
+
+// Nomes "Base" das terapias.
+// A ORDEM É IMPORTANTE: Coloque nomes mais longos e específicos PRIMEIRO.
+const THERAPY_BASE_NAMES = [
+  // Fisioterapia (Regra 2)
+  "Fisioterapia Respiratória",
+  "Fisioterapia Motora",
+  // Psicologia (Regra 1)
+  "Psicologia ABA", // Será pego por "Psicologia" se "Psicologia" vier primeiro
+  // Outros
+  "Supervisão Terapia ABA",
+  "Acompanhante Terapêutico Casa",
+  "Acompanhante Terapêutico c/ Terapeuta",
+  "Psicomotricidade",
+  "Psicopedagogia",
+  "Musicoterapia",
+  // Nomes "base" de uma palavra (greedy) vêm por último
+  "Psicologia",
+  "Fonoaudiologia",
+  "Terapia Ocupacional",
+  "Fisioterapia", // Pega "Fisioterapia" simples
+];
+
+/**
+ * Normaliza o nome de uma terapia para agrupar variações (pacote, convênio)
+ * sob um nome "base".
+ */
+const getNormalizedTherapyName = (rawName: string | undefined): string => {
+  if (!rawName) {
+    return "Não especificada";
+  }
+
+  // Encontra o nome base correspondente
+  for (const baseName of THERAPY_BASE_NAMES) {
+    if (rawName.startsWith(baseName)) {
+      return baseName;
+    }
+  }
+
+  // Se nenhum nome base for encontrado, retorna o nome original
+  return rawName;
+};
+// --- FIM DA LÓGICA DE AGRUPAMENTO ---
 
 // Tipo para os dados agrupados
 type ApuracaoPaciente = {
@@ -69,38 +113,36 @@ export function ApuracaoResultadosModal({
     toast.info("Gerando seu relatório... Isso pode levar um momento.");
 
     try {
-      // Adiciona T00:00:00 e T23:59:59 para garantir que a data seja pega corretamente
+      // Período de FATURAMENTO (ex: 01/10 a 31/10)
       const start = startOfDay(new Date(startDate + "T00:00:00"));
       const end = endOfDay(new Date(endDate + "T23:59:59"));
 
-      // --- LÓGICA DO REPASSE DE 2 MESES ---
-      // 2. Define o período de *pagamento* do repasse (2 meses à frente)
-      const repasseStartDate = addMonths(start, 2);
-      const repasseEndDate = addMonths(end, 2);
-      // --- FIM DA LÓGICA DO REPASSE ---
+      // Período de REPASSE (ex: 01/12 a 31/12)
+      // Busca os repasses 2 meses após o período de faturamento
+      const repasseSearchStart = startOfDay(addMonths(start, 2));
+      const repasseSearchEnd = endOfDay(addMonths(end, 2));
 
-      // 1. Buscar Agendamentos (Regime de Competência - Pela data do agendamento)
+
+      // 1. Buscar Agendamentos (do período de faturamento, ex: Outubro)
       const appointments = await getAppointmentsForReport({
         startDate: start,
         endDate: end,
       });
 
-      // 2. Buscar Transações de Despesa (Regime de Caixa - Pela data de pagamento do repasse)
-      // 3. ALTERAÇÃO: Busca repasses no período futuro
+      // 2. Buscar Transações de Despesa (do período de repasse, ex: Dezembro)
       const repasseTransactions = await getTransactionsForReport({
-        startDate: repasseStartDate, // Usa a data futura
-        endDate: repasseEndDate,     // Usa a data futura
+        startDate: repasseSearchStart,
+        endDate: repasseSearchEnd,
         type: "despesa",
-        status: "pago", // Assumindo que "repasse passado" significa repasse "pago"
+        // status: "pago", // Removido para pegar 'pendente' ou 'pago'
       });
       
       // 3. Criar um Mapa de Repasses para consulta rápida
-      // Filtra client-side apenas pela categoria "Repasse de Profissional"
       const repasseMap = new Map<string, number>();
-      // 4. ALTERAÇÃO: Usa a variável repasseTransactions
       repasseTransactions.forEach((t) => {
         if (
-          t.category === "Repasse de Profissional" &&
+          // Usando o NOME da categoria, como definido em 'appointmentService.ts'
+          t.category === "Repasse de Profissional" && 
           t.appointmentId &&
           t.value
         ) {
@@ -122,17 +164,15 @@ export function ApuracaoResultadosModal({
       let csvContent = "";
       let fileName = `Apuracao_Resultados_${reportType}_${startDate}_a_${endDate}.csv`;
       
-      // --- CORREÇÃO DE ESCOPO 1: Declarar os Maps aqui ---
       let porPaciente: Map<string, ApuracaoPaciente> | null = null;
       let porTerapia: Map<string, ApuracaoTerapia> | null = null;
 
       // 5. Processar de acordo com o tipo
       if (reportType === "paciente") {
-        // --- CORREÇÃO DE ESCOPO 2: Atribuir ao invés de declarar ---
         porPaciente = new Map<string, ApuracaoPaciente>();
 
         faturados.forEach((app) => {
-          // O repasse é buscado do mapa (Regime de Caixa)
+          // O repasse é buscado do mapa (agora incluindo pendentes)
           const repasseValor = repasseMap.get(app.id) || 0;
           const valorFaturado = app.valorConsulta || 0;
 
@@ -179,13 +219,15 @@ export function ApuracaoResultadosModal({
         });
       } 
       else if (reportType === "terapia") {
-        // --- CORREÇÃO DE ESCOPO 3: Atribuir ao invés de declarar ---
         porTerapia = new Map<string, ApuracaoTerapia>();
 
         faturados.forEach((app) => {
+          // --- APLICA A NOVA LÓGICA DE NORMALIZAÇÃO ---
+          const terapiaNome = getNormalizedTherapyName(app.tipo);
+          // --- FIM DA APLICAÇÃO ---
+
           const repasseValor = repasseMap.get(app.id) || 0;
           const valorFaturado = app.valorConsulta || 0;
-          const terapiaNome = app.tipo || "Não especificada";
 
           const entry = porTerapia!.get(terapiaNome) || {
             nome: terapiaNome,
@@ -227,7 +269,6 @@ export function ApuracaoResultadosModal({
         });
       }
 
-      // --- CORREÇÃO DE ESCOPO 4: Usar optional chaining (?.) ---
       if (csvContent === "" || (reportType === "paciente" && porPaciente?.size === 0) || (reportType === "terapia" && porTerapia?.size === 0)) {
         toast.info("Nenhum dado de faturamento encontrado para os filtros selecionados.");
       } else {
