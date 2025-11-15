@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -9,155 +9,242 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Plus, Search, Filter, CheckCircle, TrendingUp } from "lucide-react"
+import { Plus, Search, Filter, CheckCircle, TrendingUp, Trash2 } from "lucide-react"
 import Link from "next/link"
+import { toast } from "sonner" 
 
-interface Evento {
-  id: string
-  codigo: string
-  nome: string
-  data: string
-  status: "pendente" | "sucesso" | "falha"
+import {
+  listenToEventos,
+  listenToLeads,
+  addEvento,
+  updateEvento,
+  deleteEvento,
+  addLead,
+  updateLead,
+  deleteLead,
+  type Evento,
+  type Lead,
+} from "@/services/comercialService" // Ajuste o caminho se necessário
+
+// --- FUNÇÕES DE FORMATAÇÃO ---
+
+const formatPhone = (value: string) => {
+  if (!value) return ""
+  value = value.replace(/\D/g, "")
+  value = value.replace(/^(\d{2})(\d)/g, "($1) $2")
+  value = value.replace(/(\d)(\d{4})$/, "$1-$2")
+  return value.slice(0, 15)
 }
 
-interface Lead {
-  id: string
-  nome: string
-  contato: string
-  eventoOrigem: string
-  status: "pendente" | "sucesso" | "falha"
-  acolhimentoRealizado: boolean
-  dataAcolhimento: string
-  orcamentoEnviado: boolean
-  qhEnviado: boolean
-  anamnesesRealizada: boolean
-  contratoAssinado: boolean
+// --- MUDANÇA AQUI: NOVAS FUNÇÕES DE DATA ---
+
+/**
+ * Aplica a máscara DD/MM/AAAA enquanto o usuário digita.
+ */
+const formatDateMask = (value: string): string => {
+  if (!value) return ""
+  value = value.replace(/\D/g, "") // Remove tudo que não é dígito
+  value = value.replace(/^(\d{2})(\d)/g, "$1/$2") // Adiciona / após o dia
+  value = value.replace(/^(\d{2})\/(\d{2})(\d)/g, "$1/$2/$3") // Adiciona / após o mês
+  return value.slice(0, 10) // Limita a 10 caracteres (DD/MM/AAAA)
+}
+
+/**
+ * Converte a máscara DD/MM/AAAA para o formato YYYY-MM-DD para salvar no banco.
+ */
+const convertMaskToYYYYMMDD = (maskedDate: string): string => {
+  if (!maskedDate || maskedDate.length !== 10) return "" // Só converte se estiver completa
+  const [day, month, year] = maskedDate.split('/')
+  return `${year}-${month}-${day}`
+}
+
+/**
+ * Converte dados do Firebase (Timestamp ou YYYY-MM-DD) para DD/MM/AAAA para exibição.
+ */
+const formatDateForInput = (dateField: any): string => {
+  if (!dateField) return ""
+
+  let dateStr = "";
+
+  // Case 1: É um Timestamp do Firebase
+  if (typeof dateField.toDate === 'function') {
+    dateStr = dateField.toDate().toISOString().split('T')[0]; // Converte para YYYY-MM-DD
+  }
+  // Case 2: É uma string (provavelmente já YYYY-MM-DD)
+  else if (String(dateField).includes('-')) {
+    dateStr = String(dateField).split('T')[0]; // Limpa
+  }
+  // Case 3: É uma string DD/MM/AAAA (que o usuário está digitando)
+  else if (String(dateField).includes('/')) {
+    return String(dateField); // Retorna a própria máscara
+  }
+
+  // Se temos um YYYY-MM-DD, converte para DD/MM/AAAA
+  if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}/${year}`;
+  }
+
+  return String(dateField); // Retorna o que quer que seja se não bater
 }
 
 export default function FunilAquisicao() {
-  const [eventos, setEventos] = useState<Evento[]>([
-    { id: "1", codigo: "SVI-001", nome: "Parceria Escola São Vicente", data: "2024-01-15", status: "sucesso" },
-  ])
-
-  const [leads, setLeads] = useState<Lead[]>([
-    {
-      id: "1",
-      nome: "João Silva",
-      contato: "11999999999",
-      eventoOrigem: "SVI-001",
-      status: "sucesso",
-      acolhimentoRealizado: true,
-      dataAcolhimento: "2024-01-16",
-      orcamentoEnviado: true,
-      qhEnviado: true,
-      anamnesesRealizada: true,
-      contratoAssinado: false,
-    },
-  ])
-
+  // --- STATES ---
+  const [eventos, setEventos] = useState<Evento[]>([])
+  const [leads, setLeads] = useState<Lead[]>([])
+  
+  // Estados de UI
   const [searchTerm, setSearchTerm] = useState("")
   const [showEventoModal, setShowEventoModal] = useState(false)
   const [showLeadModal, setShowLeadModal] = useState(false)
+  const [loading, setLoading] = useState(true)
+  
+  // Estados de formulário
+  // --- MUDANÇA AQUI: O estado local agora guarda a máscara DD/MM/AAAA ---
   const [novoEvento, setNovoEvento] = useState({ codigo: "", nome: "", data: "" })
   const [novoLead, setNovoLead] = useState({ nome: "", contato: "", eventoOrigem: "" })
 
-  const handleAddEvento = () => {
-    if (novoEvento.codigo && novoEvento.nome && novoEvento.data) {
-      setEventos([...eventos, { id: Date.now().toString(), ...novoEvento, status: "pendente" }])
-      setNovoEvento({ codigo: "", nome: "", data: "" })
-      setShowEventoModal(false)
+
+  // --- DATA FETCHING (agora com o Service) ---
+  useEffect(() => {
+    setLoading(true)
+    
+    // Inicia o listener de Eventos
+    const unsubscribeEventos = listenToEventos((data) => {
+      setEventos(data)
+    })
+
+    // Inicia o listener de Leads
+    const unsubscribeLeads = listenToLeads((data) => {
+      setLeads(data)
+      setLoading(false) // Termina o loading após carregar os leads
+    })
+
+    // Função de limpeza
+    return () => {
+      unsubscribeEventos()
+      unsubscribeLeads()
+    }
+  }, []) // Roda apenas uma vez
+
+  // --- CRUD HANDLERS (agora chamam o Service) ---
+
+  const handleAddEvento = async () => {
+    // --- MUDANÇA AQUI: Converte a data antes de salvar ---
+    if (novoEvento.codigo && novoEvento.nome && novoEvento.data.length === 10) {
+      try {
+        const eventoData = {
+          ...novoEvento,
+          data: convertMaskToYYYYMMDD(novoEvento.data) // Converte DD/MM/AAAA -> YYYY-MM-DD
+        }
+        await addEvento(eventoData) // Chama o service
+        toast.success("Evento adicionado com sucesso!")
+        setNovoEvento({ codigo: "", nome: "", data: "" })
+        setShowEventoModal(false)
+      } catch (error) {
+        console.error("Erro ao adicionar evento: ", error)
+        toast.error("Erro ao adicionar evento.")
+      }
+    } else {
+      toast.warning("Preencha todos os campos do evento (incluindo data completa).")
     }
   }
 
-  const handleAddLead = () => {
+  const handleAddLead = async () => {
     if (novoLead.nome && novoLead.contato && novoLead.eventoOrigem) {
-      setLeads([
-        ...leads,
-        {
-          id: Date.now().toString(),
+      try {
+        // Remove a formatação do telefone antes de salvar
+        const leadData = {
           ...novoLead,
-          status: "pendente",
-          acolhimentoRealizado: false,
-          dataAcolhimento: "",
-          orcamentoEnviado: false,
-          qhEnviado: false,
-          anamnesesRealizada: false,
-          contratoAssinado: false,
-        },
-      ])
-      setNovoLead({ nome: "", contato: "", eventoOrigem: "" })
-      setShowLeadModal(false)
-    }
-  }
-
-  const updateEventoStatus = (id: string, status: "pendente" | "sucesso" | "falha") => {
-    setEventos(eventos.map((e) => (e.id === id ? { ...e, status } : e)))
-  }
-
-  const updateLeadStatus = (id: string, status: "pendente" | "sucesso" | "falha") => {
-    setLeads(leads.map((l) => (l.id === id ? { ...l, status } : l)))
-  }
-
-  const updateLeadAcolhimento = (id: string, acolhimentoRealizado: boolean) => {
-    setLeads(
-      leads.map((l) =>
-        l.id === id ? { ...l, acolhimentoRealizado, status: acolhimentoRealizado ? "sucesso" : l.status } : l,
-      ),
-    )
-  }
-
-  const updateLeadProposta = (id: string, field: "orcamentoEnviado" | "qhEnviado", value: boolean) => {
-    const lead = leads.find((l) => l.id === id)
-    if (lead) {
-      const updated = { ...lead, [field]: value }
-      if (updated.orcamentoEnviado && updated.qhEnviado) {
-        updated.status = "sucesso"
+          contato: novoLead.contato.replace(/\D/g, "") // Salva só os números
+        }
+        await addLead(leadData) // Chama o service
+        toast.success("Lead adicionado com sucesso!")
+        setNovoLead({ nome: "", contato: "", eventoOrigem: "" })
+        setShowLeadModal(false)
+      } catch (error) {
+        console.error("Erro ao adicionar lead: ", error)
+        toast.error("Erro ao adicionar lead.")
       }
-      setLeads(leads.map((l) => (l.id === id ? updated : l)))
+    } else {
+      toast.warning("Preencha todos os campos do lead.")
     }
   }
 
-  const updateLeadFechamento = (id: string, field: "anamnesesRealizada" | "contratoAssinado", value: boolean) => {
-    const lead = leads.find((l) => l.id === id)
-    if (lead) {
-      const updated = { ...lead, [field]: value }
-      if (updated.anamnesesRealizada && updated.contratoAssinado) {
-        updated.status = "sucesso"
+  // Funções de Update genéricas (apenas chamam o service)
+  const handleUpdateEvento = async (id: string, data: Partial<Evento>) => {
+    try {
+      await updateEvento(id, data)
+    } catch (error) {
+      console.error("Erro ao atualizar evento: ", error)
+      toast.error("Erro ao atualizar evento.")
+    }
+  }
+
+  // --- MUDANÇA AQUI: Criamos um handler de data separado ---
+  const handleLeadDateChange = (id: string, maskedDate: string) => {
+    // 1. Atualiza a UI imediatamente com a máscara
+    setLeads(prevLeads => 
+      prevLeads.map(l => l.id === id ? { ...l, dataAcolhimento: maskedDate } : l)
+    );
+
+    // 2. Se a data estiver completa, salva no banco no formato YYYY-MM-DD
+    if (maskedDate.length === 10) {
+      const dataYYYYMMDD = convertMaskToYYYYMMDD(maskedDate);
+      handleUpdateLead(id, { dataAcolhimento: dataYYYYMMDD });
+    }
+  }
+
+  const handleUpdateLead = async (id: string, data: Partial<Lead>) => {
+    try {
+      await updateLead(id, data) // A lógica de status está no service
+    } catch (error) {
+      console.error("Erro ao atualizar lead: ", error)
+      toast.error("Erro ao atualizar lead.")
+    }
+  }
+
+  // Funções de Delete
+  const handleDeleteEvento = async (id: string) => {
+    if (window.confirm("Tem certeza que deseja excluir este evento?")) {
+      try {
+        await deleteEvento(id)
+        toast.success("Evento excluído.")
+      } catch (error) {
+        toast.error("Erro ao excluir evento.")
       }
-      setLeads(leads.map((l) => (l.id === id ? updated : l)))
     }
   }
 
-  const deleteEvento = (id: string) => {
-    setEventos(eventos.filter((e) => e.id !== id))
+  const handleDeleteLead = async (id: string) => {
+    if (window.confirm("Tem certeza que deseja excluir este lead?")) {
+      try {
+        await deleteLead(id)
+        toast.success("Lead excluído.")
+      } catch (error) {
+        toast.error("Erro ao excluir lead.")
+      }
+    }
   }
 
-  const deleteLead = (id: string) => {
-    setLeads(leads.filter((l) => l.id !== id))
-  }
-
+  // --- FUNÇÕES AUXILIARES (Design) ---
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
-      case "sucesso":
-        return "bg-green-100 text-green-800"
-      case "falha":
-        return "bg-red-100 text-red-800"
-      default:
-        return "bg-yellow-100 text-yellow-800"
+      case "sucesso": return "bg-green-100 text-green-800"
+      case "falha": return "bg-red-100 text-red-800"
+      default: return "bg-yellow-100 text-yellow-800"
     }
   }
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case "sucesso":
-        return "Sucesso"
-      case "falha":
-        return "Falha"
-      default:
-        return "Pendente"
+      case "sucesso": return "Sucesso"
+      case "falha": return "Falha"
+      default: return "Pendente"
     }
   }
 
+  // --- LÓGICA DE FILTRO E KANBAN ---
   const leadsFiltrados = leads.filter(
     (lead) =>
       lead.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -165,19 +252,20 @@ export default function FunilAquisicao() {
   )
 
   const prospeccaoEventos = eventos
-  const leadsQualificados = leadsFiltrados.filter((l) => l.status === "sucesso")
-  const leadsAcolhimento = leadsQualificados.filter((l) => !l.acolhimentoRealizado)
-  const leadsPropostasAbertas = leadsQualificados.filter(
-    (l) => l.acolhimentoRealizado && (!l.orcamentoEnviado || !l.qhEnviado),
-  )
-  const leadsFechamento = leadsQualificados.filter(
-    (l) =>
-      l.acolhimentoRealizado && l.orcamentoEnviado && l.qhEnviado && (!l.anamnesesRealizada || !l.contratoAssinado),
-  )
-  const leadsPosPorVenda = leadsQualificados.filter((l) => l.anamnesesRealizada && l.contratoAssinado)
+  const leadsParaQualificar = leadsFiltrados.filter(l => !l.acolhimentoRealizado && l.status === 'pendente');
+  const leadsAcolhimento = leadsFiltrados.filter((l) => l.status === "sucesso" && !l.acolhimentoRealizado)
+  const leadsPropostasAbertas = leadsFiltrados.filter((l) => l.acolhimentoRealizado && l.status === 'sucesso' && (!l.orcamentoEnviado || !l.qhEnviado))
+  const leadsFechamento = leadsFiltrados.filter((l) => l.acolhimentoRealizado && l.orcamentoEnviado && l.qhEnviado && l.status === 'sucesso' && (!l.anamneseRealizada || !l.contratoAssinado))
+  const leadsPosPorVenda = leadsFiltrados.filter((l) => l.anamneseRealizada && l.contratoAssinado && l.status === 'sucesso')
+
+  // --- RENDER ---
+  if (loading) {
+    return (<div className="flex justify-center items-center h-64"><p>Carregando dados do funil...</p></div>);
+  }
 
   return (
     <div className="space-y-6">
+      {/* Cabeçalho */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-primary-dark-blue">Funil de Aquisição</h2>
@@ -191,6 +279,7 @@ export default function FunilAquisicao() {
         </Button>
       </div>
 
+      {/* Filtros e Ações */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -199,8 +288,9 @@ export default function FunilAquisicao() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
+          <div className="grid gap-4 md:grid-cols-3">
+            {/* Busca */}
+            <div className="space-y-2 md:col-span-1">
               <Label htmlFor="search">Buscar lead</Label>
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -213,10 +303,12 @@ export default function FunilAquisicao() {
                 />
               </div>
             </div>
-            <div className="space-y-2 flex flex-col justify-end gap-2">
+            {/* Botões de Ação */}
+            <div className="space-y-2 flex flex-col sm:flex-row justify-end gap-2 md:col-span-2 md:items-end">
+              {/* Modal Novo Evento */}
               <Dialog open={showEventoModal} onOpenChange={setShowEventoModal}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" className="w-full bg-transparent">
+                  <Button variant="outline" className="w-full sm:w-auto bg-transparent">
                     <Plus className="w-4 h-4 mr-2" />
                     Novo Evento
                   </Button>
@@ -228,29 +320,22 @@ export default function FunilAquisicao() {
                   <div className="space-y-4">
                     <div>
                       <Label htmlFor="codigo">Código do Evento</Label>
-                      <Input
-                        id="codigo"
-                        placeholder="Ex: SVI-002"
-                        value={novoEvento.codigo}
-                        onChange={(e) => setNovoEvento({ ...novoEvento, codigo: e.target.value })}
-                      />
+                      <Input id="codigo" placeholder="Ex: SVI-002" value={novoEvento.codigo} onChange={(e) => setNovoEvento({ ...novoEvento, codigo: e.target.value })} />
                     </div>
                     <div>
                       <Label htmlFor="nome">Nome do Evento</Label>
-                      <Input
-                        id="nome"
-                        placeholder="Ex: Parceria Escola São Vicente"
-                        value={novoEvento.nome}
-                        onChange={(e) => setNovoEvento({ ...novoEvento, nome: e.target.value })}
-                      />
+                      <Input id="nome" placeholder="Ex: Parceria Escola São Vicente" value={novoEvento.nome} onChange={(e) => setNovoEvento({ ...novoEvento, nome: e.target.value })} />
                     </div>
                     <div>
-                      <Label htmlFor="data">Data do Evento</Label>
-                      <Input
-                        id="data"
-                        type="date"
-                        value={novoEvento.data}
-                        onChange={(e) => setNovoEvento({ ...novoEvento, data: e.target.value })}
+                      <Label htmlFor="data">Data do Evento (DD/MM/AAAA)</Label>
+                      {/* --- MUDANÇA AQUI --- */}
+                      <Input 
+                        id="data" 
+                        type="text" // Alterado para text
+                        placeholder="DD/MM/AAAA"
+                        maxLength={10}
+                        value={novoEvento.data} 
+                        onChange={(e) => setNovoEvento({ ...novoEvento, data: formatDateMask(e.target.value) })} 
                       />
                     </div>
                     <Button onClick={handleAddEvento} className="w-full">
@@ -259,56 +344,10 @@ export default function FunilAquisicao() {
                   </div>
                 </DialogContent>
               </Dialog>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="w-full overflow-x-auto">
-        <div className="flex gap-3 min-w-max pb-4">
-          {/* Coluna 1: Prospecção */}
-          <div className="lg:w-72 md:w-64 w-56 flex-shrink-0">
-            <Card className="h-full flex flex-col bg-blue-50 border-blue-200">
-              <CardHeader className="pb-3 bg-blue-100">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base text-blue-900">Prospecção</CardTitle>
-                  <Badge variant="secondary">{prospeccaoEventos.length}</Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="flex-1 space-y-3 pt-4">
-                {prospeccaoEventos.map((evento) => (
-                  <Card key={evento.id} className="hover:shadow-md transition-shadow cursor-pointer">
-                    <CardContent className="p-3">
-                      <div className="space-y-2">
-                        <div>
-                          <h4 className="font-semibold text-sm text-primary-dark-blue">{evento.codigo}</h4>
-                          <p className="text-xs text-muted-foreground">{evento.nome}</p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {new Date(evento.data).toLocaleDateString("pt-BR")}
-                          </p>
-                        </div>
-                        <Badge className={getStatusBadgeColor(evento.status)}>{getStatusLabel(evento.status)}</Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Coluna 2: Lead Qualificado */}
-          <div className="lg:w-72 md:w-64 w-56 flex-shrink-0">
-            <Card className="h-full flex flex-col bg-teal-50 border-teal-200">
-              <CardHeader className="pb-3 bg-teal-100">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base text-teal-900">Lead Qualificado</CardTitle>
-                  <Badge variant="secondary">{leadsQualificados.length}</Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="flex-1 space-y-3 pt-4">
-                <Dialog open={showLeadModal} onOpenChange={setShowLeadModal}>
+              {/* Modal Novo Lead */}
+              <Dialog open={showLeadModal} onOpenChange={setShowLeadModal}>
                   <DialogTrigger asChild>
-                    <Button variant="outline" size="sm" className="w-full bg-transparent">
+                    <Button size="sm" className="w-full sm:w-auto">
                       <Plus className="w-4 h-4 mr-2" />
                       Novo Lead
                     </Button>
@@ -320,28 +359,21 @@ export default function FunilAquisicao() {
                     <div className="space-y-4">
                       <div>
                         <Label htmlFor="lead-nome">Nome do Lead</Label>
-                        <Input
-                          id="lead-nome"
-                          placeholder="Ex: João Silva"
-                          value={novoLead.nome}
-                          onChange={(e) => setNovoLead({ ...novoLead, nome: e.target.value })}
-                        />
+                        <Input id="lead-nome" placeholder="Ex: João Silva" value={novoLead.nome} onChange={(e) => setNovoLead({ ...novoLead, nome: e.target.value })} />
                       </div>
                       <div>
-                        <Label htmlFor="lead-contato">Contato (Telefone/Email)</Label>
-                        <Input
-                          id="lead-contato"
-                          placeholder="Ex: 11999999999"
-                          value={novoLead.contato}
-                          onChange={(e) => setNovoLead({ ...novoLead, contato: e.target.value })}
+                        <Label htmlFor="lead-contato">Contato (Telefone)</Label>
+                        <Input 
+                          id="lead-contato" 
+                          placeholder="(00) 00000-0000" 
+                          value={novoLead.contato} 
+                          onChange={(e) => setNovoLead({ ...novoLead, contato: formatPhone(e.target.value) })} 
+                          maxLength={15}
                         />
                       </div>
                       <div>
                         <Label htmlFor="lead-evento">Evento de Origem</Label>
-                        <Select
-                          value={novoLead.eventoOrigem}
-                          onValueChange={(value) => setNovoLead({ ...novoLead, eventoOrigem: value })}
-                        >
+                        <Select value={novoLead.eventoOrigem} onValueChange={(value) => setNovoLead({ ...novoLead, eventoOrigem: value })}>
                           <SelectTrigger id="lead-evento">
                             <SelectValue placeholder="Selecione um evento" />
                           </SelectTrigger>
@@ -360,16 +392,98 @@ export default function FunilAquisicao() {
                     </div>
                   </DialogContent>
                 </Dialog>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-                {leadsQualificados.map((lead) => (
-                  <Card key={lead.id} className="hover:shadow-md transition-shadow cursor-pointer">
+      {/* Kanban Board */}
+      <div className="w-full lg:overflow-x-auto">
+        <div className="flex flex-col lg:flex-row lg:gap-3 lg:min-w-max lg:pb-4 space-y-4 lg:space-y-0">
+          
+          {/* Coluna 1: Prospecção */}
+          <div className="w-full lg:w-72 flex-shrink-0">
+            <Card className="h-full flex flex-col bg-blue-50 border-blue-200">
+              <CardHeader className="pb-3 bg-blue-100">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base text-blue-900">Prospecção</CardTitle>
+                  <Badge variant="secondary">{prospeccaoEventos.length}</Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="flex-1 space-y-3 pt-4">
+                {prospeccaoEventos.map((evento) => (
+                  <Card key={evento.id} className="hover:shadow-md transition-shadow">
                     <CardContent className="p-3">
                       <div className="space-y-2">
-                        <div>
-                          <h4 className="font-semibold text-sm text-primary-dark-blue line-clamp-1">{lead.nome}</h4>
-                          <p className="text-xs text-muted-foreground">{lead.contato}</p>
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h4 className="font-semibold text-sm text-primary-dark-blue">{evento.codigo}</h4>
+                                <p className="text-xs text-muted-foreground">{evento.nome}</p>
+                            </div>
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDeleteEvento(evento.id)}>
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
                         </div>
-                        <Badge className={getStatusBadgeColor(lead.status)}>{getStatusLabel(lead.status)}</Badge>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {/* --- MUDANÇA AQUI --- */}
+                          Data: {formatDateForInput(evento.data) || 'N/A'}
+                        </p>
+                        <Select 
+                          value={evento.status} 
+                          onValueChange={(value) => handleUpdateEvento(evento.id, { status: value as "pendente" | "sucesso" | "falha" })}
+                        >
+                          <SelectTrigger className={`h-8 text-xs ${getStatusBadgeColor(evento.status)}`}>
+                            <SelectValue placeholder="Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pendente">Pendente</SelectItem>
+                            <SelectItem value="sucesso">Sucesso</SelectItem>
+                            <SelectItem value="falha">Falha</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Coluna 2: Lead Qualificado */}
+          <div className="w-full lg:w-72 flex-shrink-0">
+            <Card className="h-full flex flex-col bg-teal-50 border-teal-200">
+              <CardHeader className="pb-3 bg-teal-100">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base text-teal-900">Lead Qualificado</CardTitle>
+                  <Badge variant="secondary">{leadsParaQualificar.length}</Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="flex-1 space-y-3 pt-4">
+                {leadsParaQualificar.map((lead) => (
+                  <Card key={lead.id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="p-3">
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-start">
+                            <h4 className="font-semibold text-sm text-primary-dark-blue line-clamp-1">{lead.nome}</h4>
+                             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDeleteLead(lead.id)}>
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{formatPhone(lead.contato)}</p>
+                        <p className="text-xs text-muted-foreground">Origem: {lead.eventoOrigem}</p>
+                         <Select 
+                          value={lead.status} 
+                          onValueChange={(value) => handleUpdateLead(lead.id, { status: value as "pendente" | "sucesso" | "falha" })}
+                        >
+                          <SelectTrigger className={`h-8 text-xs ${getStatusBadgeColor(lead.status)}`}>
+                            <SelectValue placeholder="Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pendente">Pendente</SelectItem>
+                            <SelectItem value="sucesso">Avançar (Sucesso)</SelectItem>
+                            <SelectItem value="falha">Perdido (Falha)</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     </CardContent>
                   </Card>
@@ -379,7 +493,7 @@ export default function FunilAquisicao() {
           </div>
 
           {/* Coluna 3: Acolhimento */}
-          <div className="lg:w-72 md:w-64 w-56 flex-shrink-0">
+          <div className="w-full lg:w-72 flex-shrink-0">
             <Card className="h-full flex flex-col bg-green-50 border-green-200">
               <CardHeader className="pb-3 bg-green-100">
                 <div className="flex items-center justify-between">
@@ -394,25 +508,26 @@ export default function FunilAquisicao() {
                       <h4 className="font-semibold text-sm text-primary-dark-blue">{lead.nome}</h4>
                       <div className="space-y-2">
                         <Label htmlFor={`acolhimento-data-${lead.id}`} className="text-xs">
-                          Data do Acolhimento
+                          Data do Acolhimento (DD/MM/AAAA)
                         </Label>
+                        {/* --- MUDANÇA AQUI (Este era o bug!) --- */}
                         <Input
                           id={`acolhimento-data-${lead.id}`}
-                          type="date"
+                          type="text" // Alterado para text
+                          placeholder="DD/MM/AAAA"
+                          maxLength={10}
                           className="h-8 text-xs"
-                          value={lead.dataAcolhimento}
-                          onChange={(e) =>
-                            setLeads(
-                              leads.map((l) => (l.id === lead.id ? { ...l, dataAcolhimento: e.target.value } : l)),
-                            )
-                          }
+                          value={formatDateForInput(lead.dataAcolhimento)}
+                          onChange={(e) => handleLeadDateChange(lead.id, formatDateMask(e.target.value))}
                         />
                       </div>
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id={`acolhimento-realizado-${lead.id}`}
                           checked={lead.acolhimentoRealizado}
-                          onCheckedChange={(checked) => updateLeadAcolhimento(lead.id, checked as boolean)}
+                          onCheckedChange={(checked) =>
+                            handleUpdateLead(lead.id, { acolhimentoRealizado: checked as boolean })
+                          }
                         />
                         <Label htmlFor={`acolhimento-realizado-${lead.id}`} className="text-xs cursor-pointer">
                           Acolhimento Realizado
@@ -426,7 +541,7 @@ export default function FunilAquisicao() {
           </div>
 
           {/* Coluna 4: Envio de Proposta */}
-          <div className="lg:w-72 md:w-64 w-56 flex-shrink-0">
+          <div className="w-full lg:w-72 flex-shrink-0">
             <Card className="h-full flex flex-col bg-yellow-50 border-yellow-200">
               <CardHeader className="pb-3 bg-yellow-100">
                 <div className="flex items-center justify-between">
@@ -445,7 +560,7 @@ export default function FunilAquisicao() {
                             id={`orcamento-${lead.id}`}
                             checked={lead.orcamentoEnviado}
                             onCheckedChange={(checked) =>
-                              updateLeadProposta(lead.id, "orcamentoEnviado", checked as boolean)
+                              handleUpdateLead(lead.id, { orcamentoEnviado: checked as boolean })
                             }
                           />
                           <Label htmlFor={`orcamento-${lead.id}`} className="text-xs cursor-pointer">
@@ -456,7 +571,7 @@ export default function FunilAquisicao() {
                           <Checkbox
                             id={`qh-${lead.id}`}
                             checked={lead.qhEnviado}
-                            onCheckedChange={(checked) => updateLeadProposta(lead.id, "qhEnviado", checked as boolean)}
+                            onCheckedChange={(checked) => handleUpdateLead(lead.id, { qhEnviado: checked as boolean })}
                           />
                           <Label htmlFor={`qh-${lead.id}`} className="text-xs cursor-pointer">
                             QH Enviado
@@ -471,7 +586,7 @@ export default function FunilAquisicao() {
           </div>
 
           {/* Coluna 5: Fechamento */}
-          <div className="lg:w-72 md:w-64 w-56 flex-shrink-0">
+          <div className="w-full lg:w-72 flex-shrink-0">
             <Card className="h-full flex flex-col bg-purple-50 border-purple-200">
               <CardHeader className="pb-3 bg-purple-100">
                 <div className="flex items-center justify-between">
@@ -488,9 +603,9 @@ export default function FunilAquisicao() {
                         <div className="flex items-center space-x-2">
                           <Checkbox
                             id={`anamnese-${lead.id}`}
-                            checked={lead.anamnesesRealizada}
+                            checked={lead.anamneseRealizada}
                             onCheckedChange={(checked) =>
-                              updateLeadFechamento(lead.id, "anamnesesRealizada", checked as boolean)
+                              handleUpdateLead(lead.id, { anamneseRealizada: checked as boolean })
                             }
                           />
                           <Label htmlFor={`anamnese-${lead.id}`} className="text-xs cursor-pointer">
@@ -502,7 +617,7 @@ export default function FunilAquisicao() {
                             id={`contrato-${lead.id}`}
                             checked={lead.contratoAssinado}
                             onCheckedChange={(checked) =>
-                              updateLeadFechamento(lead.id, "contratoAssinado", checked as boolean)
+                              handleUpdateLead(lead.id, { contratoAssinado: checked as boolean })
                             }
                           />
                           <Label htmlFor={`contrato-${lead.id}`} className="text-xs cursor-pointer">
@@ -518,7 +633,7 @@ export default function FunilAquisicao() {
           </div>
 
           {/* Coluna 6: Pós Venda */}
-          <div className="lg:w-72 md:w-64 w-56 flex-shrink-0">
+          <div className="w-full lg:w-72 flex-shrink-0">
             <Card className="h-full flex flex-col bg-emerald-50 border-emerald-200">
               <CardHeader className="pb-3 bg-emerald-100">
                 <div className="flex items-center justify-between">

@@ -2,7 +2,7 @@
 
 import {
   Calendar, DollarSign, FileText, Home, MessageSquare, Users, UserCheck,
-  CheckCircle, UserPlus, MessageCircle, MapPin, BadgeDollarSign
+  CheckCircle, UserPlus, MessageCircle, MapPin, BadgeDollarSign, TrendingUp
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -26,6 +26,7 @@ const menuItems = [
   // { title: "Avisos", url: "/avisos", icon: MessageSquare, roles: ['admin', 'profissional', 'funcionario', 'familiar'] },
   // { title: "Tarefas", url: "/tarefas", icon: CheckCircle, roles: ['admin', 'profissional', 'funcionario'] },
   { title: "Aprovação de Acesso", url: "/admin/usuarios", icon: UserPlus, roles: ['admin'] },
+  { title: "Comercial", url: "/funil", icon: TrendingUp, roles: ['admin','coordenador'] },
   { title: "Comunicação", url: "/comunicacao", icon: MessageCircle, roles: ['admin', 'profissional', 'funcionario', 'familiar','coordenador'] },
   // { title: "Plano Evolutivo", url: "/plano-evolutivo", icon: FileText, roles: ['profissional'] },
 ]
