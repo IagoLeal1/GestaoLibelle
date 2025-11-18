@@ -9,7 +9,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Plus, Search, Filter, CheckCircle, TrendingUp, Trash2 } from "lucide-react"
+import { 
+  Plus, Search, Filter, CheckCircle, TrendingUp, Trash2, 
+  ChevronRight // {/* <-- MUDANÇA AQUI: Ícone importado */}
+} from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner" 
 
@@ -398,11 +401,14 @@ export default function FunilAquisicao() {
       </Card>
 
       {/* Kanban Board */}
-      <div className="w-full lg:overflow-x-auto">
-        <div className="flex flex-col lg:flex-row lg:gap-3 lg:min-w-max lg:pb-4 space-y-4 lg:space-y-0">
+      {/* {/* <-- MUDANÇA AQUI: Removido lg:overflow-x-auto */}
+      <div className="w-full">
+        {/* <-- MUDANÇA AQUI: De flex para grid responsivo --> */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
           
           {/* Coluna 1: Prospecção */}
-          <div className="w-full lg:w-72 flex-shrink-0">
+          {/* <-- MUDANÇA AQUI: Removido lg:w-72 flex-shrink-0 --> */}
+          <div className="w-full">
             <Card className="h-full flex flex-col bg-blue-50 border-blue-200">
               <CardHeader className="pb-3 bg-blue-100">
                 <div className="flex items-center justify-between">
@@ -450,11 +456,18 @@ export default function FunilAquisicao() {
           </div>
 
           {/* Coluna 2: Lead Qualificado */}
-          <div className="w-full lg:w-72 flex-shrink-0">
+          {/* <-- MUDANÇA AQUI: Removido lg:w-72 flex-shrink-0 --> */}
+          <div className="w-full">
             <Card className="h-full flex flex-col bg-teal-50 border-teal-200">
               <CardHeader className="pb-3 bg-teal-100">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base text-teal-900">Lead Qualificado</CardTitle>
+                  {/* <-- MUDANÇA AQUI: Adicionado ícone e flex --> */}
+                  <CardTitle className="text-base text-teal-900">
+                    <div className="flex items-center gap-1.5">
+                      <ChevronRight className="h-4 w-4 text-teal-700/60" />
+                      <span>Lead Qualificado</span>
+                    </div>
+                  </CardTitle>
                   <Badge variant="secondary">{leadsParaQualificar.length}</Badge>
                 </div>
               </CardHeader>
@@ -493,11 +506,18 @@ export default function FunilAquisicao() {
           </div>
 
           {/* Coluna 3: Acolhimento */}
-          <div className="w-full lg:w-72 flex-shrink-0">
+          {/* <-- MUDANÇA AQUI: Removido lg:w-72 flex-shrink-0 --> */}
+          <div className="w-full">
             <Card className="h-full flex flex-col bg-green-50 border-green-200">
               <CardHeader className="pb-3 bg-green-100">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base text-green-900">Acolhimento</CardTitle>
+                  {/* <-- MUDANÇA AQUI: Adicionado ícone e flex --> */}
+                  <CardTitle className="text-base text-green-900">
+                    <div className="flex items-center gap-1.5">
+                      <ChevronRight className="h-4 w-4 text-green-700/60" />
+                      <span>Acolhimento</span>
+                    </div>
+                  </CardTitle>
                   <Badge variant="secondary">{leadsAcolhimento.length}</Badge>
                 </div>
               </CardHeader>
@@ -541,11 +561,18 @@ export default function FunilAquisicao() {
           </div>
 
           {/* Coluna 4: Envio de Proposta */}
-          <div className="w-full lg:w-72 flex-shrink-0">
+          {/* <-- MUDANÇA AQUI: Removido lg:w-72 flex-shrink-0 --> */}
+          <div className="w-full">
             <Card className="h-full flex flex-col bg-yellow-50 border-yellow-200">
               <CardHeader className="pb-3 bg-yellow-100">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base text-yellow-900">Envio de Proposta</CardTitle>
+                  {/* <-- MUDANÇA AQUI: Adicionado ícone e flex --> */}
+                  <CardTitle className="text-base text-yellow-900">
+                    <div className="flex items-center gap-1.5">
+                      <ChevronRight className="h-4 w-4 text-yellow-700/60" />
+                      <span>Envio de Proposta</span>
+                    </div>
+                  </CardTitle>
                   <Badge variant="secondary">{leadsPropostasAbertas.length}</Badge>
                 </div>
               </CardHeader>
@@ -586,11 +613,18 @@ export default function FunilAquisicao() {
           </div>
 
           {/* Coluna 5: Fechamento */}
-          <div className="w-full lg:w-72 flex-shrink-0">
+          {/* <-- MUDANÇA AQUI: Removido lg:w-72 flex-shrink-0 --> */}
+          <div className="w-full">
             <Card className="h-full flex flex-col bg-purple-50 border-purple-200">
               <CardHeader className="pb-3 bg-purple-100">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base text-purple-900">Fechamento</CardTitle>
+                  {/* <-- MUDANÇA AQUI: Adicionado ícone e flex --> */}
+                  <CardTitle className="text-base text-purple-900">
+                    <div className="flex items-center gap-1.5">
+                      <ChevronRight className="h-4 w-4 text-purple-700/60" />
+                      <span>Fechamento</span>
+                    </div>
+                  </CardTitle>
                   <Badge variant="secondary">{leadsFechamento.length}</Badge>
                 </div>
               </CardHeader>
@@ -633,11 +667,18 @@ export default function FunilAquisicao() {
           </div>
 
           {/* Coluna 6: Pós Venda */}
-          <div className="w-full lg:w-72 flex-shrink-0">
+          {/* <-- MUDANÇA AQUI: Removido lg:w-72 flex-shrink-0 --> */}
+          <div className="w-full">
             <Card className="h-full flex flex-col bg-emerald-50 border-emerald-200">
               <CardHeader className="pb-3 bg-emerald-100">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base text-emerald-900">Pós Venda</CardTitle>
+                  {/* <-- MUDANÇA AQUI: Adicionado ícone e flex --> */}
+                  <CardTitle className="text-base text-emerald-900">
+                    <div className="flex items-center gap-1.5">
+                      <ChevronRight className="h-4 w-4 text-emerald-700/60" />
+                      <span>Pós Venda</span>
+                    </div>
+                  </CardTitle>
                   <Badge variant="secondary">{leadsPosPorVenda.length}</Badge>
                 </div>
               </CardHeader>
