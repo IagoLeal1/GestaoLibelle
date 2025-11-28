@@ -1,9 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import { Plus, MoreHorizontal } from "lucide-react";
+import { Plus, MoreHorizontal, Search, Filter } from "lucide-react"; // Adicionado Filter
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label"; // Adicionado Label
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/context/AuthContext";
@@ -17,6 +19,7 @@ export function SpecialtiesClientPage() {
   const [loading, setLoading] = useState(true);
   const [modalState, setModalState] = useState<{ isOpen: boolean; data?: Specialty | null }>({ isOpen: false, data: null });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const fetchData = async () => {
     setLoading(true);
@@ -39,7 +42,7 @@ export function SpecialtiesClientPage() {
     if (result.success) {
       toast.success(`Especialidade ${isEditMode ? 'atualizada' : 'criada'} com sucesso!`);
       setModalState({ isOpen: false, data: null });
-      fetchData(); // Recarrega a lista
+      fetchData();
     } else {
       toast.error(result.error);
     }
@@ -58,6 +61,10 @@ export function SpecialtiesClientPage() {
     }
   };
 
+  const filteredSpecialties = specialties.filter((spec) => 
+    spec.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   if (firestoreUser?.profile.role !== 'admin') {
       return <p className="p-4">Você não tem permissão para acessar esta página.</p>
   }
@@ -66,16 +73,46 @@ export function SpecialtiesClientPage() {
 
   return (
     <>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <div>
             <h2 className="text-2xl font-bold tracking-tight">Especialidades e Valores</h2>
             <p className="text-muted-foreground">Gerencie os serviços e valores da clínica.</p>
         </div>
-        <Button onClick={() => setModalState({ isOpen: true, data: null })}>
-          <Plus className="mr-2 h-4 w-4" /> Nova Especialidade
+        <Button onClick={() => setModalState({ isOpen: true, data: null })} className="shrink-0">
+            <Plus className="mr-2 h-4 w-4" /> Nova Especialidade
         </Button>
       </div>
+
+      {/* CARD DE FILTROS - IGUAL À PÁGINA DE PACIENTES */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="h-5 w-5" /> Filtros
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="search">Buscar especialidade</Label>
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  id="search" 
+                  placeholder="Nome da especialidade..." 
+                  className="pl-8" 
+                  value={searchTerm} 
+                  onChange={(e) => setSearchTerm(e.target.value)} 
+                />
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
+        <CardHeader>
+            <CardTitle>Lista de Especialidades ({filteredSpecialties.length})</CardTitle>
+        </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
@@ -87,22 +124,30 @@ export function SpecialtiesClientPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {specialties.map((spec) => (
-                <TableRow key={spec.id}>
-                  <TableCell className="font-medium">{spec.name}</TableCell>
-                  <TableCell>{spec.value.toFixed(2).replace('.', ',')}</TableCell>
-                  <TableCell className="hidden md:table-cell">{spec.description || "-"}</TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        <DropdownMenuItem onClick={() => setModalState({ isOpen: true, data: spec })}>Editar</DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(spec.id)}>Excluir</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+              {filteredSpecialties.length > 0 ? (
+                filteredSpecialties.map((spec) => (
+                  <TableRow key={spec.id}>
+                    <TableCell className="font-medium">{spec.name}</TableCell>
+                    <TableCell>{spec.value.toFixed(2).replace('.', ',')}</TableCell>
+                    <TableCell className="hidden md:table-cell">{spec.description || "-"}</TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <DropdownMenuItem onClick={() => setModalState({ isOpen: true, data: spec })}>Editar</DropdownMenuItem>
+                          <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(spec.id)}>Excluir</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={4} className="h-24 text-center">
+                    Nenhuma especialidade encontrada.
                   </TableCell>
                 </TableRow>
-              ))}
+              )}
             </TableBody>
           </Table>
         </CardContent>

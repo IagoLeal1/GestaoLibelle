@@ -1,10 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import Link from "next/link"
-import { Plus, Search, Filter, MoreHorizontal, User, Phone, MapPin } from "lucide-react"
+// Adicione Dispatch e SetStateAction aqui
+import { Dispatch, SetStateAction } from "react" 
+import { Search, Filter, MoreHorizontal, User, Phone, MapPin } from "lucide-react"
 import { Timestamp } from "firebase/firestore"
-import { Patient, getPatients, updatePatientStatus } from "@/services/patientService"
+import { Patient, updatePatientStatus } from "@/services/patientService"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -15,7 +17,15 @@ import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
-// --- Funções de Ajuda (Helpers) ---
+// --- 1. DEFINIÇÃO DA INTERFACE DAS PROPS ---
+interface PatientClientPageProps {
+  data: Patient[];
+  isLoading: boolean;
+  onRefresh: () => Promise<void> | void; // Aceita assíncrono ou síncrono
+  setPacientes: Dispatch<SetStateAction<Patient[]>>;
+}
+
+// --- Funções de Ajuda ---
 const getStatusBadge = (status: string) => {
   const statusConfig = {
     ativo: { label: "Ativo", className: "bg-green-100 text-green-800" },
@@ -68,25 +78,13 @@ const formatDate = (date?: Timestamp) => {
     return date.toDate().toLocaleDateString("pt-BR");
 };
 
-// --- Componente Principal ---
-export function PatientClientPage() {
-  const [pacientes, setPacientes] = useState<Patient[]>([]);
-  const [loading, setLoading] = useState(true);
+// --- 2. APLICAÇÃO DA INTERFACE NO COMPONENTE ---
+export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: PatientClientPageProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [sexoFilter, setSexoFilter] = useState("todos");
   const [statusFilter, setStatusFilter] = useState("todos");
   const [pacienteSelecionado, setPacienteSelecionado] = useState<Patient | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
-
-  useEffect(() => {
-    const fetchPatients = async () => {
-      setLoading(true);
-      const patientsFromDB = await getPatients();
-      setPacientes(patientsFromDB);
-      setLoading(false);
-    };
-    fetchPatients();
-  }, []);
 
   const abrirDetalhes = (paciente: Patient) => {
     setPacienteSelecionado(paciente);
@@ -99,6 +97,7 @@ export function PatientClientPage() {
     if (window.confirm(`Tem certeza que deseja ${actionText} o paciente ${paciente.fullName}?`)) {
       const result = await updatePatientStatus(paciente.id, newStatus);
       if (result.success) {
+        // Atualiza o estado local recebido via prop do Pai
         setPacientes(prev => prev.map(p => p.id === paciente.id ? { ...p, status: newStatus } : p));
       } else {
         alert(`Erro ao ${actionText} o paciente.`);
@@ -106,13 +105,13 @@ export function PatientClientPage() {
     }
   };
 
-  // --- LÓGICA DE FILTRO CORRIGIDA E APRIMORADA ---
+  // LÓGICA DE FILTRO (Usa a lista 'pacientes' que veio do Pai)
   const pacientesFiltrados = pacientes.filter((paciente) => {
     const search = searchTerm.toLowerCase();
     const matchesSearch =
       paciente.fullName.toLowerCase().includes(search) ||
-      (paciente.responsavel?.nome?.toLowerCase().includes(search)) || // Busca segura pelo nome do responsável
-      (paciente.cpf && paciente.cpf.includes(searchTerm)); // Busca pelo CPF do paciente
+      (paciente.responsavel?.nome?.toLowerCase().includes(search)) || 
+      (paciente.cpf && paciente.cpf.includes(searchTerm)); 
     const matchesSexo = sexoFilter === "todos" || paciente.sexo === sexoFilter;
     const matchesStatus = statusFilter === "todos" || paciente.status === statusFilter;
     return matchesSearch && matchesSexo && matchesStatus;
@@ -125,19 +124,24 @@ export function PatientClientPage() {
     mediaIdade: pacientes.length > 0 ? Math.round(pacientes.reduce((acc, p) => acc + calcularIdade(p.dataNascimento), 0) / pacientes.length) : 0,
   };
   
-  if (loading) return <div className="text-center p-8">Carregando pacientes...</div>
+  if (isLoading) return <div className="text-center p-8">Carregando pacientes...</div>
 
   return (
     <>
       <div className="space-y-6">
+        {/* Cards de Estatística */}
         <div className="grid gap-4 md:grid-cols-4">
             <Card><CardContent className="p-4"><div className="text-center"><p className="text-2xl font-bold">{estatisticas.total}</p><p className="text-xs font-medium text-muted-foreground">Total</p></div></CardContent></Card>
             <Card><CardContent className="p-4"><div className="text-center"><p className="text-2xl font-bold text-green-600">{estatisticas.ativos}</p><p className="text-xs font-medium text-green-600">Ativos</p></div></CardContent></Card>
             <Card><CardContent className="p-4"><div className="text-center"><p className="text-2xl font-bold text-red-600">{estatisticas.inativos}</p><p className="text-xs font-medium text-red-600">Inativos</p></div></CardContent></Card>
             <Card><CardContent className="p-4"><div className="text-center"><p className="text-2xl font-bold text-orange-600">{estatisticas.mediaIdade} anos</p><p className="text-xs font-medium text-orange-600">Idade Média</p></div></CardContent></Card>
         </div>
+        
+        {/* Card de Filtros */}
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5" /> Filtros</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5" /> Filtros</CardTitle>
+          </CardHeader>
           <CardContent>
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-2">
@@ -156,6 +160,7 @@ export function PatientClientPage() {
           </CardContent>
         </Card>
 
+        {/* Tabela de Pacientes */}
         <Card>
           <CardHeader><CardTitle>Lista de Pacientes ({pacientesFiltrados.length})</CardTitle></CardHeader>
           <CardContent>
@@ -198,6 +203,7 @@ export function PatientClientPage() {
         </Card>
       </div>
 
+      {/* Modal de Detalhes do Paciente (Mantido aqui pois é específico do item da lista) */}
       <Dialog open={modalAberto} onOpenChange={setModalAberto}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle className="flex items-center gap-2"><User /> Detalhes do Paciente</DialogTitle></DialogHeader>
@@ -218,7 +224,6 @@ export function PatientClientPage() {
                     <CardHeader><CardTitle className="flex items-center gap-2"><Phone /> Contato do Responsável</CardTitle></CardHeader>
                     <CardContent><div className="grid gap-4 md:grid-cols-3">
                         <div className="md:col-span-2"><Label className="text-sm font-medium text-gray-500">Nome</Label><p>{pacienteSelecionado.responsavel?.nome || "Não informado"}</p></div>
-                        {/* --- CAMPO CORRIGIDO --- */}
                         <div><Label className="text-sm font-medium text-gray-500">CPF do Responsável</Label><p>{pacienteSelecionado.responsavel?.cpf || "Não informado"}</p></div>
                         <div><Label className="text-sm font-medium text-gray-500">Celular</Label><p>{pacienteSelecionado.responsavel?.celular || "Não informado"}</p></div>
                         <div><Label className="text-sm font-medium text-gray-500">Email</Label><p>{pacienteSelecionado.responsavel?.email || "Não informado"}</p></div>
