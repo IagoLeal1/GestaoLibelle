@@ -4,6 +4,7 @@ import {
   signInWithEmailAndPassword,
   updateProfile,
   AuthError,
+  sendPasswordResetEmail
 } from "firebase/auth";
 import { doc, setDoc, getDoc, Timestamp } from "firebase/firestore";
 
@@ -152,6 +153,25 @@ export const signInUser = async (email: string, password: string) => {
     ) {
       errorMessage = "Email ou senha inválidos.";
     }
+    return { success: false, error: errorMessage };
+  }
+};
+
+export const recoverPassword = async (email: string) => {
+  try {
+    await sendPasswordResetEmail(auth, email);
+    return { success: true };
+  } catch (error) {
+    const authError = error as AuthError;
+    let errorMessage = "Erro ao enviar e-mail de recuperação.";
+    
+    if (authError.code === 'auth/user-not-found') {
+      errorMessage = "Não existe conta cadastrada com este e-mail.";
+    } else if (authError.code === 'auth/invalid-email') {
+      errorMessage = "O e-mail informado é inválido.";
+    }
+    
+    console.error("Erro no recoverPassword:", authError);
     return { success: false, error: errorMessage };
   }
 };

@@ -277,9 +277,18 @@ export default function FinancialClientPage() {
     const filteredTransactions = useMemo(() => transactions.filter(mov => mov.description.toLowerCase().includes(searchTerm.toLowerCase())), [transactions, searchTerm]);
     const receitas = filteredTransactions.filter(t => t.type === 'receita');
     const despesas = filteredTransactions.filter(t => t.type === 'despesa');
+    
+    // --- LÓGICA NOVA: Separação de Repasses e Despesas Gerais ---
+    const despesasRepasse = despesas.filter(t => t.category === 'Repasse de Profissional');
+    const despesasGerais = despesas.filter(t => t.category !== 'Repasse de Profissional');
+
+    // Cálculos de totais
     const totalReceitas = receitas.reduce((acc, mov) => acc + mov.value, 0);
     const totalDespesas = despesas.reduce((acc, mov) => acc + mov.value, 0);
     const saldoFinal = totalReceitas - totalDespesas;
+    
+    const totalDespesasGerais = despesasGerais.reduce((acc, t) => acc + t.value, 0);
+    const totalRepasses = despesasRepasse.reduce((acc, t) => acc + t.value, 0);
 
     return (
         <>
@@ -294,12 +303,75 @@ export default function FinancialClientPage() {
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
                     <TabsList className="grid w-full grid-cols-5"><TabsTrigger value="despesas">Despesas</TabsTrigger><TabsTrigger value="receitas">Receitas</TabsTrigger><TabsTrigger value="repasses">Repasses</TabsTrigger><TabsTrigger value="relatorios">Relatórios</TabsTrigger><TabsTrigger value="configuracoes">Configurações</TabsTrigger></TabsList>
+                    
+                    {/* Filtros e Cards Globais (Fora das abas internas para contexto geral) */}
                     <div className="mt-6 space-y-6">
                         <FinancialSummaryCards totalDespesas={totalDespesas} totalReceitas={totalReceitas} saldoFinal={saldoFinal} totalTransacoes={filteredTransactions.length} />
                         <FinancialFilters dateFrom={dateFrom} dateTo={dateTo} searchTerm={searchTerm} onDateFromChange={setDateFrom} onDateToChange={setDateTo} onSearchTermChange={setSearchTerm} />
                     </div>
 
-                    <TabsContent value="despesas" className="mt-6"><FinancialTable title="Despesas" data={despesas} type="despesa" loading={loading} onAddTransaction={() => setIsAddTransactionModalOpen(true)} onEditTransaction={(tx) => { setSelectedTransaction(tx); setIsEditTransactionModalOpen(true); }} onUpdateStatus={handleUpdateStatus} onDeleteTransaction={handleDeleteTransaction} bankAccounts={bankAccounts} /></TabsContent>
+                    <TabsContent value="despesas" className="mt-6 space-y-4">
+                        {/* --- NOVA ESTRUTURA DE ABAS INTERNAS PARA DESPESAS --- */}
+                        <Tabs defaultValue="gerais" className="w-full">
+                            <div className="flex items-center justify-between mb-4">
+                                <TabsList>
+                                    <TabsTrigger value="gerais">Despesas Gerais</TabsTrigger>
+                                    <TabsTrigger value="repasses">Apenas Repasses</TabsTrigger>
+                                </TabsList>
+                            </div>
+
+                            <TabsContent value="gerais">
+                                <div className="space-y-4">
+                                    {/* Card de Resumo Específico para Gerais */}
+                                    <FinancialSummaryCards 
+                                        totalDespesas={totalDespesasGerais} 
+                                        totalReceitas={0} 
+                                        saldoFinal={-totalDespesasGerais} 
+                                        totalTransacoes={despesasGerais.length} 
+                                    />
+                                    <FinancialTable 
+                                        title="Despesas Gerais" 
+                                        data={despesasGerais} 
+                                        type="despesa" 
+                                        loading={loading} 
+                                        onAddTransaction={() => setIsAddTransactionModalOpen(true)} 
+                                        onEditTransaction={(tx) => { setSelectedTransaction(tx); setIsEditTransactionModalOpen(true); }} 
+                                        onUpdateStatus={handleUpdateStatus} 
+                                        onDeleteTransaction={handleDeleteTransaction} 
+                                        bankAccounts={bankAccounts} 
+                                    />
+                                </div>
+                            </TabsContent>
+
+                            <TabsContent value="repasses">
+                                <div className="space-y-4">
+                                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-blue-800 text-sm flex items-center">
+                                        <span className="mr-2">ℹ️</span>
+                                        Aqui constam apenas as saídas referentes ao pagamento de profissionais (Categoria: "Repasse de Profissional").
+                                    </div>
+                                    {/* Card de Resumo Específico para Repasses */}
+                                    <FinancialSummaryCards 
+                                        totalDespesas={totalRepasses} 
+                                        totalReceitas={0} 
+                                        saldoFinal={-totalRepasses} 
+                                        totalTransacoes={despesasRepasse.length} 
+                                    />
+                                    <FinancialTable 
+                                        title="Pagamentos de Repasse" 
+                                        data={despesasRepasse} 
+                                        type="despesa" 
+                                        loading={loading} 
+                                        onAddTransaction={() => setIsAddTransactionModalOpen(true)} 
+                                        onEditTransaction={(tx) => { setSelectedTransaction(tx); setIsEditTransactionModalOpen(true); }} 
+                                        onUpdateStatus={handleUpdateStatus} 
+                                        onDeleteTransaction={handleDeleteTransaction} 
+                                        bankAccounts={bankAccounts} 
+                                    />
+                                </div>
+                            </TabsContent>
+                        </Tabs>
+                    </TabsContent>
+
                     <TabsContent value="receitas" className="mt-6"><FinancialTable title="Receitas" data={receitas} type="receita" loading={loading} onAddTransaction={() => setIsAddTransactionModalOpen(true)} onEditTransaction={(tx) => { setSelectedTransaction(tx); setIsEditTransactionModalOpen(true); }} onUpdateStatus={handleUpdateStatus} onDeleteTransaction={handleDeleteTransaction} bankAccounts={bankAccounts} /></TabsContent>
                     <TabsContent value="repasses" className="mt-6"><ProfessionalRepasseDashboard transactions={transactions} professionals={professionals} loading={loading} /></TabsContent>
                     <TabsContent value="relatorios" className="mt-6">

@@ -4,6 +4,7 @@ import {
     createAppointment,
     deleteAppointment,
     updateAppointment,
+    updateAppointmentBlock,
     getRenewableAppointments,
     dismissRenewal,
     getOccupiedRoomIdsByTime,
@@ -128,20 +129,27 @@ describe('Appointment Service - Cobertura Completa', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         mockedWriteBatch.mockReturnValue(mockBatch);
-        mockedDoc.mockReturnValue({ id: 'mock-generated-id' });
+        
+        // --- CORREÇÃO AQUI ---
+        // Agora o mock do doc respeita o ID passado como 3º argumento (doc(db, col, id))
+        mockedDoc.mockImplementation((_db, _col, idOrPath) => {
+            // Se passar um ID específico (ex: 'app-1'), usa ele. Se não, usa o genérico.
+            return { id: typeof idOrPath === 'string' ? idOrPath : 'mock-generated-id' };
+        });
+        // ---------------------
+
         mockedQuery.mockImplementation((...args) => ({ _query: args }));
         mockedDeleteTransaction.mockResolvedValue({ success: true });
-        // Linha corrigida
         mockedAddTransaction.mockResolvedValue({ success: true });
         mockedGetProfessionalById.mockResolvedValue(mockProfessional as any);
         mockedGetProfessionals.mockResolvedValue([mockProfessional] as any);
         mockedGetRooms.mockResolvedValue([{ id: 'sala-1', nome: 'Sala 1', status: 'ativa' }] as any);
-        mockedGetDocs.mockResolvedValue({ docs: [], empty: true }); // Reset padrão
-        mockedGetBankAccounts.mockResolvedValue([{ id: 'conta-padrao', isDefault: true }] as any); // Mock essencial
+        mockedGetDocs.mockResolvedValue({ docs: [], empty: true }); 
+        mockedGetBankAccounts.mockResolvedValue([{ id: 'conta-padrao', isDefault: true }] as any);
     });
 
 
-    // --- Testes de CRUD (Já existentes e revisados) ---
+    // --- Testes de CRUD ---
     describe('CRUD Operations', () => {
         it('should create a single appointment successfully', async () => {
             mockedGetDoc
@@ -170,7 +178,7 @@ describe('Appointment Service - Cobertura Completa', () => {
     });
 
 
-    // --- Testes da Lógica de Repasse (handleRepasseTransaction) ---
+    // --- Testes da Lógica de Repasse ---
     describe('handleRepasseTransaction', () => {
         it('should create a repasse transaction when appointment is "finalizado"', async () => {
             const finalizadoApp = { ...mockAppointment, status: 'finalizado' as const };
@@ -209,7 +217,7 @@ describe('Appointment Service - Cobertura Completa', () => {
     });
 
 
-    // --- Testes das Funções de Busca e Lógica de Negócio ---
+    // --- Testes das Funções de Busca ---
     describe('Business Logic and Search Functions', () => {
         it('should get renewable appointments within the next 7 days', async () => {
             mockedGetDocs.mockResolvedValue({
@@ -248,10 +256,10 @@ describe('Appointment Service - Cobertura Completa', () => {
     // --- Testes do Assistente de Agendamento ---
     describe('Schedule Assistant Functions', () => {
         it('should find available slots for a given therapy', async () => {
-            mockedGetDocs.mockResolvedValue({ docs: [], empty: true }); // Nenhum agendamento futuro
+            mockedGetDocs.mockResolvedValue({ docs: [], empty: true });
 
             const options = {
-                semana: new Date('2025-10-06'), // Uma segunda-feira
+                semana: new Date('2025-10-06'), 
                 terapia: 'Psicologia',
             };
             const slots = await findAvailableSlots(options);
@@ -266,9 +274,8 @@ describe('Appointment Service - Cobertura Completa', () => {
                 start: mockedTimestamp.fromDate(conflictingTime),
                 end: mockedTimestamp.fromDate(new Date(conflictingTime.getTime() + 50 * 60000)),
             };
-            // Mock para a busca de agendamentos no findAvailableSlots
+            
             mockedGetDocs.mockImplementation(query => {
-                // Simula que a query encontrou o agendamento conflitante
                 return Promise.resolve({
                     docs: [{ id: 'conflict', data: () => conflictingAppointment }],
                     empty: false
@@ -276,17 +283,86 @@ describe('Appointment Service - Cobertura Completa', () => {
             });
 
             const options = {
-                semana: new Date('2025-10-06'), // Semana que inclui a sexta-feira do conflito
+                semana: new Date('2025-10-06'),
                 terapia: 'Psicologia',
                 turno: 'tarde' as const
             };
             const slots = await findAvailableSlots(options);
 
-            // Verifica se o horário conflitante não foi oferecido
             const hasConflictSlot = slots.some(slot => 
                 format(slot.dia, 'yyyy-MM-dd HH:mm') === format(conflictingTime, 'yyyy-MM-dd HH:mm')
             );
             expect(hasConflictSlot).toBe(false);
+        });
+    });
+
+    // --- NOVO TESTE: Atualização em Bloco Segura ---
+    describe('Block Update Logic', () => {
+        it('should update appointment details in block but NOT propagate status to future appointments', async () => {
+            const currentAppDate = new Date('2025-10-10T10:00:00');
+            const futureAppDate = new Date('2025-10-17T10:00:00'); 
+
+            const currentApp = { 
+                ...mockAppointment, 
+                id: 'app-1', 
+                start: mockedTimestamp.fromDate(currentAppDate),
+                blockId: 'block-123' 
+            };
+            
+            // Simula o agendamento futuro que NÃO deve receber o status "finalizado"
+            const futureApp = { 
+                ...mockAppointment, 
+                id: 'app-2', 
+                start: mockedTimestamp.fromDate(futureAppDate),
+                blockId: 'block-123',
+                status: 'agendado' 
+            };
+
+            // Mock da busca: retorna o atual e o futuro
+            mockedGetDocs.mockResolvedValue({
+                docs: [
+                    { id: 'app-1', data: () => currentApp },
+                    { id: 'app-2', data: () => futureApp }
+                ],
+                empty: false
+            });
+            
+            // Mock para garantir que o repasse funcione ao buscar o doc atualizado
+            mockedGetDoc.mockResolvedValue({ exists: () => true, data: () => ({ ...currentApp, status: 'finalizado' }) });
+
+            const updateData = {
+                data: '2025-10-10',
+                horaInicio: '10:00',
+                horaFim: '10:50',
+                observacoes: 'Nova observação para todos',
+                status: 'finalizado' as const, 
+            };
+
+            await updateAppointmentBlock(currentApp, updateData);
+
+            // VERIFICAÇÃO
+            expect(mockBatch.update).toHaveBeenCalledTimes(2);
+
+            // 1. Verifica se o app-1 recebeu o status 'finalizado'
+            expect(mockBatch.update).toHaveBeenCalledWith(
+                expect.objectContaining({ id: 'app-1' }), 
+                expect.objectContaining({ 
+                    observacoes: 'Nova observação para todos',
+                    status: 'finalizado' 
+                })
+            );
+
+            // 2. Verifica se o app-2 (futuro) recebeu a observação MAS NÃO o status
+            expect(mockBatch.update).toHaveBeenCalledWith(
+                expect.objectContaining({ id: 'app-2' }),
+                expect.objectContaining({ 
+                    observacoes: 'Nova observação para todos' 
+                })
+            );
+            
+            // Garante que o status NÃO foi passado para o segundo update
+            const secondCallArg = mockBatch.update.mock.calls.find((call: any) => call[0].id === 'app-2')[1];
+            expect(secondCallArg).not.toHaveProperty('status');
         });
     });
 });

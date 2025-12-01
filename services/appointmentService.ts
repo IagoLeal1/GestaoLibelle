@@ -99,7 +99,7 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
     return { success: false, error: "Dados financeiros do profissional não encontrados." };
   }
 
-  // 3. Determina o percentual de repasse (LÓGICA NOVA AQUI)
+  // 3. Determina o percentual de repasse
   const { tipoPagamento, percentualRepasse, horarioFixoInicio, horarioFixoFim, regrasEspeciais } = professional.financeiro;
   let percentualAplicado = percentualRepasse || 0; // Começa com o percentual padrão
 
@@ -375,6 +375,8 @@ export const updateAppointment = async (id: string, data: Partial<AppointmentFor
   try {
     const docRef = doc(db, 'appointments', id);
     const dataToUpdate: { [key: string]: any } = { ...data };
+    
+    // Converte datas se fornecidas
     if (data.data && data.horaInicio && data.horaFim) {
       const [year, month, day] = data.data.split('-').map(Number);
       const [startHour, startMinute] = data.horaInicio.split(':').map(Number);
@@ -387,6 +389,35 @@ export const updateAppointment = async (id: string, data: Partial<AppointmentFor
       delete dataToUpdate.horaInicio;
       delete dataToUpdate.horaFim;
     }
+
+    // --- CORREÇÃO: Busca nomes atualizados se IDs mudaram ---
+    if (data.professionalId) {
+      const pDoc = await getDoc(doc(db, 'professionals', data.professionalId));
+      if (pDoc.exists()) {
+        dataToUpdate.professionalName = pDoc.data().fullName;
+      }
+    }
+    if (data.patientId) {
+      const pDoc = await getDoc(doc(db, 'patients', data.patientId));
+      if (pDoc.exists()) {
+        dataToUpdate.patientName = pDoc.data().fullName;
+      }
+    }
+    // Atualiza o Título se algum nome mudou
+    if (dataToUpdate.professionalName || dataToUpdate.patientName) {
+        // Se um deles não foi atualizado agora, precisamos buscar o atual do documento para compor o título
+        // Mas para simplificar, se não temos o dado na mão, podemos deixar o título desatualizado ou fazer um getDoc extra.
+        // Vamos fazer o getDoc do appointment atual para garantir integridade do título.
+        const currentDoc = await getDoc(docRef);
+        if (currentDoc.exists()) {
+            const currentData = currentDoc.data();
+            const pName = dataToUpdate.patientName || currentData.patientName;
+            const profName = dataToUpdate.professionalName || currentData.professionalName;
+            dataToUpdate.title = `${pName} - ${profName}`;
+        }
+    }
+    // --------------------------------------------------------
+
     Object.keys(dataToUpdate).forEach(key => {
       if (dataToUpdate[key] === undefined) {
         delete dataToUpdate[key];
@@ -456,16 +487,11 @@ export const renewAppointmentBlock = async (lastAppointment: Appointment, sessio
         professionalId: lastAppointment.professionalId, 
         professionalName: lastAppointment.professionalName,
         tipo: lastAppointment.tipo, 
-        
-        // --- CORREÇÃO APLICADA AQUI ---
-        // Garante que campos opcionais não sejam 'undefined'
         sala: lastAppointment.sala ?? null,
         convenio: lastAppointment.convenio ?? "",
-        observacoes: lastAppointment.observacoes ?? "", // Este era o campo do erro
+        observacoes: lastAppointment.observacoes ?? "", 
         valorConsulta: lastAppointment.valorConsulta ?? 0,
         statusSecundario: lastAppointment.statusSecundario ?? "",
-        // --- FIM DA CORREÇÃO ---
-
         start: Timestamp.fromDate(sessionDate), 
         end: Timestamp.fromDate(sessionEndDate),
         status: 'agendado',
@@ -474,7 +500,6 @@ export const renewAppointmentBlock = async (lastAppointment: Appointment, sessio
       });
     }
 
-    // Atualiza o agendamento antigo para não ser mais o último
     batch.update(doc(db, 'appointments', lastAppointment.id), { isLastInBlock: false });
     
     await batch.commit();
@@ -828,18 +853,44 @@ export const updateAppointmentBlock = async (
 
     const { data: dateStr, horaInicio, horaFim, ...restData } = data;
 
+    // Se as datas não forem fornecidas, não podemos recalcular o tempo.
+    // Isso evita crash se vier sem data, embora o modal geralmente mande tudo.
+    if (!dateStr || !horaInicio || !horaFim) {
+        console.error("Dados de data/hora incompletos para atualização em bloco.");
+        // Fallback: Atualiza apenas os outros dados (exceto data/hora)
+         for (const docSnap of snapshot.docs) {
+             // ... Lógica similar de nomes e status ...
+             // Mas para simplicidade, vamos assumir que o fluxo correto exige data.
+        }
+        return { success: false, error: "Dados de data e hora são obrigatórios para edição em bloco." };
+    }
+
     // Converte a nova data e hora do formulário em um objeto Date "âncora"
-    const [year, month, day] = dateStr!.split('-').map(Number);
-    const [startHour, startMinute] = horaInicio!.split(':').map(Number);
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const [startHour, startMinute] = horaInicio.split(':').map(Number);
     const newAnchorDate = new Date(year, month - 1, day, startHour, startMinute);
     
     // Calcula a diferença em dias entre a data original do agendamento editado e a nova data
     const dayDifference = differenceInCalendarDays(newAnchorDate, currentAppointment.start.toDate());
 
     const durationInMinutes = differenceInMinutes(
-      new Date(0, 0, 0, Number(horaFim!.split(':')[0]), Number(horaFim!.split(':')[1])),
+      new Date(0, 0, 0, Number(horaFim.split(':')[0]), Number(horaFim.split(':')[1])),
       new Date(0, 0, 0, startHour, startMinute)
     );
+
+    // --- CORREÇÃO: Busca nomes atualizados se IDs mudaram (para o bloco todo) ---
+    let newProfessionalName = "";
+    let newPatientName = "";
+
+    if (restData.professionalId) {
+        const pDoc = await getDoc(doc(db, 'professionals', restData.professionalId));
+        if (pDoc.exists()) newProfessionalName = pDoc.data().fullName;
+    }
+    if (restData.patientId) {
+        const pDoc = await getDoc(doc(db, 'patients', restData.patientId));
+        if (pDoc.exists()) newPatientName = pDoc.data().fullName;
+    }
+    // --------------------------------------------------------------------------
 
     for (const docSnap of snapshot.docs) {
       const appointmentDocRef = doc(db, 'appointments', docSnap.id);
@@ -859,12 +910,33 @@ export const updateAppointmentBlock = async (
         end: Timestamp.fromDate(finalNewEndDate),
       };
 
+      // Injeta os nomes atualizados se houver
+      if (newProfessionalName) dataToUpdate.professionalName = newProfessionalName;
+      if (newPatientName) dataToUpdate.patientName = newPatientName;
+      
+      // Atualiza o Título se necessário
+      if (newProfessionalName || newPatientName) {
+           const pName = newPatientName || oldAppointmentData.patientName;
+           const profName = newProfessionalName || oldAppointmentData.professionalName;
+           dataToUpdate.title = `${pName} - ${profName}`;
+      }
+
+      // --- CORREÇÃO IMPORTANTE: PROTEÇÃO DE STATUS ---
+      // Se NÃO for o agendamento atual (o que o usuário clicou),
+      // NÃO altera o status (não queremos marcar todos futuros como 'finalizado')
+      if (docSnap.id !== currentAppointment.id) {
+          delete dataToUpdate.status;
+          delete dataToUpdate.statusSecundario;
+      }
+      // ----------------------------------------------
+
       // Remove quaisquer campos com valor 'undefined' antes de salvar
       Object.keys(dataToUpdate).forEach(key => {
         if (dataToUpdate[key] === undefined) {
           delete dataToUpdate[key];
         }
       });
+      // Verifica status secundário
       if (dataToUpdate.statusSecundario === 'nenhum') {
         dataToUpdate.statusSecundario = '';
       }
@@ -874,7 +946,8 @@ export const updateAppointmentBlock = async (
 
     await batch.commit();
 
-    // Dispara a atualização do repasse para o primeiro agendamento modificado
+    // Dispara a atualização do repasse SOMENTE para o primeiro agendamento modificado (o atual)
+    // Agendamentos futuros não devem ter repasse gerado agora (geralmente estão 'agendado')
     const updatedFirstAppointmentDoc = await getDoc(doc(db, 'appointments', currentAppointment.id));
     if (updatedFirstAppointmentDoc.exists()) {
         const updatedAppointment = { id: updatedFirstAppointmentDoc.id, ...updatedFirstAppointmentDoc.data() } as Appointment;
@@ -910,7 +983,7 @@ export const getAppointmentsBySpecialties = async (
   // A consulta agora é feita diretamente no campo 'tipo', que armazena o nome da terapia.
   const q = query(
     appointmentsRef,
-    where("tipo", "in", specialtyNames), // Esta é a chave da correção!
+    where("tipo", "in", specialtyNames), 
     where("start", ">=", startDate),
     where("start", "<=", endDate)
   );
