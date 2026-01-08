@@ -1,8 +1,9 @@
+// components/pages/financial-client-page.tsx
 "use client"
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Wallet } from "lucide-react";
+import { Plus, Wallet, Wrench } from "lucide-react"; // Adicionado Wrench
 import { format, startOfMonth, endOfMonth, startOfDay, endOfDay } from "date-fns";
 import { toast } from "sonner";
 import { db } from "@/lib/firebaseConfig";
@@ -30,6 +31,9 @@ import {
     getCompanyData, updateCompanyData, CompanyData
 } from "@/services/settingsService";
 import { getPatients, Patient } from "@/services/patientService";
+
+// NOVO SERVICE DE CORREÇÃO
+import { fixExistingRepasseDates } from "@/services/fixRepasses";
 
 // Modals
 import { AddTransactionModal, FormValues as AddTransactionFormValues } from "@/components/modals/add-transaction-modal";
@@ -274,11 +278,28 @@ export default function FinancialClientPage() {
         }
     };
 
+    // --- NOVO HANDLER PARA O BOTÃO DE CORREÇÃO ---
+    const handleFixRepasses = async () => {
+        const confirm = window.confirm("Isso irá corrigir as datas de vencimento de todos os repasses PENDENTES de 'Particular' e 'Pacote' para 1 mês após o atendimento.\n\nDeseja continuar?");
+        if (!confirm) return;
+
+        setLoading(true);
+        const result = await fixExistingRepasseDates();
+        setLoading(false);
+
+        if (result.success) {
+            toast.success(result.message);
+            fetchData(); // Recarrega os dados para ver as mudanças
+        } else {
+            toast.error(typeof result.error === 'string' ? result.error : "Erro ao corrigir datas.");
+        }
+    };
+    // ---------------------------------------------
+
     const filteredTransactions = useMemo(() => transactions.filter(mov => mov.description.toLowerCase().includes(searchTerm.toLowerCase())), [transactions, searchTerm]);
     const receitas = filteredTransactions.filter(t => t.type === 'receita');
     const despesas = filteredTransactions.filter(t => t.type === 'despesa');
     
-    // --- LÓGICA NOVA: Separação de Repasses e Despesas Gerais ---
     const despesasRepasse = despesas.filter(t => t.category === 'Repasse de Profissional');
     const despesasGerais = despesas.filter(t => t.category !== 'Repasse de Profissional');
 
@@ -373,7 +394,24 @@ export default function FinancialClientPage() {
                     </TabsContent>
 
                     <TabsContent value="receitas" className="mt-6"><FinancialTable title="Receitas" data={receitas} type="receita" loading={loading} onAddTransaction={() => setIsAddTransactionModalOpen(true)} onEditTransaction={(tx) => { setSelectedTransaction(tx); setIsEditTransactionModalOpen(true); }} onUpdateStatus={handleUpdateStatus} onDeleteTransaction={handleDeleteTransaction} bankAccounts={bankAccounts} /></TabsContent>
-                    <TabsContent value="repasses" className="mt-6"><ProfessionalRepasseDashboard transactions={transactions} professionals={professionals} loading={loading} /></TabsContent>
+                    
+                    <TabsContent value="repasses" className="mt-6">
+                        {/* --- BOTÃO DE CORREÇÃO ADICIONADO AQUI --- */}
+                        <div className="flex justify-end mb-4">
+                            <Button 
+                                onClick={handleFixRepasses} 
+                                variant="outline" 
+                                className="border-orange-500 text-orange-600 hover:bg-orange-50"
+                                disabled={loading}
+                            >
+                                <Wrench className="mr-2 h-4 w-4" />
+                                Corrigir Datas (Particulares/Pacotes)
+                            </Button>
+                        </div>
+                        {/* ----------------------------------------- */}
+                        <ProfessionalRepasseDashboard transactions={transactions} professionals={professionals} loading={loading} />
+                    </TabsContent>
+                    
                     <TabsContent value="relatorios" className="mt-6">
                         <FinancialReportsDashboard 
                             onGenerateReport={handleOpenReportModal} 

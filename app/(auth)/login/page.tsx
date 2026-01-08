@@ -16,7 +16,7 @@ import { signInUser } from "@/services/authService"
 // 1. Criamos um componente interno que contém toda a lógica do formulário
 function LoginForm() {
   const router = useRouter();
-  const searchParams = useSearchParams(); // O hook agora está dentro do componente que será "suspenso"
+  const searchParams = useSearchParams();
 
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -120,12 +120,38 @@ function LoginForm() {
             {isLoading ? "Entrando..." : "Entrar"}
           </Button>
 
-          <div className="text-center text-sm text-gray-600">
-            Não tem uma conta?{" "}
-            <Link href="/signup" className="text-primary-teal hover:underline font-medium">
-              Solicitar acesso
-            </Link>
+          {/* --- AQUI COMEÇA A ÁREA DO PRIMEIRO ACESSO --- */}
+          <div className="mt-8">
+            <div className="relative mb-4">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-gray-200" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-white px-2 text-gray-500">
+                  Primeiro Acesso?
+                </span>
+              </div>
+            </div>
+
+            <div className="grid gap-3 text-center">
+              {/* Botão em destaque para a Família */}
+              <Button type="button" variant="outline" asChild className="w-full border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold h-11">
+                <Link href="/cadastro-familia">
+                  Sou Familiar / Responsável
+                </Link>
+              </Button>
+              
+              {/* Link menor para Profissionais */}
+              <div className="text-xs text-gray-500 mt-2">
+                É Profissional ou Funcionário?{" "}
+                <Link href="/signup" className="text-primary-teal hover:underline font-medium">
+                  Clique aqui para se cadastrar
+                </Link>
+              </div>
+            </div>
           </div>
+          {/* --- FIM DA ÁREA DO PRIMEIRO ACESSO --- */}
+
         </form>
       </CardContent>
     </Card>

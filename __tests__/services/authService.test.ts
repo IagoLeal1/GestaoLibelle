@@ -139,3 +139,49 @@ describe('Auth Service', () => {
     });
   });
 });
+// --- NOVO TESTE: FLUXO DA FAMÍLIA (VÍNCULO AUTOMÁTICO) ---
+    it('should link a patient to the user if emailCadastro matches', async () => {
+        // 1. Simula a criação do usuário (Mãe)
+        const mockUser = { uid: 'mae-uid-123' };
+        mockedCreateUserWithEmailAndPassword.mockResolvedValue({ user: mockUser });
+
+        // 2. Simula que o Firestore ENCONTROU um paciente com esse email
+        const mockPatientDoc = { id: 'paciente-joaozinho-id', data: () => ({ name: 'João' }) };
+        
+        // Mock do getDocs para retornar o paciente encontrado quando a query for feita
+        const { getDocs } = require('firebase/firestore');
+        (getDocs as jest.Mock).mockResolvedValue({
+            empty: false,
+            size: 1,
+            docs: [mockPatientDoc],
+            forEach: (callback: any) => callback(mockPatientDoc)
+        });
+
+        // Mock do updateDoc para verificar se o vínculo foi feito
+        const { updateDoc } = require('firebase/firestore');
+        
+        const formData = {
+            displayName: 'Mãe do João',
+            email: 'mae.joao@email.com',
+            // Dados simplificados que vêm da página nova
+            tipo: 'familiar' as const,
+            vinculo: 'Mãe',
+            cpf: '',
+            telefone: '',
+            observacoes: ''
+        };
+
+        // AÇÃO: Executa o cadastro
+        const result = await signUpAndCreateProfile(formData, 'senhaSegura123');
+
+        // VERIFICAÇÕES
+        expect(result.success).toBe(true);
+
+        // Verifica se tentou atualizar o paciente
+        expect(updateDoc).toHaveBeenCalledWith(
+            expect.anything(), // O ref do documento (difícil validar exato por ser mock)
+            expect.objectContaining({
+                userId: 'mae-uid-123' // <--- O PULO DO GATO: Verificamos se o ID da mãe foi salvo no paciente!
+            })
+        );
+    });

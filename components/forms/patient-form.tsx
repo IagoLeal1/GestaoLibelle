@@ -8,34 +8,50 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { User, Phone, MapPin } from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { User, Phone, MapPin, AlertCircle } from "lucide-react"
 
-import { createPatient, updatePatient, PatientFormData } from "@/services/patientService"
-import { Patient } from "@/services/patientService"
+import { createPatient, updatePatient, PatientFormData, Patient } from "@/services/patientService"
 
 interface PatientFormProps {
   initialData?: Patient | null;
 }
 
-// O componente foi totalmente refatorado para usar a estrutura de dados correta
 export function PatientForm({ initialData }: PatientFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // 1. Estado inicial com a estrutura aninhada correta para 'responsavel'
+  // Estado inicial unificado (trazido das páginas manuais)
   const [formData, setFormData] = useState<Partial<PatientFormData>>({
     fullName: "",
     cpf: "",
     dataNascimento: "",
+    rg: "",
+    sexo: "",
+    convenio: "",
+    emailCadastro: "", // Campo novo de login
+    
     responsavel: {
       nome: "",
       cpf: "",
       celular: "",
+      email: "",
+      profissao: "",
+      estadoCivil: "",
     },
+
+    endereco: "", 
+    numero: "", 
+    complemento: "", 
+    bairro: "", 
+    cidade: "", 
+    cep: "", 
+    estado: "",
+    observacoes: "",
   });
 
-  // 2. useEffect corrigido para ler e preencher a estrutura aninhada
+  // useEffect para preencher dados na edição (Lógica do editar/page.tsx)
   useEffect(() => {
     if (initialData) {
       setFormData({
@@ -45,7 +61,8 @@ export function PatientForm({ initialData }: PatientFormProps) {
         rg: initialData.rg || "",
         sexo: initialData.sexo || "",
         convenio: initialData.convenio || "",
-        
+        emailCadastro: initialData.emailCadastro || "",
+
         responsavel: {
           nome: initialData.responsavel?.nome || "",
           cpf: initialData.responsavel?.cpf || "",
@@ -67,18 +84,30 @@ export function PatientForm({ initialData }: PatientFormProps) {
     }
   }, [initialData]);
 
-  // 3. handleInputChange agora entende campos aninhados
+  // Handler inteligente com máscaras (Trazido do novo/page.tsx)
   const handleInputChange = (field: keyof PatientFormData | keyof NonNullable<PatientFormData['responsavel']>, value: string, parentField?: 'responsavel') => {
+    
+    let formattedValue = value;
+    
+    // Aplicação de Máscaras
+    if (field === 'cpf') { 
+        formattedValue = value.replace(/\D/g, '').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})/, '$1-$2').substring(0, 14);
+    } else if (field === 'celular') {
+        formattedValue = value.replace(/\D/g, '').replace(/^(\d{2})(\d)/g, '($1) $2').replace(/(\d{5})(\d)/, '$1-$2').substring(0, 15);
+    } else if (field === 'cep') {
+        formattedValue = value.replace(/\D/g, '').replace(/^(\d{5})(\d)/, '$1-$2').substring(0, 9);
+    }
+
     if (parentField) {
         setFormData(prev => ({
             ...prev,
             [parentField]: {
                 ...(prev[parentField] || {}),
-                [field]: value
+                [field]: formattedValue
             }
         }));
     } else {
-        setFormData(prev => ({ ...prev, [field]: value }));
+        setFormData(prev => ({ ...prev, [field]: formattedValue }));
     }
   };
 
@@ -86,6 +115,13 @@ export function PatientForm({ initialData }: PatientFormProps) {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    // Validação básica que estava nas páginas
+    if (!formData.fullName || !formData.dataNascimento || !formData.cpf || !formData.responsavel?.celular || !formData.responsavel?.nome) {
+        setError("Nome do Paciente, Data de Nascimento, CPF, Nome do Responsável e Celular do Responsável são obrigatórios.");
+        setLoading(false);
+        return;
+    }
 
     try {
       let result;
@@ -100,7 +136,7 @@ export function PatientForm({ initialData }: PatientFormProps) {
         router.push('/pacientes');
         router.refresh(); 
       } else {
-        setError(result.error || "Ocorreu um erro.");
+        setError(result.error || "Ocorreu um erro ao salvar.");
       }
     } catch (err) {
       setError("Ocorreu um erro inesperado.");
@@ -111,24 +147,51 @@ export function PatientForm({ initialData }: PatientFormProps) {
   
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      
+      {error && (
+          <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Erro no preenchimento</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+          </Alert>
+      )}
+
       {/* Dados Pessoais do PACIENTE */}
       <Card>
-        <CardHeader><CardTitle className="flex items-center gap-2"><User /> Dados Pessoais do Paciente</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><User className="h-5 w-5" /> Dados Pessoais do Paciente</CardTitle></CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-2 md:col-span-2"><Label htmlFor="fullName">Nome Completo *</Label><Input id="fullName" value={formData.fullName || ''} onChange={(e) => handleInputChange("fullName", e.target.value)} required /></div>
             <div className="space-y-2"><Label htmlFor="dataNascimento">Data de Nascimento *</Label><Input id="dataNascimento" type="date" value={formData.dataNascimento || ''} onChange={(e) => handleInputChange("dataNascimento", e.target.value)} required /></div>
             <div className="space-y-2"><Label htmlFor="cpf">CPF *</Label><Input id="cpf" value={formData.cpf || ''} onChange={(e) => handleInputChange("cpf", e.target.value)} required /></div>
+            
             <div className="space-y-2"><Label htmlFor="rg">RG</Label><Input id="rg" value={formData.rg || ''} onChange={(e) => handleInputChange("rg", e.target.value)} /></div>
+
+            {/* --- CAMPO DE EMAIL DE CADASTRO (NOVO) --- */}
+            <div className="space-y-2 bg-blue-50 p-2 rounded-md border border-blue-100">
+              <Label htmlFor="emailCadastro" className="text-blue-700 font-bold">E-mail para Login (Vínculo)</Label>
+              <Input 
+                id="emailCadastro" 
+                placeholder="email.da.familia@exemplo.com" 
+                value={formData.emailCadastro || ''} 
+                onChange={(e) => handleInputChange("emailCadastro", e.target.value)} 
+                className="bg-white"
+              />
+              <p className="text-[10px] text-blue-600 mt-1">
+                A família deve usar exatamente este e-mail ao criar a conta no site.
+              </p>
+            </div>
+            {/* ----------------------------------------- */}
+
             <div className="space-y-2"><Label htmlFor="sexo">Sexo</Label><Select value={formData.sexo} onValueChange={(value) => handleInputChange("sexo", value)}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent><SelectItem value="masculino">Masculino</SelectItem><SelectItem value="feminino">Feminino</SelectItem><SelectItem value="outro">Outro</SelectItem></SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="convenio">Convênio</Label><Input id="convenio" value={formData.convenio || ''} onChange={(e) => handleInputChange("convenio", e.target.value)} /></div>
           </div>
         </CardContent>
       </Card>
 
-      {/* 4. Inputs do responsável atualizados para o formato aninhado */}
+      {/* Dados do RESPONSÁVEL */}
       <Card>
-        <CardHeader><CardTitle className="flex items-center gap-2"><Phone /> Contato do Responsável</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Phone className="h-5 w-5" /> Contato do Responsável</CardTitle></CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-2 md:col-span-2"><Label htmlFor="responsavelNome">Nome Completo *</Label><Input id="responsavelNome" value={formData.responsavel?.nome || ''} onChange={(e) => handleInputChange("nome", e.target.value, "responsavel")} required /></div>
@@ -140,8 +203,41 @@ export function PatientForm({ initialData }: PatientFormProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Endereço */}
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2"><MapPin className="h-5 w-5" /> Endereço</CardTitle></CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-2"><Label htmlFor="cep">CEP</Label><Input id="cep" value={formData.cep || ''} onChange={(e) => handleInputChange("cep", e.target.value)} /></div>
+            <div className="space-y-2 lg:col-span-2"><Label htmlFor="endereco">Endereço</Label><Input id="endereco" value={formData.endereco || ''} onChange={(e) => handleInputChange("endereco", e.target.value)} /></div>
+            <div className="space-y-2"><Label htmlFor="numero">Número</Label><Input id="numero" value={formData.numero || ''} onChange={(e) => handleInputChange("numero", e.target.value)} /></div>
+            <div className="space-y-2"><Label htmlFor="complemento">Complemento</Label><Input id="complemento" value={formData.complemento || ''} onChange={(e) => handleInputChange("complemento", e.target.value)} /></div>
+            <div className="space-y-2"><Label htmlFor="bairro">Bairro</Label><Input id="bairro" value={formData.bairro || ''} onChange={(e) => handleInputChange("bairro", e.target.value)} /></div>
+            <div className="space-y-2"><Label htmlFor="cidade">Cidade</Label><Input id="cidade" value={formData.cidade || ''} onChange={(e) => handleInputChange("cidade", e.target.value)} /></div>
+            <div className="space-y-2"><Label htmlFor="estado">Estado</Label><Select value={formData.estado} onValueChange={(value) => handleInputChange("estado", value)}><SelectTrigger><SelectValue placeholder="UF" /></SelectTrigger><SelectContent>
+                <SelectItem value="AC">AC</SelectItem><SelectItem value="AL">AL</SelectItem><SelectItem value="AP">AP</SelectItem>
+                <SelectItem value="AM">AM</SelectItem><SelectItem value="BA">BA</SelectItem><SelectItem value="CE">CE</SelectItem>
+                <SelectItem value="DF">DF</SelectItem><SelectItem value="ES">ES</SelectItem><SelectItem value="GO">GO</SelectItem>
+                <SelectItem value="MA">MA</SelectItem><SelectItem value="MT">MT</SelectItem><SelectItem value="MS">MS</SelectItem>
+                <SelectItem value="MG">MG</SelectItem><SelectItem value="PA">PA</SelectItem><SelectItem value="PB">PB</SelectItem>
+                <SelectItem value="PR">PR</SelectItem><SelectItem value="PE">PE</SelectItem><SelectItem value="PI">PI</SelectItem>
+                <SelectItem value="RJ">RJ</SelectItem><SelectItem value="RN">RN</SelectItem><SelectItem value="RS">RS</SelectItem>
+                <SelectItem value="RO">RO</SelectItem><SelectItem value="RR">RR</SelectItem><SelectItem value="SC">SC</SelectItem>
+                <SelectItem value="SP">SP</SelectItem><SelectItem value="SE">SE</SelectItem><SelectItem value="TO">TO</SelectItem>
+            </SelectContent></Select></div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Observações */}
+      <Card>
+        <CardHeader><CardTitle>Observações Adicionais</CardTitle></CardHeader>
+        <CardContent>
+          <Textarea id="observacoes" placeholder="Informações adicionais sobre o paciente..." value={formData.observacoes || ''} onChange={(e) => handleInputChange("observacoes", e.target.value)} rows={4} />
+        </CardContent>
+      </Card>
       
-      {error && <p className="text-sm font-medium text-red-500">{error}</p>}
       <div className="flex justify-end gap-4">
         <Button type="button" variant="outline" onClick={() => router.push('/pacientes')}>Cancelar</Button>
         <Button type="submit" disabled={loading}>{loading ? "Salvando..." : (initialData ? "Salvar Alterações" : "Salvar Paciente")}</Button>

@@ -33,6 +33,8 @@ export interface Patient {
   cpf: string;
   rg?: string;
   convenio?: string;
+  emailCadastro?: string; // O e-mail chave para o login
+  userId?: string;        // O ID do usuário que será vinculado depois
   
   responsavel: Responsavel; // Objeto aninhado para o responsável
 
@@ -70,6 +72,7 @@ export interface PatientFormData {
   sexo?: string;
   rg?: string;
   convenio?: string;
+  emailCadastro?: string;
   
   responsavel: ResponsavelFormData;
 

@@ -147,11 +147,26 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
   const allBankAccounts = await getBankAccounts();
   const defaultAccount = allBankAccounts.find(acc => acc.isDefault);
 
+  // --- LÓGICA DE DATAS CORRIGIDA (Incluindo 'Pacote') ---
+  const convenio = appointment.convenio ? appointment.convenio.toLowerCase().trim() : "";
+  
+  // Regra de 1 Mês: Particular OU Pacote OU Sem convênio
+  const isRegraUmMes = convenio === "" || 
+                       convenio === "particular" || 
+                       convenio === "pacote";
+
+  // Se for Particular/Pacote: +1 mês. Outros convênios: +2 meses.
+  const mesesParaAdicionar = isRegraUmMes ? 1 : 2; 
+
+  const dataMovimento = addMonths(appointment.start.toDate(), mesesParaAdicionar);
+  // -----------------------------------------------------
+
   const transactionData: TransactionFormData = {
+    // ... restante dos dados igual ...
     type: 'despesa',
     description: `Repasse ${professional.fullName} - Sessão ${appointment.patientName} ${format(appointment.start.toDate(), 'dd/MM')}`,
     value: valorRepasse,
-    dataMovimento: addMonths(appointment.start.toDate(), 2),
+    dataMovimento: dataMovimento,
     dataEmissao: appointment.start.toDate(),
     status: 'pendente',
     category: 'Repasse de Profissional',

@@ -4,7 +4,7 @@ import {
     collection, addDoc, updateDoc, doc, deleteDoc, getDocs, getDoc, 
     query, orderBy, where, writeBatch, setDoc, runTransaction, increment 
 } from "firebase/firestore";
-import { format, addMonths } from "date-fns";
+import { format, addMonths, startOfDay, endOfDay, addMinutes } from "date-fns";
 import { Timestamp } from "firebase/firestore";
 
 // --- INTERFACES ---
@@ -239,8 +239,23 @@ const normalizeTransaction = (doc: any): Transaction => {
 
 export const getTransactionsByPeriod = async (startDate: Date, endDate: Date): Promise<Transaction[]> => {
     try {
-        const qNew = query(collection(db, "transactions"), where("dataMovimento", ">=", Timestamp.fromDate(startDate)), where("dataMovimento", "<=", Timestamp.fromDate(endDate)));
-        const qOld = query(collection(db, "transactions"), where("date", ">=", Timestamp.fromDate(startDate)), where("date", "<=", Timestamp.fromDate(endDate)));
+        // --- CORREÇÃO DE TIMEZONE ---
+        // O input costuma vir em UTC (ex: 01/12 00:00 UTC = 30/11 21:00 BRT).
+        // Isso ajusta para garantir que buscamos a partir da 00:00 do fuso local.
+        const offset = startDate.getTimezoneOffset();
+        const adjustedStart = startOfDay(addMinutes(startDate, offset));
+        const adjustedEnd = endOfDay(addMinutes(endDate, offset));
+
+        const qNew = query(collection(db, "transactions"), 
+            where("dataMovimento", ">=", Timestamp.fromDate(adjustedStart)), 
+            where("dataMovimento", "<=", Timestamp.fromDate(adjustedEnd))
+        );
+        
+        // Query de legado (retrocompatibilidade)
+        const qOld = query(collection(db, "transactions"), 
+            where("date", ">=", Timestamp.fromDate(adjustedStart)), 
+            where("date", "<=", Timestamp.fromDate(adjustedEnd))
+        );
 
         const [newSnapshot, oldSnapshot] = await Promise.all([getDocs(qNew), getDocs(qOld)]);
 
