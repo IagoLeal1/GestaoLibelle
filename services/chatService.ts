@@ -1,3 +1,4 @@
+// services/chatService.ts
 import { db } from "@/lib/firebaseConfig";
 import {
   collection,
@@ -9,28 +10,28 @@ import {
   doc,
   updateDoc,
   getDoc,
-  serverTimestamp,
   Timestamp,
   limit
 } from "firebase/firestore";
 
-// Interfaces
+// --- INTERFACES (Obrigatório ter 'export' nelas) ---
 export interface ChatGroup {
   id: string;
   pacienteId: string;
   pacienteNome: string;
   responsavelId: string;
-  responsavelNome: string; // Nome do familiar responsável
-  terapeutaIds: string[]; // Lista de UIDs dos terapeutas
-  terapeutaNomes: string[]; // Apenas para exibição rápida
-  createdBy: string; // UID do coordenador
+  responsavelNome: string;
+  terapeutaIds: string[];
+  terapeutaNomes: string[];
+  createdBy: string;
   createdAt: Timestamp;
+  updatedAt: Timestamp;
   lastMessage?: {
     content: string;
     senderName: string;
     createdAt: Timestamp;
   };
-  unreadCounts: Record<string, number>; // { "uid_do_usuario": 5 }
+  unreadCounts: Record<string, number>;
 }
 
 export interface ChatMessage {
@@ -38,32 +39,33 @@ export interface ChatMessage {
   groupId: string;
   senderId: string;
   senderName: string;
-  senderRole: string; // 'profissional', 'familiar', 'admin'
+  senderRole: string;
   content: string;
-  createdAt: Timestamp | null; // Pode ser null localmente antes de salvar
+  createdAt: Timestamp; 
   readBy: string[];
   type: 'text' | 'image' | 'file';
 }
 
-// --- Funções ---
+// --- FUNÇÕES ---
 
-// 1. Criar um novo grupo (Apenas Coordenadores/Admins)
 export const createChatGroup = async (
   paciente: { uid: string; nome: string; responsavelNome: string },
   terapeutas: { uid: string; nome: string }[],
   coordenadorId: string
 ) => {
   try {
+    const agora = Timestamp.now();
     const groupData = {
       pacienteId: paciente.uid,
       pacienteNome: paciente.nome,
-      responsavelId: paciente.uid, // Assumindo que o login é do responsável
+      responsavelId: paciente.uid,
       responsavelNome: paciente.responsavelNome,
       terapeutaIds: terapeutas.map(t => t.uid),
       terapeutaNomes: terapeutas.map(t => t.nome),
-      memberIds: [paciente.uid, coordenadorId, ...terapeutas.map(t => t.uid)], // Todos que têm acesso
+      memberIds: [paciente.uid, coordenadorId, ...terapeutas.map(t => t.uid)],
       createdBy: coordenadorId,
-      createdAt: serverTimestamp(),
+      createdAt: agora,
+      updatedAt: agora,
       unreadCounts: {},
       lastMessage: null
     };
@@ -76,12 +78,11 @@ export const createChatGroup = async (
   }
 };
 
-// 2. Inscrever-se para receber a lista de grupos do usuário em tempo real
 export const subscribeToUserGroups = (userId: string, callback: (groups: ChatGroup[]) => void) => {
   const q = query(
     collection(db, "chat_groups"),
     where("memberIds", "array-contains", userId),
-    orderBy("lastMessage.createdAt", "desc")
+    orderBy("updatedAt", "desc")
   );
 
   return onSnapshot(q, (snapshot) => {
@@ -90,12 +91,11 @@ export const subscribeToUserGroups = (userId: string, callback: (groups: ChatGro
   });
 };
 
-// 3. Inscrever-se para receber mensagens de um grupo específico em tempo real
 export const subscribeToChatMessages = (groupId: string, callback: (messages: ChatMessage[]) => void) => {
   const q = query(
     collection(db, "chat_groups", groupId, "messages"),
     orderBy("createdAt", "asc"),
-    limit(100) // Carrega as últimas 100
+    limit(100)
   );
 
   return onSnapshot(q, (snapshot) => {
@@ -104,28 +104,26 @@ export const subscribeToChatMessages = (groupId: string, callback: (messages: Ch
   });
 };
 
-// 4. Enviar Mensagem
 export const sendMessage = async (groupId: string, message: { content: string; senderId: string; senderName: string; senderRole: string; type?: 'text' | 'image' | 'file' }) => {
   try {
+    const agora = Timestamp.now(); 
     const msgData = {
       ...message,
       type: message.type || 'text',
-      createdAt: serverTimestamp(),
+      createdAt: agora,
       readBy: [message.senderId]
     };
 
-    // Adiciona na subcoleção de mensagens
     await addDoc(collection(db, "chat_groups", groupId, "messages"), msgData);
 
-    // Atualiza a última mensagem do grupo para aparecer na lista
     const groupRef = doc(db, "chat_groups", groupId);
     await updateDoc(groupRef, {
       lastMessage: {
         content: message.type === 'image' ? '📷 Imagem' : message.content,
         senderName: message.senderName,
-        createdAt: serverTimestamp()
-      }
-      // Aqui você poderia incrementar contadores de não lidos com lógica de transação se quisesse ser muito preciso
+        createdAt: agora
+      },
+      updatedAt: agora
     });
 
     return { success: true };
@@ -135,7 +133,6 @@ export const sendMessage = async (groupId: string, message: { content: string; s
   }
 };
 
-// 5. Buscar detalhes de um único grupo
 export const getGroupDetails = async (groupId: string) => {
     try {
         const docRef = doc(db, "chat_groups", groupId);
