@@ -8,7 +8,6 @@ import {
   getCommunications, 
   markCommunicationAsRead, 
   createCommunication, 
-  countUsersByRole, 
   deleteCommunication,
   getUsersByRole,
   UserDetails,
@@ -25,7 +24,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, MessageSquare, Users, CheckCircle, Send, Trash2, AlertCircle } from "lucide-react";
+import { Plus, MessageSquare, Users, CheckCircle, Send, Trash2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CommunicationDetailsModal } from "../modals/communication-details-modal";
 import { toast } from "sonner";
@@ -55,27 +54,36 @@ export function CommunicationsClientPage() {
     const [selectedComm, setSelectedComm] = useState<Communication | null>(null);
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
+    // --- CORREÇÃO 1: Adicionado ?.profile?.role aqui também ---
     const fetchData = useCallback(async () => {
-        if (firestoreUser?.profile.role) {
+        if (firestoreUser?.profile?.role) {
             setLoading(true);
-            const [commsData, profUsers, famUsers, funcUsers, adminUsers, coordUsers] = await Promise.all([
-                getCommunications(firestoreUser.profile.role),
-                getUsersByRole('profissional'),
-                getUsersByRole('familiar'),
-                getUsersByRole('funcionario'),
-                getUsersByRole('admin'),
-                getUsersByRole('coordenador') 
-            ]);
-            setAllComms(commsData);
-            setAllUsers({ 
-              profissionais: profUsers, 
-              familiares: famUsers, 
-              funcionarios: funcUsers, 
-              admins: adminUsers, 
-              coordenadores: coordUsers 
-            });
-            setLoading(false);
+            try {
+                const [commsData, profUsers, famUsers, funcUsers, adminUsers, coordUsers] = await Promise.all([
+                    getCommunications(firestoreUser.profile.role),
+                    getUsersByRole('profissional'),
+                    getUsersByRole('familiar'),
+                    getUsersByRole('funcionario'),
+                    getUsersByRole('admin'),
+                    getUsersByRole('coordenador') 
+                ]);
+                setAllComms(commsData);
+                setAllUsers({ 
+                  profissionais: profUsers, 
+                  familiares: famUsers, 
+                  funcionarios: funcUsers, 
+                  admins: adminUsers, 
+                  coordenadores: coordUsers 
+                });
+            } catch (error) {
+                console.error("Erro ao carregar dados:", error);
+            } finally {
+                setLoading(false);
+            }
             fetchUnreadCount();
+        } else {
+            // Se não tiver role, para o loading para não travar a tela
+            if (firestoreUser) setLoading(false);
         }
     }, [firestoreUser, fetchUnreadCount]);
 
@@ -102,11 +110,9 @@ export function CommunicationsClientPage() {
             targets = [...allUsers.funcionarios];
         }
         
-        // Admins e Coordenadores veem todos os comunicados internos
         if (comm.targetRole === 'profissional' || comm.targetRole === 'funcionario' || comm.targetRole === 'coordenador') {
           targets.push(...allUsers.admins, ...allUsers.coordenadores);
         }
-        // Admins também veem comunicados de familiares
         if (comm.targetRole === 'familiar') {
           targets.push(...allUsers.admins);
         }
@@ -117,8 +123,10 @@ export function CommunicationsClientPage() {
     const avisosInternos = allComms.filter(c => c.targetRole === 'profissional' || c.targetRole === 'funcionario' || c.targetRole === 'coordenador');
     const comunicadosFamiliares = allComms.filter(c => c.targetRole === 'familiar');
     
-    const canManage = firestoreUser?.profile.role === 'admin' || firestoreUser?.profile.role === 'funcionario' || firestoreUser?.profile.role === 'coordenador';
-    const hasDeletePermission = firestoreUser?.profile.role === 'admin' || firestoreUser?.profile.role === 'coordenador';
+    // CORREÇÃO 2: Verificações seguras com ?.
+    const canManage = firestoreUser?.profile?.role === 'admin' || firestoreUser?.profile?.role === 'funcionario' || firestoreUser?.profile?.role === 'coordenador';
+    const hasDeletePermission = firestoreUser?.profile?.role === 'admin' || firestoreUser?.profile?.role === 'coordenador';
+    const isFamiliar = firestoreUser?.profile?.role === 'familiar';
 
     // --- Sub-componente para o Card de Comunicação ---
     const CommunicationCard = ({ comm, hasDeletePermission, onDeleted }: { comm: Communication, hasDeletePermission: boolean, onDeleted: () => void }) => {
@@ -180,13 +188,7 @@ export function CommunicationsClientPage() {
                             {canManage && <Badge>{readCount}/{totalDestinatarios} leram</Badge>}
                             
                             {hasDeletePermission && (
-                                <Button
-                                    variant="destructive"
-                                    size="icon"
-                                    className="h-7 w-7" 
-                                    onClick={handleDelete}
-                                    title="Excluir Comunicado"
-                                >
+                                <Button variant="destructive" size="icon" className="h-7 w-7" onClick={handleDelete} title="Excluir Comunicado">
                                     <Trash2 className="h-4 w-4" />
                                 </Button>
                             )}
@@ -195,7 +197,6 @@ export function CommunicationsClientPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <p className="text-gray-700 line-clamp-2">{comm.message}</p>
-                    
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                         {!hasRead ? (
                             <Button onClick={handleConfirmReadClick} size="sm">
@@ -208,7 +209,6 @@ export function CommunicationsClientPage() {
                                 Leitura confirmada
                             </div>
                         )}
-
                         {canManage && (
                              <div className="flex items-center gap-2 w-full sm:w-1/3">
                                  <div className="flex-1 bg-gray-200 rounded-full h-2">
@@ -232,24 +232,38 @@ export function CommunicationsClientPage() {
 
     return (
         <>
-            <Tabs defaultValue="internos" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="internos" className="flex items-center gap-2"><MessageSquare className="h-4 w-4" />Avisos Internos ({avisosInternos.length})</TabsTrigger>
-                    <TabsTrigger value="familiares" className="flex items-center gap-2"><Users className="h-4 w-4" />Comunicados Familiares ({comunicadosFamiliares.length})</TabsTrigger>
+            <Tabs defaultValue={isFamiliar ? "familiares" : "internos"} className="w-full">
+                <TabsList className={`grid w-full ${isFamiliar ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                    
+                    {!isFamiliar && (
+                        <TabsTrigger value="internos" className="flex items-center gap-2">
+                            <MessageSquare className="h-4 w-4" />
+                            Avisos Internos ({avisosInternos.length})
+                        </TabsTrigger>
+                    )}
+
+                    <TabsTrigger value="familiares" className="flex items-center gap-2">
+                        <Users className="h-4 w-4" />
+                        Comunicados Familiares ({comunicadosFamiliares.length})
+                    </TabsTrigger>
                 </TabsList>
-                <TabsContent value="internos" className="space-y-4 pt-4">
-                    {avisosInternos.length > 0 ? 
-                        avisosInternos.map((aviso) => (
-                            <CommunicationCard 
-                                key={aviso.id} 
-                                comm={aviso} 
-                                hasDeletePermission={hasDeletePermission} 
-                                onDeleted={fetchData} 
-                            />
-                        )) :
-                        <p className="text-center text-muted-foreground py-8">Nenhum aviso interno no momento.</p>
-                    }
-                </TabsContent>
+                
+                {!isFamiliar && (
+                    <TabsContent value="internos" className="space-y-4 pt-4">
+                        {avisosInternos.length > 0 ? 
+                            avisosInternos.map((aviso) => (
+                                <CommunicationCard 
+                                    key={aviso.id} 
+                                    comm={aviso} 
+                                    hasDeletePermission={hasDeletePermission} 
+                                    onDeleted={fetchData} 
+                                />
+                            )) :
+                            <p className="text-center text-muted-foreground py-8">Nenhum aviso interno no momento.</p>
+                        }
+                    </TabsContent>
+                )}
+                
                 <TabsContent value="familiares" className="space-y-4 pt-4">
                     {comunicadosFamiliares.length > 0 ?
                         comunicadosFamiliares.map((comunicado) => (
@@ -277,7 +291,7 @@ export function CommunicationsClientPage() {
     );
 }
 
-// Sub-componente para o Modal de Criação
+// Modal de Criação (Mantido igual)
 CommunicationsClientPage.CreateCommunicationModal = function CreateCommunicationModal() {
     const { firestoreUser, fetchUnreadCount } = useAuth();
     const [open, setOpen] = useState(false);
@@ -308,10 +322,6 @@ CommunicationsClientPage.CreateCommunicationModal = function CreateCommunication
                 targetRole: "profissional"
             });
             fetchUnreadCount(); 
-            // NOTA: A lista de comunicados não será atualizada
-            // automaticamente aqui sem passar uma função de 'refetch'
-            // do componente pai (page.tsx).
-            // O ideal é o page.tsx controlar o 'fetchData' e passá-lo para cá.
         } else {
             toast.error(result.error || "Falha ao criar comunicado.");
         }
@@ -331,7 +341,6 @@ CommunicationsClientPage.CreateCommunicationModal = function CreateCommunication
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="profissional">Aviso Interno (Profissionais/Funcionários)</SelectItem>
-                                {/* --- ERRO CORRIGIDO AQUI --- */}
                                 <SelectItem value="coordenador">Aviso para Coordenadores</SelectItem>
                                 <SelectItem value="familiar">Comunicado para Familiares</SelectItem>
                             </SelectContent>
