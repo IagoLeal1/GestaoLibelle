@@ -17,7 +17,7 @@ import {
 import {
     addWeeks, startOfDay, endOfDay, differenceInMinutes, addDays,
     format, getHours, getMinutes, addMonths, startOfWeek, endOfWeek,
-    eachDayOfInterval, setHours, setMinutes, addMinutes, differenceInCalendarDays
+    eachDayOfInterval, setHours, setMinutes, addMinutes, differenceInCalendarDays,
 } from 'date-fns';
 import { ptBR } from "date-fns/locale";
 import { getProfessionalById, getProfessionals, Professional } from "./professionalService";
@@ -481,18 +481,34 @@ export const getRenewableAppointments = async (): Promise<Appointment[]> => {
     return [];
   }
 };
-export const renewAppointmentBlock = async (lastAppointment: Appointment, sessionsToRenew: number) => {
+// --- 🔥 ATUALIZAÇÃO: Suporte a Frequência (Semanal/Quinzenal) ---
+export const renewAppointmentBlock = async (
+  lastAppointment: Appointment, 
+  sessionsToRenew: number,
+  frequency: 'weekly' | 'bi-weekly' = 'weekly' // Novo parâmetro padrão 'weekly'
+) => {
   try {
-    if (!sessionsToRenew || sessionsToRenew <= 0) return { success: false, error: "O número de sessões para renovação deve ser maior que zero." };
+    if (!sessionsToRenew || sessionsToRenew <= 0) return { success: false, error: "O número de sessões deve ser maior que zero." };
     
-    const durationInMinutes = differenceInMinutes(lastAppointment.end.toDate(), lastAppointment.start.toDate());
     const batch = writeBatch(db);
     const newBlockId = doc(collection(db, 'idGenerator')).id;
-    const firstNewDate = addWeeks(lastAppointment.start.toDate(), 1);
+    
+    // Define o intervalo em semanas
+    const intervalWeeks = frequency === 'bi-weekly' ? 2 : 1;
+
+    // A primeira data da nova série começa após 1 intervalo da data do último agendamento
+    const lastDate = lastAppointment.start.toDate();
+    const firstNewDate = addWeeks(lastDate, intervalWeeks);
+    
+    const durationInMinutes = differenceInMinutes(lastAppointment.end.toDate(), lastDate);
 
     for (let i = 0; i < sessionsToRenew; i++) {
-      const sessionDate = addWeeks(firstNewDate, i);
+      // Calcula a data: DataBase + (Índice * Intervalo)
+      // Ex Semanal: DataBase + 0, DataBase + 1 semana, DataBase + 2 semanas...
+      // Ex Quinzenal: DataBase + 0, DataBase + 2 semanas, DataBase + 4 semanas...
+      const sessionDate = addWeeks(firstNewDate, i * intervalWeeks);
       const sessionEndDate = new Date(sessionDate.getTime() + durationInMinutes * 60000);
+      
       const newAppointmentRef = doc(collection(db, "appointments"));
       
       batch.set(newAppointmentRef, {
@@ -506,7 +522,7 @@ export const renewAppointmentBlock = async (lastAppointment: Appointment, sessio
         convenio: lastAppointment.convenio ?? "",
         observacoes: lastAppointment.observacoes ?? "", 
         valorConsulta: lastAppointment.valorConsulta ?? 0,
-        statusSecundario: lastAppointment.statusSecundario ?? "",
+        statusSecundario: "", // Reseta status secundário
         start: Timestamp.fromDate(sessionDate), 
         end: Timestamp.fromDate(sessionEndDate),
         status: 'agendado',
@@ -515,12 +531,13 @@ export const renewAppointmentBlock = async (lastAppointment: Appointment, sessio
       });
     }
 
+    // Remove a flag de "último" do agendamento antigo
     batch.update(doc(db, 'appointments', lastAppointment.id), { isLastInBlock: false });
     
     await batch.commit();
     return { success: true };
   } catch (error) {
-    console.error("Erro ao renovar bloco de agendamentos:", error);
+    console.error("Erro ao renovar bloco:", error);
     return { success: false, error: "Falha ao renovar o bloco." };
   }
 };
@@ -846,133 +863,129 @@ export const findPotentialSwapCandidates = async (
   return candidatos;
 };
 
-// --- FUNÇÃO DE ATUALIZAÇÃO EM BLOCO CORRIGIDA E ROBUSTA ---
+// --- 🔥 VERSÃO FINAL BLINDADA: CLONAR, DETECTAR E MIGRAR ---
 export const updateAppointmentBlock = async (
   currentAppointment: Appointment,
   data: Partial<AppointmentFormData & { status: AppointmentStatus }>
 ) => {
   if (!currentAppointment.blockId) {
-    return { success: false, error: "Este agendamento não faz parte de um bloco." };
+    return { success: false, error: "Agendamento sem série (blockId)." };
   }
 
   try {
     const batch = writeBatch(db);
+    
+    // 1. Busca TODOS os agendamentos da série antiga
     const q = query(
       collection(db, "appointments"),
-      where("blockId", "==", currentAppointment.blockId),
-      where("start", ">=", currentAppointment.start) // Pega o atual e todos os futuros
+      where("blockId", "==", currentAppointment.blockId)
     );
-
     const snapshot = await getDocs(q);
-    if (snapshot.empty) return { success: true }; // Nenhum agendamento futuro para atualizar
 
-    const { data: dateStr, horaInicio, horaFim, ...restData } = data;
+    if (snapshot.empty) return { success: true };
 
-    // Se as datas não forem fornecidas, não podemos recalcular o tempo.
-    // Isso evita crash se vier sem data, embora o modal geralmente mande tudo.
-    if (!dateStr || !horaInicio || !horaFim) {
-        console.error("Dados de data/hora incompletos para atualização em bloco.");
-        // Fallback: Atualiza apenas os outros dados (exceto data/hora)
-         for (const docSnap of snapshot.docs) {
-             // ... Lógica similar de nomes e status ...
-             // Mas para simplicidade, vamos assumir que o fluxo correto exige data.
-        }
-        return { success: false, error: "Dados de data e hora são obrigatórios para edição em bloco." };
+    const getMillis = (d: any) => d?.toMillis ? d.toMillis() : new Date(d).getTime();
+    const currentStartMs = getMillis(currentAppointment.start);
+
+    // 2. Separa e Ordena (Do atual para o futuro)
+    const futureOldAppointments = snapshot.docs
+      .map(doc => ({ id: doc.id, ref: doc.ref, ...doc.data() } as Appointment & { ref: any }))
+      .filter(app => getMillis(app.start) >= (currentStartMs - 60000))
+      .sort((a, b) => getMillis(a.start) - getMillis(b.start));
+
+    if (futureOldAppointments.length === 0) {
+        return await updateAppointment(currentAppointment.id, data);
     }
 
-    // Converte a nova data e hora do formulário em um objeto Date "âncora"
+    // 3. 🕵️ DETECTIVE DE FREQUÊNCIA
+    let intervalDays = 7; 
+    if (futureOldAppointments.length > 1) {
+        const first = futureOldAppointments[0];
+        const second = futureOldAppointments[1];
+        const diff = differenceInCalendarDays(second.start.toDate(), first.start.toDate());
+        intervalDays = diff <= 8 ? 7 : 14;
+    }
+
+    // 4. PREPARAÇÃO DA NOVA SÉRIE
+    const newBlockId = doc(collection(db, "idGenerator")).id;
+    
+    const { data: dateStr, horaInicio, horaFim, ...restData } = data;
+    if (!dateStr || !horaInicio || !horaFim) throw new Error("Dados incompletos.");
+
     const [year, month, day] = dateStr.split('-').map(Number);
     const [startHour, startMinute] = horaInicio.split(':').map(Number);
-    const newAnchorDate = new Date(year, month - 1, day, startHour, startMinute);
-    
-    // Calcula a diferença em dias entre a data original do agendamento editado e a nova data
-    const dayDifference = differenceInCalendarDays(newAnchorDate, currentAppointment.start.toDate());
+    const [endHour, endMinute] = horaFim.split(':').map(Number);
 
-    const durationInMinutes = differenceInMinutes(
-      new Date(0, 0, 0, Number(horaFim.split(':')[0]), Number(horaFim.split(':')[1])),
-      new Date(0, 0, 0, startHour, startMinute)
+    const newBaseStart = new Date(year, month - 1, day, startHour, startMinute);
+    const durationMinutes = differenceInMinutes(
+      new Date(year, month - 1, day, endHour, endMinute),
+      newBaseStart
     );
 
-    // --- CORREÇÃO: Busca nomes atualizados se IDs mudaram (para o bloco todo) ---
-    let newProfessionalName = "";
-    let newPatientName = "";
-
+    // Atualiza nomes se necessário
+    let newProfName = currentAppointment.professionalName;
+    let newPatName = currentAppointment.patientName;
     if (restData.professionalId) {
         const pDoc = await getDoc(doc(db, 'professionals', restData.professionalId));
-        if (pDoc.exists()) newProfessionalName = pDoc.data().fullName;
+        if (pDoc.exists()) newProfName = pDoc.data().fullName;
     }
     if (restData.patientId) {
         const pDoc = await getDoc(doc(db, 'patients', restData.patientId));
-        if (pDoc.exists()) newPatientName = pDoc.data().fullName;
+        if (pDoc.exists()) newPatName = pDoc.data().fullName;
     }
-    // --------------------------------------------------------------------------
 
-    for (const docSnap of snapshot.docs) {
-      const appointmentDocRef = doc(db, 'appointments', docSnap.id);
-      const oldAppointmentData = docSnap.data() as Appointment;
-      const oldStartDate = oldAppointmentData.start.toDate();
+    // 5. 🚀 CRIAÇÃO DA NOVA SÉRIE
+    for (let i = 0; i < futureOldAppointments.length; i++) {
+        const newStart = addDays(newBaseStart, i * intervalDays);
+        const newEnd = addMinutes(newStart, durationMinutes);
+        
+        const newDocRef = doc(collection(db, "appointments"));
 
-      // 1. Aplica a diferença de dias à data original de cada agendamento da série
-      const newStartDateWithDayShift = addDays(oldStartDate, dayDifference);
-      
-      // 2. Define o novo horário na data já ajustada
-      const finalNewStartDate = setMinutes(setHours(newStartDateWithDayShift, startHour), startMinute);
-      const finalNewEndDate = addMinutes(finalNewStartDate, durationInMinutes);
+        // 🛡️ SANITIZAÇÃO: Garante que nada seja undefined
+        // Prioridade: 1. Novo Dado (restData) -> 2. Dado Antigo (currentAppointment) -> 3. Valor Padrão
+        const appointmentData = {
+            patientId: restData.patientId || currentAppointment.patientId,
+            patientName: newPatName,
+            professionalId: restData.professionalId || currentAppointment.professionalId,
+            professionalName: newProfName,
+            title: `${newPatName} - ${newProfName}`,
+            start: Timestamp.fromDate(newStart),
+            end: Timestamp.fromDate(newEnd),
+            
+            // Campos Opcionais com Fallback Seguro
+            tipo: restData.tipo ?? currentAppointment.tipo ?? "",
+            sala: restData.sala ?? currentAppointment.sala ?? null,
+            convenio: restData.convenio ?? currentAppointment.convenio ?? "",
+            valorConsulta: restData.valorConsulta ?? currentAppointment.valorConsulta ?? 0,
+            observacoes: restData.observacoes ?? currentAppointment.observacoes ?? "", // 🔥 AQUI ESTAVA O ERRO
+            
+            // Controle da Série
+            blockId: newBlockId,
+            status: i === 0 ? (data.status || 'agendado') : 'agendado',
+            statusSecundario: i === 0 ? (data.statusSecundario || '') : '',
+            isLastInBlock: (i === futureOldAppointments.length - 1)
+        };
 
-      const dataToUpdate: { [key: string]: any } = {
-        ...restData,
-        start: Timestamp.fromDate(finalNewStartDate),
-        end: Timestamp.fromDate(finalNewEndDate),
-      };
+        // Remove chaves que ainda possam ser undefined (segurança extra)
+        Object.keys(appointmentData).forEach(key => (appointmentData as any)[key] === undefined && delete (appointmentData as any)[key]);
 
-      // Injeta os nomes atualizados se houver
-      if (newProfessionalName) dataToUpdate.professionalName = newProfessionalName;
-      if (newPatientName) dataToUpdate.patientName = newPatientName;
-      
-      // Atualiza o Título se necessário
-      if (newProfessionalName || newPatientName) {
-           const pName = newPatientName || oldAppointmentData.patientName;
-           const profName = newProfessionalName || oldAppointmentData.professionalName;
-           dataToUpdate.title = `${pName} - ${profName}`;
-      }
-
-      // --- CORREÇÃO IMPORTANTE: PROTEÇÃO DE STATUS ---
-      // Se NÃO for o agendamento atual (o que o usuário clicou),
-      // NÃO altera o status (não queremos marcar todos futuros como 'finalizado')
-      if (docSnap.id !== currentAppointment.id) {
-          delete dataToUpdate.status;
-          delete dataToUpdate.statusSecundario;
-      }
-      // ----------------------------------------------
-
-      // Remove quaisquer campos com valor 'undefined' antes de salvar
-      Object.keys(dataToUpdate).forEach(key => {
-        if (dataToUpdate[key] === undefined) {
-          delete dataToUpdate[key];
-        }
-      });
-      // Verifica status secundário
-      if (dataToUpdate.statusSecundario === 'nenhum') {
-        dataToUpdate.statusSecundario = '';
-      }
-
-      batch.update(appointmentDocRef, dataToUpdate);
+        batch.set(newDocRef, appointmentData);
     }
+
+    // 6. 🗑️ DELEÇÃO DA SÉRIE VELHA
+    futureOldAppointments.forEach(oldApp => {
+        batch.delete(oldApp.ref);
+    });
 
     await batch.commit();
 
-    // Dispara a atualização do repasse SOMENTE para o primeiro agendamento modificado (o atual)
-    // Agendamentos futuros não devem ter repasse gerado agora (geralmente estão 'agendado')
-    const updatedFirstAppointmentDoc = await getDoc(doc(db, 'appointments', currentAppointment.id));
-    if (updatedFirstAppointmentDoc.exists()) {
-        const updatedAppointment = { id: updatedFirstAppointmentDoc.id, ...updatedFirstAppointmentDoc.data() } as Appointment;
-        await handleRepasseTransaction(updatedAppointment);
-    }
-
     return { success: true };
+
   } catch (error) {
-    console.error("Erro ao atualizar agendamentos em bloco:", error);
-    return { success: false, error: "Falha ao atualizar a sequência de agendamentos." };
+    console.error("Erro na migração de bloco:", error);
+    // Retorna o erro detalhado para facilitar o debug se acontecer de novo
+    const errorMessage = error instanceof Error ? error.message : "Falha desconhecida";
+    return { success: false, error: `Erro ao recriar série: ${errorMessage}` };
   }
 };
 

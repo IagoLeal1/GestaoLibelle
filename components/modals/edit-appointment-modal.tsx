@@ -1,258 +1,245 @@
-// components/modals/edit-appointment-modal.tsx
-"use client"
+'use client';
 
 import { useState, useEffect } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Appointment, AppointmentFormData, AppointmentStatus, deleteAppointment, deleteFutureAppointmentsInBlock } from "@/services/appointmentService";
-import { Patient } from "@/services/patientService";
-import { Professional } from "@/services/professionalService";
-import { getSpecialties, Specialty } from "@/services/specialtyService";
-import { getRooms, Room } from "@/services/roomService";
-import { getOccupiedRoomIdsByTime } from "@/services/appointmentService";
-import { format } from "date-fns";
-import { DollarSign } from "lucide-react";
-import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { AlertCircle, Copy, Calendar, Clock, User, Stethoscope, Trash2 } from "lucide-react";
+import { Appointment, AppointmentFormData, AppointmentStatus } from "@/services/appointmentService";
 
 interface EditAppointmentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (formData: Partial<AppointmentFormData & { status: AppointmentStatus }>, updateType: 'single' | 'block') => void;
+  // ✅ CORREÇÃO 1: Definindo explicitamente como boolean para casar com a Grade
+  onSave: (
+    data: AppointmentFormData & { status: AppointmentStatus; statusSecundario?: string },
+    isBlockUpdate: boolean
+  ) => void;
+  // ✅ CORREÇÃO 2: Definindo explicitamente como boolean
   onDelete: (isBlockDeletion: boolean) => void;
   appointment: Appointment | null;
-  patients: Patient[];
-  professionals: Professional[];
+  professionals: any[];
+  patients: any[];
 }
 
-const secondaryStatusOptions = [
-    { value: "substituicao", label: "Substituição" },
-    { value: "fnj_paciente", label: "FNJ Paciente" },
-    { value: "f_terapeuta", label: "F Terapeuta" },
-    { value: "fj_paciente", label: "FJ Paciente" },
-    { value: "f_dupla", label: "F Dupla" },
-    { value: "suspenso_plano", label: "Suspenso pelo Plano" },
-    { value: "nenhum", label: "Nenhum" },
-];
+export function EditAppointmentModal({
+  isOpen,
+  onClose,
+  onSave,
+  onDelete,
+  appointment,
+  professionals,
+  patients,
+}: EditAppointmentModalProps) {
+  const [formData, setFormData] = useState<AppointmentFormData & { status: AppointmentStatus; statusSecundario?: string }>({
+    patientId: "",
+    professionalId: "",
+    data: "",
+    horaInicio: "",
+    horaFim: "",
+    tipo: "",
+    sala: "",
+    convenio: "",
+    valorConsulta: 0,
+    observacoes: "",
+    status: "agendado",
+    statusSecundario: "",
+  });
 
-export function EditAppointmentModal({ isOpen, onClose, onSave, onDelete, appointment, patients, professionals }: EditAppointmentModalProps) {
-  const [formData, setFormData] = useState<Partial<AppointmentFormData & { status: AppointmentStatus }>>({});
-  const [specialties, setSpecialties] = useState<Specialty[]>([]);
-  const [availableSpecialties, setAvailableSpecialties] = useState<Specialty[]>([]);
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [occupiedRoomIds, setOccupiedRoomIds] = useState<string[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoadingData, setIsLoadingData] = useState(true);
-  const [isAlertOpen, setIsAlertOpen] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-        setIsLoadingData(true);
-        const fetchDropdownData = async () => {
-            const [specialtiesData, roomsData] = await Promise.all([getSpecialties(), getRooms()]);
-            setSpecialties(specialtiesData);
-            setRooms(roomsData.filter(r => r.status === 'ativa'));
-            setIsLoadingData(false);
-        };
-        fetchDropdownData();
-    }
-  }, [isOpen]);
+  const [isBlockUpdate, setIsBlockUpdate] = useState(false);
 
   useEffect(() => {
-    if (isOpen && !isLoadingData && appointment) {
-      const startDate = appointment.start.toDate();
-      const endDate = appointment.end.toDate();
+    if (appointment) {
+      const start = appointment.start.toDate();
+      const end = appointment.end.toDate();
+      // Formata data YYYY-MM-DD para o input HTML
+      const dateStr = start.toLocaleDateString('pt-BR').split('/').reverse().join('-');
+      
       setFormData({
-        patientId: appointment.patientId, professionalId: appointment.professionalId,
-        data: format(startDate, 'yyyy-MM-dd'), horaInicio: format(startDate, 'HH:mm'), horaFim: format(endDate, 'HH:mm'),
-        tipo: appointment.tipo, sala: appointment.sala, convenio: appointment.convenio,
-        valorConsulta: appointment.valorConsulta, observacoes: appointment.observacoes,
-        status: appointment.status, statusSecundario: appointment.statusSecundario,
+        patientId: appointment.patientId,
+        professionalId: appointment.professionalId,
+        data: dateStr,
+        horaInicio: start.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+        horaFim: end.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+        tipo: appointment.tipo || "",
+        sala: appointment.sala || "",
+        convenio: appointment.convenio || "",
+        valorConsulta: appointment.valorConsulta || 0,
+        observacoes: appointment.observacoes || "",
+        status: appointment.status,
+        statusSecundario: appointment.statusSecundario || "",
       });
-      const selectedPatient = patients.find(p => p.id === appointment.patientId);
-      const patientConvenio = (selectedPatient?.convenio || 'particular').toLowerCase();
-      const filtered = specialties.filter(spec => {
-          const specNameLower = spec.name.toLowerCase();
-          if (patientConvenio === 'particular') return !['unimed', 'bradesco', 'amil', 'sulamerica'].some(conv => specNameLower.includes(conv));
-          return specNameLower.includes(patientConvenio);
-      });
-      setAvailableSpecialties(filtered);
+      setIsBlockUpdate(false);
     }
-  }, [isOpen, isLoadingData, appointment, patients, specialties]);
-  
-  useEffect(() => {
-    const checkRoomAvailability = async () => {
-      if (formData.data && formData.horaInicio && formData.horaFim) {
-        const [year, month, day] = formData.data.split('-').map(Number);
-        const [startHour, startMinute] = formData.horaInicio.split(':').map(Number);
-        const [endHour, endMinute] = formData.horaFim.split(':').map(Number);
-        const startTime = new Date(year, month - 1, day, startHour, startMinute);
-        const endTime = new Date(year, month - 1, day, endHour, endMinute);
-        if (endTime <= startTime) return;
-        const occupiedIds = await getOccupiedRoomIdsByTime(startTime, endTime);
-        setOccupiedRoomIds(occupiedIds.filter(id => id !== appointment?.sala));
-      }
-    };
-    checkRoomAvailability();
-  }, [formData.data, formData.horaInicio, formData.horaFim, appointment]);
+  }, [appointment]);
 
-  const handleInputChange = (field: keyof typeof formData, value: string | number | undefined) => {
-      setFormData(prev => ({ ...prev, [field]: value }));
+  const handleSave = () => {
+    onSave(formData, isBlockUpdate);
   };
 
-  const handlePatientChange = (patientId: string) => {
-      const selectedPatient = patients.find(p => p.id === patientId);
-      if (!selectedPatient) return;
-      const patientConvenio = (selectedPatient.convenio || 'particular').toLowerCase();
-      const filteredSpecialties = specialties.filter(spec => {
-          const specNameLower = spec.name.toLowerCase();
-          if (patientConvenio === 'particular') {
-              return !['unimed', 'bradesco', 'amil', 'sulamerica'].some(conv => specNameLower.includes(conv));
-          }
-          return specNameLower.includes(patientConvenio);
-      });
-      setAvailableSpecialties(filteredSpecialties);
-      setFormData(prev => ({ ...prev, patientId, convenio: selectedPatient.convenio || "", tipo: '', valorConsulta: 0 }));
-  };
+  const handleDelete = () => {
+    const message = isBlockUpdate 
+        ? "⚠️ CUIDADO: Você está prestes a excluir TODA a série de agendamentos futuros.\n\nIsso apagará este agendamento e todos os seguintes. Tem certeza?" 
+        : "Tem certeza que deseja excluir este agendamento?";
 
-  const handleSpecialtyChange = (specialtyName: string) => {
-      const selectedSpecialty = specialties.find(s => s.name === specialtyName);
-      setFormData(prev => ({ ...prev, tipo: specialtyName, valorConsulta: selectedSpecialty?.value || 0 }));
-  };
-
-  const handleRoomChange = (roomId: string) => {
-      if (occupiedRoomIds.includes(roomId)) {
-          if (!window.confirm("Esta sala já está em uso neste horário. Deseja agendar mesmo assim?")) return;
-      }
-      handleInputChange("sala", roomId);
-  };
-
-  const handleSaveClick = async () => {
-    setIsSubmitting(true);
-    if (appointment?.blockId) {
-      setIsAlertOpen(true);
-    } else {
-      await onSave(formData, 'single');
+    if (confirm(message)) {
+        onDelete(isBlockUpdate);
     }
-    setIsSubmitting(false);
   };
-  
-  const handleDelete = async () => {
-      if (!appointment) return;
-      setIsSubmitting(true);
-      if (appointment.blockId) {
-          const userChoice = confirm(`Este agendamento faz parte de uma sequência.\n\nClique em 'OK' para apagar este e todos os futuros agendamentos da sequência.\n\nClique em 'Cancelar' para apagar APENAS o agendamento de ${format(appointment.start.toDate(), 'dd/MM/yyyy')}.`);
-          if (userChoice) {
-              const result = await deleteFutureAppointmentsInBlock(appointment);
-              if(result.success) onDelete(true); else toast.error(result.error);
-          } else {
-              if (confirm("Confirmar a exclusão APENAS deste agendamento?")) {
-                  const result = await deleteAppointment(appointment.id);
-                  if(result.success) onDelete(false); else toast.error(result.error);
-              }
-          }
-      } else {
-          if (window.confirm("Tem certeza que deseja excluir este agendamento?")) {
-              const result = await deleteAppointment(appointment.id);
-              if(result.success) onDelete(false); else toast.error(result.error);
-          }
-      }
-      setIsSubmitting(false);
+
+  const handleChange = (field: string, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   if (!appointment) return null;
 
-  return (
-    <>
-      <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="sm:max-w-[725px]">
-          <DialogHeader>
-            <DialogTitle>Editar Agendamento</DialogTitle>
-            <DialogDescription>{appointment.patientName} com {appointment.professionalName}</DialogDescription>
-          </DialogHeader>
-          {isLoadingData ? (<div className="py-4">A carregar dados...</div>) : (
-          <div className="grid gap-6 py-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2"><Label>Paciente</Label><Select value={formData.patientId} onValueChange={handlePatientChange}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{patients.map(p=><SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent></Select></div>
-                  <div className="space-y-2"><Label>Profissional</Label><Select value={formData.professionalId} onValueChange={(v) => handleInputChange("professionalId", v)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{professionals.map(p=><SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent></Select></div>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                  <div className="space-y-2"><Label>Especialidade</Label><Select value={formData.tipo} onValueChange={handleSpecialtyChange} disabled={!formData.patientId}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{availableSpecialties.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
-                  <div className="space-y-2"><Label>Data</Label><Input type="date" value={formData.data || ''} onChange={(e) => handleInputChange("data", e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Horário Inicial</Label><Input type="time" value={formData.horaInicio || ''} onChange={(e) => handleInputChange("horaInicio", e.target.value)} /></div>
-                  <div className="space-y-2"><Label>Horário Final</Label><Input type="time" value={formData.horaFim || ''} onChange={(e) => handleInputChange("horaFim", e.target.value)} /></div>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  <div className="space-y-2"><Label>Sala</Label><Select value={formData.sala} onValueChange={handleRoomChange}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{rooms.map(r => <SelectItem key={r.id} value={r.id} className={occupiedRoomIds.includes(r.id) ? 'text-red-500 font-semibold' : ''}>{r.name} {occupiedRoomIds.includes(r.id) ? '(Ocupada)' : ''}</SelectItem>)}</SelectContent></Select></div>
-                  <div className="space-y-2"><Label>Convênio</Label><Input value={formData.convenio || ''} readOnly /></div>
-                  <div className="space-y-2">
-                      <Label>Valor (R$)</Label>
-                      <div className="relative">
-                          <DollarSign className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                          <Input type="number" step="0.01" value={formData.valorConsulta || ''} onChange={(e) => handleInputChange("valorConsulta", parseFloat(e.target.value) || 0)} className="pl-8" />
-                      </div>
-                  </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                    <Label>Status Principal</Label>
-                    <Select value={formData.status} onValueChange={(v) => handleInputChange("status", v as AppointmentStatus)}>
-                        <SelectTrigger><SelectValue/></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="agendado">Agendado</SelectItem>
-                            <SelectItem value="em_atendimento">Em Atendimento</SelectItem>
-                            <SelectItem value="finalizado">Finalizado</SelectItem>
-                            <SelectItem value="nao_compareceu">Não compareceu</SelectItem>
-                            <SelectItem value="cancelado">Cancelado</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div className="space-y-2">
-                    <Label>Status Secundário</Label>
-                    <Select value={formData.statusSecundario || 'nenhum'} onValueChange={(v) => handleInputChange("statusSecundario", v)}>
-                        <SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger>
-                        <SelectContent>
-                            {secondaryStatusOptions.map(option => (
-                                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-              </div>
-              <div className="space-y-2"><Label>Observações</Label><Textarea value={formData.observacoes || ''} onChange={(e) => handleInputChange("observacoes", e.target.value)} /></div>
-          </div>
-          )}
-          <DialogFooter className="justify-between sm:justify-between">
-              <Button variant="destructive" onClick={handleDelete} disabled={isSubmitting}>Excluir Agendamento</Button>
-              <div className="flex gap-2">
-                  <Button variant="outline" onClick={onClose}>Cancelar</Button>
-                  <Button onClick={handleSaveClick} disabled={isSubmitting || isLoadingData}>
-                      {isSubmitting ? "A guardar..." : "Salvar Alterações"}
-                  </Button>
-              </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+  const hasBlock = !!appointment.blockId;
 
-      <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
-          <AlertDialogContent>
-              <AlertDialogHeader>
-                  <AlertDialogTitle>Editar Agendamento Recorrente</AlertDialogTitle>
-                  <AlertDialogDescription>
-                      Este agendamento faz parte de uma sequência. Deseja aplicar esta alteração a todos os eventos futuros da sequência?
-                  </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <Button variant="outline" onClick={() => { onSave(formData, 'single'); setIsAlertOpen(false); }}>Alterar Somente Este</Button>
-                  <AlertDialogAction onClick={() => { onSave(formData, 'block'); setIsAlertOpen(false); }}>Sim, Alterar Todos</AlertDialogAction>
-              </AlertDialogFooter>
-          </AlertDialogContent>
-      </AlertDialog>
-    </>
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Editar Agendamento</DialogTitle>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto px-1 py-2">
+            <div className="grid gap-6">
+            
+            {/* Linha 1 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                <Label htmlFor="patient" className="flex items-center gap-2"><User className="h-4 w-4" /> Paciente</Label>
+                <Select value={formData.patientId} onValueChange={(val) => handleChange('patientId', val)}>
+                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                    {patients.map((p) => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                </div>
+
+                <div className="space-y-2">
+                <Label htmlFor="professional" className="flex items-center gap-2"><Stethoscope className="h-4 w-4" /> Profissional</Label>
+                <Select value={formData.professionalId} onValueChange={(val) => handleChange('professionalId', val)}>
+                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                    {professionals.map((p) => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                </div>
+            </div>
+
+            {/* Linha 2 */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                <Label className="flex items-center gap-2"><Calendar className="h-4 w-4" /> Data</Label>
+                <Input type="date" value={formData.data} onChange={(e) => handleChange('data', e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                <Label className="flex items-center gap-2"><Clock className="h-4 w-4" /> Início</Label>
+                <Input type="time" value={formData.horaInicio} onChange={(e) => handleChange('horaInicio', e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                <Label className="flex items-center gap-2"><Clock className="h-4 w-4" /> Fim</Label>
+                <Input type="time" value={formData.horaFim} onChange={(e) => handleChange('horaFim', e.target.value)} />
+                </div>
+            </div>
+
+            {/* Linha 3 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                <Label>Status</Label>
+                <Select value={formData.status} onValueChange={(val) => handleChange('status', val)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                    <SelectItem value="agendado">Agendado</SelectItem>
+                    <SelectItem value="finalizado">Finalizado</SelectItem>
+                    <SelectItem value="cancelado">Cancelado</SelectItem>
+                    <SelectItem value="nao_compareceu">Não Compareceu</SelectItem>
+                    </SelectContent>
+                </Select>
+                </div>
+                <div className="space-y-2">
+                <Label>Especialidade</Label>
+                <Input value={formData.tipo} onChange={(e) => handleChange('tipo', e.target.value)} placeholder="Ex: Psicologia" />
+                </div>
+            </div>
+            
+            {/* Linha 4 */}
+            <div className="space-y-2">
+                <Label>Observações</Label>
+                <Textarea value={formData.observacoes} onChange={(e) => handleChange('observacoes', e.target.value)} placeholder="Detalhes..." className="h-20" />
+            </div>
+
+            {/* SEÇÃO DE SÉRIE / BLOCO */}
+            {hasBlock && (
+                <div className="p-4 border rounded-lg bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 transition-all">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                    <div className="bg-blue-100 dark:bg-blue-800 p-2 rounded-full text-blue-600 dark:text-blue-200">
+                        <Copy className="h-5 w-5" />
+                    </div>
+                    <div className="space-y-0.5">
+                        <Label htmlFor="block-mode" className="text-base font-medium cursor-pointer">
+                        Aplicar a toda a série?
+                        </Label>
+                        <p className="text-sm text-muted-foreground">
+                        Deseja alterar ou <strong>excluir</strong> os agendamentos futuros também?
+                        </p>
+                    </div>
+                    </div>
+                    <Switch id="block-mode" checked={isBlockUpdate} onCheckedChange={setIsBlockUpdate} />
+                </div>
+
+                {isBlockUpdate && (
+                    <div className="mt-3 flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded animate-in fade-in slide-in-from-top-2">
+                    <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    <p>
+                        <strong>Modo Série Ativado:</strong> O botão "Salvar" recriará a série e o botão "Excluir" apagará todos os futuros.
+                    </p>
+                    </div>
+                )}
+                </div>
+            )}
+            </div>
+        </div>
+
+        <DialogFooter className="flex flex-col sm:flex-row sm:justify-between gap-2 mt-4">
+            <Button 
+                variant="destructive" 
+                onClick={handleDelete}
+                className="gap-2 sm:w-auto w-full"
+            >
+                <Trash2 className="h-4 w-4" />
+                {isBlockUpdate ? "Excluir Série Futura" : "Excluir"}
+            </Button>
+
+            <div className="flex gap-2 justify-end w-full sm:w-auto">
+                <Button variant="outline" onClick={onClose}>Cancelar</Button>
+                <Button 
+                    onClick={handleSave} 
+                    className={isBlockUpdate ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}
+                >
+                    {isBlockUpdate ? "Salvar Série Inteira" : "Salvar Alterações"}
+                </Button>
+            </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

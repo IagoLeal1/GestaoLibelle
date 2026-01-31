@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { QuickAppointmentModal } from "@/components/modals/quick-appointment-modal";
 import { EditAppointmentModal } from "@/components/modals/edit-appointment-modal";
 import { formatSpecialtyName } from "@/lib/formatters";
+import { Badge } from "@/components/ui/badge";
 
 // Icons
 import { ChevronLeft, ChevronRight, User, Calendar, Save } from "lucide-react";
@@ -27,10 +28,18 @@ import { Professional, getProfessionals } from "@/services/professionalService";
 import { Specialty, getSpecialties } from "@/services/specialtyService";
 import { Room, getRooms } from "@/services/roomService";
 import { 
-    Appointment, getAppointmentsForReport, createMultipleAppointments, 
-    QuickAppointmentData, updateAppointment, deleteAppointment, AppointmentFormData, AppointmentStatus
+    Appointment, 
+    getAppointmentsForReport, 
+    createMultipleAppointments, 
+    QuickAppointmentData, 
+    updateAppointment, 
+    deleteAppointment, 
+    AppointmentFormData, 
+    AppointmentStatus,
+    // 🔥 NOVOS IMPORTS
+    updateAppointmentBlock,
+    deleteFutureAppointmentsInBlock
 } from "@/services/appointmentService";
-import { Badge } from "@/components/ui/badge";
 
 // Horários fixos da clínica
 const HORARIOS_CLINICA = [
@@ -155,22 +164,61 @@ export function GradeAgendamentosClientPage() {
         setLoading(false);
     };
 
-    const handleUpdateAppointment = async (formData: Partial<AppointmentFormData & { status: AppointmentStatus }>) => {
+    // --- 🔥 UPDATE ATUALIZADO (Compatível com Modal e Lógica de Bloco) ---
+    const handleUpdateAppointment = async (
+        formData: Partial<AppointmentFormData & { status: AppointmentStatus }>,
+        isBlockUpdate: boolean // Recebe boolean do modal
+    ) => {
         if (!selectedAppointment) return;
-        const result = await updateAppointment(selectedAppointment.id, formData);
-        if (result.success) {
-            toast.success("Agendamento atualizado com sucesso!");
-            setIsEditModalOpen(false);
-            fetchWeekAppointments();
-        } else {
-            toast.error(result.error || "Falha ao atualizar.");
+
+        try {
+            const updateFunction = isBlockUpdate
+                ? updateAppointmentBlock(selectedAppointment, formData)
+                : updateAppointment(selectedAppointment.id, formData);
+
+            const result = await updateFunction;
+
+            if (result.success) {
+                toast.success("Sucesso", {
+                    description: isBlockUpdate 
+                        ? "Série recriada e atualizada com sucesso." 
+                        : "Agendamento atualizado com sucesso."
+                });
+                setIsEditModalOpen(false);
+                fetchWeekAppointments();
+            } else {
+                toast.error("Erro", {
+                    description: result.error || "Falha ao atualizar."
+                });
+            }
+        } catch (err) {
+            console.error(err);
+            toast.error("Erro Inesperado", { description: "Verifique o console." });
         }
     };
   
-    const handleDeleteAppointment = () => {
-        toast.success("Operação de exclusão concluída.");
-        setIsEditModalOpen(false);
-        fetchWeekAppointments();
+    // --- 🔥 DELETE IMPLEMENTADO (Antes era só visual) ---
+    const handleDeleteAppointment = async (isBlockDeletion: boolean) => {
+        if (!selectedAppointment) return;
+
+        try {
+            const result = isBlockDeletion
+                ? await deleteFutureAppointmentsInBlock(selectedAppointment)
+                : await deleteAppointment(selectedAppointment.id);
+
+            if (result.success) {
+                toast.success("Excluído", {
+                    description: `Agendamento${isBlockDeletion ? 's futuros' : ''} removido${isBlockDeletion ? 's' : ''}.`
+                });
+                setIsEditModalOpen(false);
+                fetchWeekAppointments();
+            } else {
+                toast.error("Erro", { description: result.error });
+            }
+        } catch (err) {
+            console.error(err);
+            toast.error("Erro ao excluir");
+        }
     };
 
     const totalPending = Array.from(pendingAppointments.values()).flat().length;
@@ -249,11 +297,8 @@ export function GradeAgendamentosClientPage() {
                                                               }
                                                           }}
                                                         >
-                                                            {/* --- ALTERAÇÃO APLICADA AQUI --- */}
                                                             <p className="font-bold">{formatSpecialtyName(isExisting ? (app as Appointment).tipo : (app as QuickAppointmentData).specialty)}</p>
                                                             <p className="text-muted-foreground">{professional?.fullName}</p>
-                                                            {/* --- FIM DA ALTERAÇÃO --- */}
-
                                                             <p className="text-blue-600">Sala: {getRoomNameById(isExisting ? (app as Appointment).sala : (app as QuickAppointmentData).roomId)}</p>
                                                             {!isExisting && (app as QuickAppointmentData).isRecurring && <Badge variant="secondary" className="mt-1">Repete {(app as QuickAppointmentData).sessions}x</Badge>}
                                                         </div>
@@ -280,6 +325,7 @@ export function GradeAgendamentosClientPage() {
                 specialties={specialties}
                 rooms={rooms}
             />
+            {/* 🔥 MODAL CONECTADO CORRETAMENTE */}
             <EditAppointmentModal 
                 isOpen={isEditModalOpen}
                 onClose={() => setIsEditModalOpen(false)}

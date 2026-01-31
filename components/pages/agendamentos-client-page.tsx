@@ -17,6 +17,7 @@ import {
     updateAppointment, 
     AppointmentStatus, 
     AppointmentFormData, 
+    // 🔥 NOVOS IMPORTS DE BLOCO
     updateAppointmentBlock,
     deleteAppointment,
     deleteFutureAppointmentsInBlock
@@ -30,7 +31,7 @@ import { RenewalNotificationButton } from "@/components/features/RenewalNotifica
 import { MultiSelectFilter, MultiSelectOption } from "@/components/ui/multi-select-filter"
 import Link from "next/link"
 import { format } from "date-fns"
-import { toast } from "sonner"
+import { toast } from "sonner" // 🔥 Sonner
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatSpecialtyName } from "@/lib/formatters";
 
@@ -145,50 +146,72 @@ export function AgendamentosClientPage() {
     setIsEditModalOpen(true);
   };
   
+  // --- 🔥 UPDATE CORRIGIDO: Aceita BOOLEAN ---
   const handleUpdateAppointment = async (
     formData: Partial<AppointmentFormData & { status: AppointmentStatus }>,
-    updateType: 'single' | 'block'
+    isBlockUpdate: boolean // Agora é boolean!
     ) => {
     if (!selectedAppointment) return;
 
-    const updateFunction = updateType === 'block'
-        ? updateAppointmentBlock(selectedAppointment, formData)
-        : updateAppointment(selectedAppointment.id, formData);
+    try {
+        const updateFunction = isBlockUpdate
+            ? updateAppointmentBlock(selectedAppointment, formData)
+            : updateAppointment(selectedAppointment.id, formData);
 
-    const result = await updateFunction;
+        const result = await updateFunction;
 
-    if (result.success) {
-        toast.success("Agendamento(s) atualizado(s) com sucesso!");
-        setIsEditModalOpen(false);
-        fetchData();
-    } else {
-        toast.error(result.error || "Falha ao atualizar o agendamento.");
+        if (result.success) {
+            toast.success("Atualizado com Sucesso", {
+                description: isBlockUpdate 
+                  ? "Série de agendamentos recriada." 
+                  : "Agendamento atualizado."
+            });
+            setIsEditModalOpen(false);
+            fetchData();
+        } else {
+            toast.error("Erro na Atualização", {
+                description: result.error || "Não foi possível salvar."
+            });
+        }
+    } catch (err) {
+        console.error(err);
+        toast.error("Erro Inesperado", { description: "Verifique o console." });
     }
   };
   
+  // --- 🔥 DELETE CORRIGIDO: Aceita BOOLEAN ---
   const handleDeleteAppointment = async (isBlockDeletion: boolean) => {
     if (!selectedAppointment) return;
 
-    const result = isBlockDeletion
-      ? await deleteFutureAppointmentsInBlock(selectedAppointment)
-      : await deleteAppointment(selectedAppointment.id);
+    try {
+        const result = isBlockDeletion
+          ? await deleteFutureAppointmentsInBlock(selectedAppointment)
+          : await deleteAppointment(selectedAppointment.id);
 
-    if (result.success) {
-      toast.success(`Agendamento${isBlockDeletion ? 's' : ''} excluído${isBlockDeletion ? 's' : ''} com sucesso!`);
-      setIsEditModalOpen(false);
-      fetchData();
-    } else {
-      toast.error(result.error || "Falha ao excluir.");
+        if (result.success) {
+          toast.success("Excluído com Sucesso", {
+            description: `Agendamento${isBlockDeletion ? 's futuros' : ''} removido${isBlockDeletion ? 's' : ''}.`
+          });
+          setIsEditModalOpen(false);
+          fetchData();
+        } else {
+          toast.error("Erro ao Excluir", {
+            description: result.error || "Falha ao remover o agendamento."
+          });
+        }
+    } catch (err) {
+        console.error(err);
+        toast.error("Erro Inesperado", { description: "Falha ao processar exclusão." });
     }
   };
   
   const handleStatusChange = async (appointmentId: string, newStatus: AppointmentStatus) => {
     const result = await updateAppointment(appointmentId, { status: newStatus });
     if (result.success) {
-      toast.success("Status atualizado!");
+      toast.success("Status Atualizado");
       setAppointments(prev => prev.map(app => app.id === appointmentId ? { ...app, status: newStatus } : app));
     } else {
-      toast.error("Falha ao atualizar o status.");
+      toast.error("Erro", { description: "Falha ao atualizar o status." });
     }
   };
 
@@ -196,10 +219,10 @@ export function AgendamentosClientPage() {
     const statusToSave = newStatus === 'nenhum' ? '' : newStatus;
     const result = await updateAppointment(appointmentId, { statusSecundario: statusToSave });
     if (result.success) {
-      toast.success("Status atualizado!");
+      toast.success("Status Secundário Atualizado");
       setAppointments(prev => prev.map(app => app.id === appointmentId ? { ...app, statusSecundario: statusToSave } : app));
     } else {
-      toast.error("Falha ao atualizar o status.");
+      toast.error("Erro", { description: "Falha ao atualizar o status." });
     }
   };
   
@@ -278,7 +301,6 @@ export function AgendamentosClientPage() {
 
   const TabelaDeAgendamentos = ({ agendamentos, loading }: { agendamentos: Appointment[], loading: boolean }) => (
     <>
-      {/* Visualização em Tabela para Telas Maiores */}
       <div className="overflow-x-auto hidden md:block">
         <Table>
           <TableHeader><TableRow>
@@ -358,7 +380,6 @@ export function AgendamentosClientPage() {
         </Table>
       </div>
 
-      {/* Visualização em Cards para Mobile */}
       <div className="grid grid-cols-1 gap-4 md:hidden">
         {loading ? (
            Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-40 w-full" />)
@@ -467,7 +488,17 @@ export function AgendamentosClientPage() {
       </div>
 
       <ReportModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} onGenerate={handleGenerateReport} patients={patients} professionals={professionals} />
-      <EditAppointmentModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} onSave={handleUpdateAppointment} onDelete={handleDeleteAppointment} appointment={selectedAppointment} patients={patients} professionals={professionals} />
+      
+      {/* 🔥 MODAL CONECTADO CORRETAMENTE: onSave aceita (data, isBlockUpdate) e onDelete aceita (isBlockDeletion) */}
+      <EditAppointmentModal 
+        isOpen={isEditModalOpen} 
+        onClose={() => setIsEditModalOpen(false)} 
+        onSave={handleUpdateAppointment} 
+        onDelete={handleDeleteAppointment} 
+        appointment={selectedAppointment} 
+        patients={patients} 
+        professionals={professionals} 
+      />
     </>
   )
 }

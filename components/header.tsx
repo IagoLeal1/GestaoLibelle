@@ -1,6 +1,6 @@
 "use client"
 
-import { Bell, LogOut, User } from "lucide-react"
+import { Bell, LogOut, User, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
@@ -12,6 +12,7 @@ import Link from "next/link"
 import { useAuth } from "@/context/AuthContext"
 import { auth } from "@/lib/firebaseConfig"
 import { useRouter } from "next/navigation"
+
 
 const getInitials = (name: string | null | undefined = "") => {
   if (!name) return "U";
@@ -61,21 +62,49 @@ export function Header() {
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-56" align="end" forceMount>
-            <DropdownMenuLabel className="font-normal">
-              <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">{firestoreUser?.displayName || "Usuário"}</p>
-                <p className="text-xs leading-none text-muted-foreground">{firestoreUser?.email || ""}</p>
-              </div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <Link href="/perfil"><DropdownMenuItem className="cursor-pointer"><User className="mr-2 h-4 w-4" /><span>Perfil</span></DropdownMenuItem></Link>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={handleLogout} className="text-red-500 focus:text-red-600 focus:bg-red-50 cursor-pointer">
-              <LogOut className="mr-2 h-4 w-4" />
-              <span>Sair</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
+          <DropdownMenuContent align="end" className="w-56">
+  <DropdownMenuLabel className="font-normal">
+    <div className="flex flex-col space-y-1">
+      <p className="text-sm font-medium leading-none">Minha Conta</p>
+      <p className="text-xs leading-none text-muted-foreground">
+        {/* Aqui você pode por o email do user se tiver acesso fácil */}
+        Gerencie seus dados
+      </p>
+    </div>
+  </DropdownMenuLabel>
+  
+  <DropdownMenuSeparator />
+  
+          {/* Link para Configurações */}
+          <DropdownMenuItem asChild>
+            <Link href="/minha-conta" className="cursor-pointer w-full flex items-center">
+              <Settings className="mr-2 h-4 w-4" />
+              <span>Configurações</span>
+              {/* Opcional: Atalho de teclado visual apenas para estilo */}
+              {/* <span className="ml-auto text-xs tracking-widest opacity-60">⌘S</span> */}
+            </Link>
+          </DropdownMenuItem>
+
+          {/* (Opcional) Se quiser um link direto para o perfil público ou algo assim */}
+          {/* <DropdownMenuItem asChild>
+            <Link href="/perfil" className="cursor-pointer w-full flex items-center">
+              <User className="mr-2 h-4 w-4" />
+              <span>Meu Perfil</span>
+            </Link>
+          </DropdownMenuItem> 
+          */}
+          
+          <DropdownMenuSeparator />
+          
+          {/* Botão de Sair */}
+          <DropdownMenuItem 
+            onClick={handleLogout} 
+            className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-900/10 cursor-pointer"
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            <span>Sair</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
         </DropdownMenu>
       </div>
     </header>
