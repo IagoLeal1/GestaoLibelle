@@ -8,6 +8,7 @@ import { Send, ArrowLeft, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/context/AuthContext"
 import { subscribeToChatMessages, sendMessage, getGroupDetails, ChatMessage, ChatGroup } from "@/services/chatService"
+import { AddParticipantsModal } from "@/components/modals/add-participants-modal"
 
 // Definindo que params é uma Promise
 export default function ChatDetalhePage({ params }: { params: Promise<{ id: string }> }) {
@@ -71,23 +72,36 @@ export default function ChatDetalhePage({ params }: { params: Promise<{ id: stri
     return (
         <div className="flex flex-col h-[calc(100vh-120px)] bg-slate-50">
             {/* --- CABEÇALHO --- */}
-            <div className="flex items-center gap-3 bg-white p-4 border-b border-gray-200 shadow-sm z-10">
-                <Link href="/mensagens">
-                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-100 rounded-full">
-                        <ArrowLeft className="h-4 w-4 text-gray-600" />
-                    </Button>
-                </Link>
-                <div>
-                    <h2 className="text-sm font-bold text-gray-800">
-                        {grupo ? grupo.pacienteNome : "Carregando..."}
-                    </h2>
-                    {grupo && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                           <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block"></span>
-                           Responsável: {grupo.responsavelNome}
-                        </p>
-                    )}
+            <div className="flex justify-between items-center bg-white p-4 border-b border-gray-200 shadow-sm z-10">
+                <div className="flex items-center gap-3">
+                    <Link href="/mensagens">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-100 rounded-full">
+                            <ArrowLeft className="h-4 w-4 text-gray-600" />
+                        </Button>
+                    </Link>
+                    <div>
+                        <h2 className="text-sm font-bold text-gray-800">
+                            {grupo ? grupo.pacienteNome : "Carregando..."}
+                        </h2>
+                        {grupo && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                               <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block"></span>
+                               Responsável: {grupo.responsavelNome}
+                            </p>
+                        )}
+                    </div>
                 </div>
+                {grupo && (
+                    <AddParticipantsModal 
+                        groupId={id} 
+                        existingIds={grupo.terapeutaIds} 
+                        onAdded={() => {
+                            getGroupDetails(id).then(g => {
+                                if(g) setGrupo(g);
+                            });
+                        }}
+                    />
+                )}
             </div>
 
             {/* --- ÁREA DE MENSAGENS --- */}

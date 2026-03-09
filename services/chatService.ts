@@ -23,6 +23,7 @@ export interface ChatGroup {
   responsavelNome: string;
   terapeutaIds: string[];
   terapeutaNomes: string[];
+  memberIds: string[];
   createdBy: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -143,3 +144,39 @@ export const getGroupDetails = async (groupId: string) => {
         return null;
     }
 }
+
+export const addProfessionalsToGroup = async (
+  groupId: string,
+  novosTerapeutas: { uid: string; nome: string }[]
+) => {
+  try {
+    const groupRef = doc(db, "chat_groups", groupId);
+    const snap = await getDoc(groupRef);
+    if (!snap.exists()) return { success: false, error: "Grupo não encontrado" };
+    
+    const data = snap.data() as ChatGroup;
+    
+    const existingIds = data.terapeutaIds || [];
+    const existingNames = data.terapeutaNomes || [];
+    const memberIds = data.memberIds || [];
+    
+    const newProfessionals = novosTerapeutas.filter(t => !existingIds.includes(t.uid));
+    
+    if (newProfessionals.length === 0) return { success: true };
+    
+    const newIds = newProfessionals.map(t => t.uid);
+    const newNames = newProfessionals.map(t => t.nome);
+    
+    await updateDoc(groupRef, {
+        terapeutaIds: [...existingIds, ...newIds],
+        terapeutaNomes: [...existingNames, ...newNames],
+        memberIds: [...memberIds, ...newIds],
+        updatedAt: Timestamp.now()
+    });
+    
+    return { success: true };
+  } catch (error) {
+    console.error("Erro ao adicionar profissionais:", error);
+    return { success: false, error };
+  }
+};
