@@ -27,6 +27,7 @@ const menuItems = [
   // { title: "Tarefas", url: "/tarefas", icon: CheckCircle, roles: ['admin', 'profissional', 'funcionario'] },
   { title: "Aprovação de Acesso", url: "/admin/usuarios", icon: UserPlus, roles: ['admin'] },
   { title: "Comercial", url: "/comercial", icon: TrendingUp, roles: ['admin','coordenador'] },
+  { title: "Gerenciar Usuários", url: "/admin/gerenciar-usuarios", icon: Users, roles: ['admin'] },
   { title: "Comunicação", url: "/comunicacao", icon: MessageCircle, roles: ['admin', 'profissional', 'funcionario', 'familiar','coordenador'] },
    { title: "Mensagens", url: "/mensagens", icon: MessagesSquare, roles: ['admin', 'profissional', 'funcionario', 'familiar','coordenador'] },
   // { title: "Plano Evolutivo", url: "/plano-evolutivo", icon: FileText, roles: ['profissional'] },

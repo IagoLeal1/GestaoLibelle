@@ -10,7 +10,7 @@ import {
   getDoc,
   QueryDocumentSnapshot,
   DocumentData,
-  writeBatch, // <--- NOVA IMPORTAÇÃO
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebaseConfig";
 
@@ -249,5 +249,61 @@ export const hideUserFromHistory = async (userId: string) => {
   } catch (error) {
     console.error("Erro ao ocultar usuário do histórico:", error);
     return { success: false, error: "Falha ao ocultar usuário." };
+  }
+};
+
+/**
+ * Busca todos os usuários aprovados para o painel de administração.
+ */
+export const getAllApprovedUsers = async (): Promise<UserForApproval[]> => {
+  try {
+    const usersRef = collection(db, "users");
+    const q = query(usersRef, where("profile.status", "==", "aprovado"));
+    const snapshot = await getDocs(q);
+    
+    return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            displayName: data.displayName,
+            email: data.email,
+            phone: data.profile?.telefone || null,
+            cpf: data.profile?.cpf || null,
+            profile: data.profile,
+            ...data
+        } as UserForApproval;
+    });
+  } catch (error) {
+    console.error("Erro ao buscar todos os usuários aprovados:", error);
+    return [];
+  }
+};
+
+/**
+ * Atualiza a role (papel) de um usuário específico.
+ */
+export const updateUserRole = async (userId: string, newRole: string) => {
+  const userDocRef = doc(db, "users", userId);
+  try {
+    await updateDoc(userDocRef, { "profile.role": newRole });
+    return { success: true };
+  } catch (error) {
+    console.error("Erro ao atualizar role do usuário:", error);
+    return { success: false, error: "Falha ao atualizar a permissão do usuário." };
+  }
+};
+
+/**
+ * Exclui (Remove) um usuário da coleção 'users'.
+ * Usado para remover o acesso do sistema de alguém já aprovado.
+ */
+export const deleteActiveUser = async (userId: string) => {
+  const userDocRef = doc(db, "users", userId);
+  try {
+    await deleteDoc(userDocRef);
+    return { success: true };
+  } catch (error) {
+    console.error("Erro ao excluir usuário:", error);
+    return { success: false, error: "Houve um problema ao excluir o usuário." };
   }
 };
