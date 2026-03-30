@@ -84,7 +84,7 @@ export default function FunilRelatorios() {
 
     // 2. Calcular KPIs
     const totalLeads = leadsFiltrados.length
-    const leadsConvertidos = leadsFiltrados.filter(l => l.anamneseRealizada && l.contratoAssinado).length
+    const leadsConvertidos = leadsFiltrados.filter(l => l.checklist?.anamnese && l.checklist?.contrato).length
     const taxaConversao = totalLeads > 0 ? ((leadsConvertidos / totalLeads) * 100).toFixed(1) : "0.0"
 
     // 3. Dados para Gráfico de Barras
@@ -96,7 +96,7 @@ export default function FunilRelatorios() {
     // 4. Evento com Mais Conversões
     const conversaoPorEvento: { [key: string]: number } = {}
     leadsFiltrados.forEach(lead => {
-      if (lead.anamneseRealizada && lead.contratoAssinado) {
+      if (lead.checklist?.anamnese && lead.checklist?.contrato) {
         if (!conversaoPorEvento[lead.eventoOrigem]) {
           conversaoPorEvento[lead.eventoOrigem] = 0
         }
@@ -108,8 +108,8 @@ export default function FunilRelatorios() {
 
     // 5. Dados para Gráfico de Funil
     const etapa_total = leadsFiltrados.length // Todos os leads que entraram
-    const etapa_acolhimento = leadsFiltrados.filter(l => l.acolhimentoRealizado).length
-    const etapa_proposta = leadsFiltrados.filter(l => l.acolhimentoRealizado && l.orcamentoEnviado && l.qhEnviado).length
+    const etapa_acolhimento = leadsFiltrados.filter(l => l.checklist?.acolher).length
+    const etapa_proposta = leadsFiltrados.filter(l => l.checklist?.acolher && l.checklist?.fazerOrcamento && l.checklist?.qhHorarios).length
     const etapa_fechamento = leadsConvertidos
 
     const dadosFunilAbandonos = [

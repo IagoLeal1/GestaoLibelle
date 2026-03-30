@@ -11,11 +11,10 @@ import {
   query,
   orderBy,
   Timestamp,
-  getDoc, // Precisamos do getDoc para a lógica de update
+  getDoc,
 } from "firebase/firestore"
 
 // --- Interfaces (Definidas e Exportadas aqui) ---
-// É uma boa prática exportar as interfaces junto com o service
 export interface Evento {
   id: string
   codigo: string
@@ -25,18 +24,59 @@ export interface Evento {
   criadoEm?: Timestamp
 }
 
+export type TipoFluxo = "novo_paciente" | "avaliacao" | "liminar";
+
+export interface LeadChecklist {
+  // Recepção Inicial
+  agendar: boolean;
+  inserirPlControle: boolean;
+  enviarGrupoAcolhimento: boolean; // novo paciente
+  avisarProfissional: boolean; // avaliação
+  email: boolean; // liminar
+  
+  // Coord. Famílias / Profissional
+  acolher: boolean; // novo paciente, liminar
+  fazerCarta: boolean; // novo paciente, liminar
+  qtdHorasOrcamento: boolean; // novo paciente, avaliação
+  avaliar: boolean; // avaliação
+
+  // Fin.
+  fazerOrcamento: boolean; // novo paciente, avaliação
+  confPlano: boolean; // liminar
+
+  // Comercial
+  enviarCarta: boolean; // todos
+  cOrcamento: boolean; // novo paciente, avaliação
+  pos: boolean; // todos
+  anamnese: boolean; // todos
+  avisarFinNegativa: boolean; // avaliação
+
+  // Coord. Clínica
+  qhHorarios: boolean; // todos
+  pastaDrive: boolean; // todos
+  dataInicio: boolean; // todos
+  avisarProf: boolean; // todos
+
+  // Recepção Final
+  avisarFamilia: boolean; // todos
+  cadastroInthegra: boolean; // todos
+
+  // Gerente. Op.
+  contrato: boolean; // novo paciente, avaliação
+  brinde: boolean; // todos
+  termo: boolean; // todos
+  regulamento: boolean; // todos
+}
+
 export interface Lead {
   id: string
   nome: string
   contato: string
   eventoOrigem: string // Código do evento
   status: "pendente" | "sucesso" | "falha"
-  acolhimentoRealizado: boolean
-  dataAcolhimento: string
-  orcamentoEnviado: boolean
-  qhEnviado: boolean
-  anamneseRealizada: boolean // Corrigido
-  contratoAssinado: boolean
+  tipoFluxo: TipoFluxo
+  etapaAtual: string // "recepcao1", "coord_familias", "fin", "comercial", "coord_clinica", "recepcao2", "gerente_op"
+  checklist: LeadChecklist
   criadoEm?: Timestamp
 }
 
@@ -61,11 +101,10 @@ export const listenToEventos = (
     },
     (error) => {
       console.error("Erro ao escutar eventos: ", error)
-      // Você pode chamar o callback com um array vazio ou um erro
       callback([])
     },
   )
-  return unsubscribe // Retorna a função de unsubscribe
+  return unsubscribe
 }
 
 export const listenToLeads = (
@@ -86,7 +125,7 @@ export const listenToLeads = (
       callback([])
     },
   )
-  return unsubscribe // Retorna a função de unsubscribe
+  return unsubscribe
 }
 
 // --- Funções CRUD (Create, Read, Update, Delete) ---
@@ -118,17 +157,23 @@ export const deleteEvento = async (id: string) => {
 
 // LEADS
 export const addLead = async (
-  novoLead: Omit<Lead, "id" | "status" | "criadoEm" | "acolhimentoRealizado" | "dataAcolhimento" | "orcamentoEnviado" | "qhEnviado" | "anamneseRealizada" | "contratoAssinado">,
+  novoLead: Omit<Lead, "id" | "status" | "criadoEm" | "checklist" | "etapaAtual">,
 ) => {
+  const defaultChecklist: LeadChecklist = {
+    agendar: false, inserirPlControle: false, enviarGrupoAcolhimento: false, avisarProfissional: false, email: false,
+    acolher: false, fazerCarta: false, qtdHorasOrcamento: false, avaliar: false,
+    fazerOrcamento: false, confPlano: false,
+    enviarCarta: false, cOrcamento: false, pos: false, anamnese: false, avisarFinNegativa: false,
+    qhHorarios: false, pastaDrive: false, dataInicio: false, avisarProf: false,
+    avisarFamilia: false, cadastroInthegra: false,
+    contrato: false, brinde: false, termo: false, regulamento: false,
+  };
+
   const leadData = {
     ...novoLead,
     status: "pendente" as const,
-    acolhimentoRealizado: false,
-    dataAcolhimento: "",
-    orcamentoEnviado: false,
-    qhEnviado: false,
-    anamneseRealizada: false, // Corrigido
-    contratoAssinado: false,
+    etapaAtual: "recepcao1", // Inicia na primeira etapa
+    checklist: defaultChecklist,
     criadoEm: Timestamp.now(),
   }
   return await addDoc(leadsColRef, leadData)
@@ -139,35 +184,7 @@ export const updateLead = async (
   data: Partial<Lead>,
 ) => {
   const leadRef = doc(db, "comercial_leads", id)
-
-  // Esta é a "lógica de negócios" que agora vive no service
-  // Para garantir que a lógica de status funcione, buscamos o documento atual
-  const docSnap = await getDoc(leadRef)
-  if (!docSnap.exists()) {
-    throw new Error("Lead não encontrado!")
-  }
-
-  const currentLead = docSnap.data() as Lead
-  const finalData = { ...currentLead, ...data } // Mescla o dado atual com o novo
-
-  // Lógica de status automático (lógica de negócios)
-  // Se as duas sub-etapas da proposta estão OK, status vira sucesso
-  if (finalData.orcamentoEnviado && finalData.qhEnviado && !finalData.anamneseRealizada) {
-    finalData.status = "sucesso"
-  }
-
-  // Se as duas sub-etapas do fechamento estão OK, status vira sucesso
-  if (finalData.anamneseRealizada && finalData.contratoAssinado) {
-    finalData.status = "sucesso"
-  }
-  
-  // Se o acolhimento é marcado, o status avança
-  if (data.acolhimentoRealizado === true) {
-     finalData.status = "sucesso"
-  }
-
-  // Atualiza o documento com os dados recebidos E o status calculado
-  return await updateDoc(leadRef, { ...data, status: finalData.status })
+  return await updateDoc(leadRef, data as any)
 }
 
 export const deleteLead = async (id: string) => {
