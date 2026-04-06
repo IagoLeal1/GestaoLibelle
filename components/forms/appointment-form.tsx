@@ -29,6 +29,7 @@ export function AppointmentForm() {
   const [availableSpecialties, setAvailableSpecialties] = useState<Specialty[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [occupiedRoomIds, setOccupiedRoomIds] = useState<string[]>([]);
+  const [availableConvenios, setAvailableConvenios] = useState<string[]>([]);
 
   const [isRecurring, setIsRecurring] = useState(false);
   const [formData, setFormData] = useState<Partial<AppointmentFormData & AppointmentBlockFormData>>({
@@ -84,28 +85,53 @@ export function AppointmentForm() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handlePatientChange = (patientId: string) => {
-    const selectedPatient = patients.find(p => p.id === patientId);
-    if (!selectedPatient) return;
-
-    const patientConvenio = (selectedPatient.convenio || 'particular').toLowerCase();
+  const filterSpecialtiesByConvenio = (convenio: string) => {
+    const convenioLower = convenio.toLowerCase();
     
     const filteredSpecialties = specialties.filter(spec => {
         const specNameLower = spec.name.toLowerCase();
         
-        if (patientConvenio === 'particular') {
+        if (convenioLower === 'particular') {
             return !['unimed', 'bradesco', 'amil', 'sulamerica'].some(conv => specNameLower.includes(conv));
         }
         
-        return specNameLower.includes(patientConvenio);
+        return specNameLower.includes(convenioLower);
     });
 
     setAvailableSpecialties(filteredSpecialties);
 
+    setFormData(prev => {
+        if (prev.tipo && !filteredSpecialties.some(s => s.name === prev.tipo)) {
+            return { ...prev, tipo: '', valorConsulta: 0 };
+        }
+        return prev;
+    });
+  };
+
+  const handlePatientChange = (patientId: string) => {
+    const selectedPatient = patients.find(p => p.id === patientId);
+    if (!selectedPatient) return;
+
+    const rawConvenio = selectedPatient.convenio || '';
+    const conveniosList = rawConvenio
+        .split(',')
+        .map(c => c.trim())
+        .filter(c => c.length > 0);
+    
+    // Garantir "Particular" como padrão/fallback se não existir
+    if (!conveniosList.some(c => c.toLowerCase() === 'particular')) {
+        conveniosList.push('Particular');
+    }
+
+    setAvailableConvenios(conveniosList);
+    const defaultConvenio = conveniosList[0];
+
+    filterSpecialtiesByConvenio(defaultConvenio);
+
     setFormData(prev => ({
         ...prev,
         patientId: patientId,
-        convenio: selectedPatient.convenio || "Particular",
+        convenio: defaultConvenio,
         tipo: '', 
         valorConsulta: 0,
     }));
@@ -186,7 +212,7 @@ export function AppointmentForm() {
 
             <div className="space-y-2 lg:col-span-2">
                 <Label>Especialidade *</Label>
-                <Select onValueChange={handleSpecialtyChange} value={formData.tipo} disabled={!formData.patientId} required>
+                <Select onValueChange={handleSpecialtyChange} value={formData.tipo || undefined} disabled={!formData.patientId} required>
                     <SelectTrigger><SelectValue placeholder={!formData.patientId ? "Selecione um paciente" : "Selecione..."} /></SelectTrigger>
                     <SelectContent>{availableSpecialties.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent>
                 </Select>
@@ -209,8 +235,22 @@ export function AppointmentForm() {
                 <Select onValueChange={handleRoomChange} value={formData.sala}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{rooms.map(r => <SelectItem key={r.id} value={r.id} className={occupiedRoomIds.includes(r.id) ? 'text-red-500 font-semibold' : ''}>{r.name} {occupiedRoomIds.includes(r.id) ? '(Ocupada)' : ''}</SelectItem>)}</SelectContent></Select>
             </div>
             <div className="space-y-2 lg:col-span-2">
-                <Label>Convênio</Label>
-                <Input value={formData.convenio || ''} readOnly placeholder="Automático"/>
+                <Label>Modalidade / Convênio</Label>
+                <Select 
+                    value={formData.convenio || undefined} 
+                    onValueChange={(val) => {
+                        handleInputChange("convenio", val);
+                        filterSpecialtiesByConvenio(val);
+                    }}
+                    disabled={!formData.patientId}
+                >
+                    <SelectTrigger><SelectValue placeholder={!formData.patientId ? "Selecione o paciente" : "Selecione..."} /></SelectTrigger>
+                    <SelectContent>
+                        {availableConvenios.map((c, idx) => (
+                            <SelectItem key={idx} value={c}>{c}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
             </div>
             <div className="space-y-2 lg:col-span-2">
                 <Label>Valor da Consulta (R$)</Label>

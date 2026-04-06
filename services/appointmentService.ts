@@ -75,6 +75,7 @@ export interface QuickAppointmentData {
   specialty: string;
   valorConsulta: number;
   roomId?: string;
+  convenio?: string;
   isRecurring: boolean;
   sessions: number;
   frequency: RecurrenceFrequency;
@@ -346,7 +347,7 @@ export const createMultipleAppointments = async (patientId: string, appointments
         title: `${patientName} - ${professionalName}`,
         patientId, patientName, professionalId: appData.professionalId, professionalName,
         tipo: appData.specialty, sala: appData.roomId || null,
-        convenio: patientConvenio, valorConsulta: appData.valorConsulta || 0,
+        convenio: appData.convenio || patientConvenio, valorConsulta: appData.valorConsulta || 0,
         start: Timestamp.fromDate(appData.start), end: Timestamp.fromDate(appData.end),
         status: 'agendado' as AppointmentStatus,
         blockId: newAppointmentRef.id, isLastInBlock: !appData.isRecurring,

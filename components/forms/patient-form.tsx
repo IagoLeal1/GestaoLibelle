@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Checkbox } from "@/components/ui/checkbox"
 import { User, Phone, MapPin, AlertCircle } from "lucide-react"
 
 import { createPatient, updatePatient, PatientFormData, Patient } from "@/services/patientService"
@@ -21,6 +22,8 @@ export function PatientForm({ initialData }: PatientFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasOutroConvenio, setHasOutroConvenio] = useState(false);
+  const [outroConvenio, setOutroConvenio] = useState("");
   
   // Estado inicial unificado (trazido das páginas manuais)
   const [formData, setFormData] = useState<Partial<PatientFormData>>({
@@ -54,13 +57,26 @@ export function PatientForm({ initialData }: PatientFormProps) {
   // useEffect para preencher dados na edição (Lógica do editar/page.tsx)
   useEffect(() => {
     if (initialData) {
+      let primaryConvenio = initialData.convenio || "";
+      let secondaryConvenio = "";
+      let checkHasOutro = false;
+      
+      if (primaryConvenio.includes(',')) {
+          const parts = primaryConvenio.split(',');
+          primaryConvenio = parts[0].trim();
+          secondaryConvenio = parts.slice(1).join(',').trim();
+          checkHasOutro = true;
+      }
+      setHasOutroConvenio(checkHasOutro);
+      setOutroConvenio(secondaryConvenio);
+
       setFormData({
         fullName: initialData.fullName || "",
         dataNascimento: initialData.dataNascimento?.toDate().toISOString().split('T')[0] || "",
         cpf: initialData.cpf || "",
         rg: initialData.rg || "",
         sexo: initialData.sexo || "",
-        convenio: initialData.convenio || "",
+        convenio: primaryConvenio,
         emailCadastro: initialData.emailCadastro || "",
 
         responsavel: {
@@ -125,10 +141,16 @@ export function PatientForm({ initialData }: PatientFormProps) {
 
     try {
       let result;
+      const finalData = { ...formData };
+      
+      if (hasOutroConvenio && outroConvenio.trim() !== '') {
+          finalData.convenio = `${finalData.convenio || ''}, ${outroConvenio.trim()}`.replace(/^, /, '');
+      }
+
       if (initialData) {
-        result = await updatePatient(initialData.id, formData as PatientFormData);
+        result = await updatePatient(initialData.id, finalData as PatientFormData);
       } else {
-        result = await createPatient(formData as PatientFormData);
+        result = await createPatient(finalData as PatientFormData);
       }
 
       if (result.success) {
@@ -184,7 +206,22 @@ export function PatientForm({ initialData }: PatientFormProps) {
             {/* ----------------------------------------- */}
 
             <div className="space-y-2"><Label htmlFor="sexo">Sexo</Label><Select value={formData.sexo} onValueChange={(value) => handleInputChange("sexo", value)}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent><SelectItem value="masculino">Masculino</SelectItem><SelectItem value="feminino">Feminino</SelectItem><SelectItem value="outro">Outro</SelectItem></SelectContent></Select></div>
-            <div className="space-y-2"><Label htmlFor="convenio">Convênio</Label><Input id="convenio" value={formData.convenio || ''} onChange={(e) => handleInputChange("convenio", e.target.value)} /></div>
+            <div className="space-y-2"><Label htmlFor="convenio">Convênio principal</Label><Input id="convenio" value={formData.convenio || ''} onChange={(e) => handleInputChange("convenio", e.target.value)} /></div>
+
+            {/* Checkbox "Outro convênio?" */}
+            <div className="space-y-2 flex flex-col justify-center lg:mt-6">
+                <div className="flex items-center space-x-2">
+                    <Checkbox id="outro-convenio" checked={hasOutroConvenio} onCheckedChange={(checked) => setHasOutroConvenio(checked === true)} />
+                    <Label htmlFor="outro-convenio" className="cursor-pointer">Outro convênio?</Label>
+                </div>
+            </div>
+
+            {hasOutroConvenio && (
+                <div className="space-y-2">
+                    <Label htmlFor="outroConvenio">Qual?</Label>
+                    <Input id="outroConvenio" placeholder="Ex: Amil" value={outroConvenio} onChange={(e) => setOutroConvenio(e.target.value)} />
+                </div>
+            )}
           </div>
         </CardContent>
       </Card>

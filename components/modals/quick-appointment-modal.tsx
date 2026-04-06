@@ -38,6 +38,8 @@ export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patie
     // --- NOVO ESTADO PARA FREQUÊNCIA ---
     const [frequency, setFrequency] = useState<RecurrenceFrequency>('weekly');
     const [availableSpecialties, setAvailableSpecialties] = useState<Specialty[]>([]);
+    const [convenio, setConvenio] = useState<string>('');
+    const [availableConvenios, setAvailableConvenios] = useState<string[]>([]);
 
     useEffect(() => {
         if (isOpen) {
@@ -51,20 +53,51 @@ export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patie
             setFrequency('weekly'); // Reseta para o padrão
 
             if (patient) {
-                const patientConvenio = (patient.convenio || 'particular').toLowerCase();
+                const rawConvenio = patient.convenio || '';
+                const conveniosList = rawConvenio.split(',').map(c => c.trim()).filter(c => c.length > 0);
+                if (!conveniosList.some(c => c.toLowerCase() === 'particular')) {
+                    conveniosList.push('Particular');
+                }
+                setAvailableConvenios(conveniosList);
+                const defaultConvenio = conveniosList[0];
+                setConvenio(defaultConvenio);
+
+                const convenioLower = defaultConvenio.toLowerCase();
                 const filtered = specialties.filter(spec => {
                     const specNameLower = spec.name.toLowerCase();
-                    if (patientConvenio === 'particular') {
+                    if (convenioLower === 'particular') {
                         return !['unimed', 'bradesco', 'amil', 'sulamerica'].some(conv => specNameLower.includes(conv));
                     }
-                    return specNameLower.includes(patientConvenio);
+                    return specNameLower.includes(convenioLower);
                 });
                 setAvailableSpecialties(filtered);
             } else {
+                setAvailableConvenios([]);
+                setConvenio('');
                 setAvailableSpecialties(specialties);
             }
         }
     }, [isOpen, patient, specialties]);
+
+    const filterSpecialtiesByConvenio = (conv: string) => {
+        const convenioLower = conv.toLowerCase();
+        const filtered = specialties.filter(spec => {
+            const specNameLower = spec.name.toLowerCase();
+            if (convenioLower === 'particular') {
+                return !['unimed', 'bradesco', 'amil', 'sulamerica'].some(c => specNameLower.includes(c));
+            }
+            return specNameLower.includes(convenioLower);
+        });
+        setAvailableSpecialties(filtered);
+        
+        setSpecialty(prev => {
+            if (prev && !filtered.some(s => s.name === prev)) {
+                setValorConsulta(0);
+                return '';
+            }
+            return prev;
+        });
+    };
 
     const handleSpecialtyChange = (specialtyName: string) => {
         const selectedSpecialty = specialties.find(s => s.name === specialtyName);
@@ -92,6 +125,7 @@ export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patie
             isRecurring,
             sessions: isRecurring ? sessions : 1,
             frequency: isRecurring ? frequency : 'weekly', // Inclui a frequência nos dados
+            convenio: convenio,
         };
         onSave(data);
     };
@@ -108,12 +142,17 @@ export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patie
                 <div className="space-y-4 py-4">
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2"><Label htmlFor="professional">Profissional *</Label><Select value={professionalId} onValueChange={setProfessionalId}><SelectTrigger id="professional"><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{professionals.map(p => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent></Select></div>
-                        <div className="space-y-2"><Label htmlFor="specialty">Especialidade *</Label><Select value={specialty} onValueChange={handleSpecialtyChange} disabled={!patient}><SelectTrigger id="specialty"><SelectValue placeholder={!patient ? "Selecione um paciente" : "Selecione..."} /></SelectTrigger><SelectContent>{availableSpecialties.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+                        <div className="space-y-2"><Label>Modalidade / Convênio</Label><Select value={convenio || undefined} onValueChange={(val) => { setConvenio(val); filterSpecialtiesByConvenio(val); }} disabled={!patient}><SelectTrigger><SelectValue placeholder={!patient ? "Selecione um paciente" : "Selecione..."} /></SelectTrigger><SelectContent>{availableConvenios.map((c, idx) => <SelectItem key={idx} value={c}>{c}</SelectItem>)}</SelectContent></Select></div>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2"><Label htmlFor="specialty">Especialidade *</Label><Select value={specialty || undefined} onValueChange={handleSpecialtyChange} disabled={!patient}><SelectTrigger id="specialty"><SelectValue placeholder={!patient ? "Selecione um paciente" : "Selecione..."} /></SelectTrigger><SelectContent>{availableSpecialties.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
                         <div className="space-y-2"><Label htmlFor="room">Sala</Label><Select value={roomId} onValueChange={(value) => setRoomId(value === "none" ? undefined : value)}><SelectTrigger id="room"><SelectValue placeholder="Opcional..." /></SelectTrigger><SelectContent><SelectItem value="none">Nenhuma</SelectItem>{rooms.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent></Select></div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2"><Label htmlFor="valorConsulta">Valor da Consulta (R$)</Label><div className="relative"><DollarSign className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input id="valorConsulta" type="number" step="0.01" value={valorConsulta} onChange={(e) => setValorConsulta(parseFloat(e.target.value) || 0)} className="pl-8" /></div></div>
+                        <div></div>
                     </div>
                     
                     {/* --- BLOCO DE RECORRÊNCIA ATUALIZADO --- */}
