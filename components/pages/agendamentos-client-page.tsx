@@ -234,7 +234,7 @@ export function AgendamentosClientPage() {
       alert("Nenhum agendamento encontrado para os filtros selecionados.");
       return;
     }
-    const headers = ["Data", "Hora Inicio", "Hora Fim", "Paciente", "Profissional", "Status", "Tipo", "Sala", "Convenio"];
+    const headers = ["Data", "Hora Inicio", "Hora Fim", "Paciente", "Profissional", "Status", "Status Secundário", "Tipo", "Sala", "Convenio"];
     const csvContent = [
       headers.join(';'),
       ...appointmentsToExport.map(apt => [
@@ -243,7 +243,7 @@ export function AgendamentosClientPage() {
         format(apt.end.toDate(), 'HH:mm'),
         `"${apt.patientName}"`,
         `"${apt.professionalName}"`,
-        apt.status, apt.tipo, getRoomNameById(apt.sala), apt.convenio || 'N/A'
+        apt.status, apt.statusSecundario || 'N/A', apt.tipo, getRoomNameById(apt.sala), apt.convenio || 'N/A'
       ].join(';'))
     ].join('\n');
     const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
