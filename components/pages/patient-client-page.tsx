@@ -61,21 +61,48 @@ const getConvenioBadge = (convenio?: string) => {
     return <Badge variant="outline" className={`font-medium ${className}`}>{convenio}</Badge>
 }
 
+const MESES = [
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+];
+
+const getDataNascimento = (dataNascimento?: Timestamp) => {
+  if (!dataNascimento?.toDate) return null;
+
+  const date = dataNascimento.toDate();
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
 const calcularIdade = (dataNascimento?: Timestamp) => {
-  if (!dataNascimento?.toDate) return 0;
+  const nascimento = getDataNascimento(dataNascimento);
+  if (!nascimento) return 0;
+
   const hoje = new Date();
-  const nascimento = dataNascimento.toDate();
-  let idade = hoje.getFullYear() - nascimento.getFullYear();
-  const mes = hoje.getMonth() - nascimento.getMonth();
-  if (mes < 0 || (mes === 0 && hoje.getDate() < nascimento.getDate())) {
+  let idade = hoje.getFullYear() - nascimento.getUTCFullYear();
+  const mes = hoje.getMonth() - nascimento.getUTCMonth();
+  if (mes < 0 || (mes === 0 && hoje.getDate() < nascimento.getUTCDate())) {
     idade--;
   }
   return idade;
 };
 
 const formatDate = (date?: Timestamp) => {
-    if (!date?.toDate) return "Não informado";
-    return date.toDate().toLocaleDateString("pt-BR");
+    const dataNascimento = getDataNascimento(date);
+    if (!dataNascimento) return "Não informado";
+
+    // As datas de nascimento são armazenadas à meia-noite UTC. Fixar o fuso
+    // evita que a interface exiba o dia anterior no horário de Brasília.
+    return dataNascimento.toLocaleDateString("pt-BR", { timeZone: "UTC" });
 };
 
 // --- 2. APLICAÇÃO DA INTERFACE NO COMPONENTE ---
@@ -83,6 +110,7 @@ export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: 
   const [searchTerm, setSearchTerm] = useState("");
   const [sexoFilter, setSexoFilter] = useState("todos");
   const [statusFilter, setStatusFilter] = useState("todos");
+  const [mesAniversarioFilter, setMesAniversarioFilter] = useState("todos");
   const [pacienteSelecionado, setPacienteSelecionado] = useState<Patient | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
 
@@ -108,20 +136,39 @@ export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: 
   // LÓGICA DE FILTRO (Usa a lista 'pacientes' que veio do Pai)
   const pacientesFiltrados = pacientes.filter((paciente) => {
     const search = searchTerm.toLowerCase();
+    const dataNascimento = getDataNascimento(paciente.dataNascimento);
     const matchesSearch =
       paciente.fullName.toLowerCase().includes(search) ||
       (paciente.responsavel?.nome?.toLowerCase().includes(search)) || 
       (paciente.cpf && paciente.cpf.includes(searchTerm)); 
     const matchesSexo = sexoFilter === "todos" || paciente.sexo === sexoFilter;
     const matchesStatus = statusFilter === "todos" || paciente.status === statusFilter;
-    return matchesSearch && matchesSexo && matchesStatus;
+    const matchesMesAniversario = mesAniversarioFilter === "todos" ||
+      dataNascimento?.getUTCMonth() === Number(mesAniversarioFilter);
+    return matchesSearch && matchesSexo && matchesStatus && matchesMesAniversario;
+  }).sort((a, b) => {
+    if (mesAniversarioFilter === "todos") return 0;
+
+    const dataA = getDataNascimento(a.dataNascimento);
+    const dataB = getDataNascimento(b.dataNascimento);
+    if (!dataA) return 1;
+    if (!dataB) return -1;
+
+    return dataA.getUTCDate() - dataB.getUTCDate() ||
+      a.fullName.localeCompare(b.fullName, "pt-BR");
   });
+
+  const mesAniversarioReferencia = mesAniversarioFilter === "todos"
+    ? new Date().getMonth()
+    : Number(mesAniversarioFilter);
 
   const estatisticas = {
     total: pacientes.length,
     ativos: pacientes.filter((p) => p.status === "ativo").length,
     inativos: pacientes.filter((p) => p.status === "inativo").length,
-    mediaIdade: pacientes.length > 0 ? Math.round(pacientes.reduce((acc, p) => acc + calcularIdade(p.dataNascimento), 0) / pacientes.length) : 0,
+    aniversariantes: pacientes.filter((p) =>
+      getDataNascimento(p.dataNascimento)?.getUTCMonth() === mesAniversarioReferencia
+    ).length,
   };
   
   if (isLoading) return <div className="text-center p-8">Carregando pacientes...</div>
@@ -134,7 +181,7 @@ export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: 
             <Card><CardContent className="p-4"><div className="text-center"><p className="text-2xl font-bold">{estatisticas.total}</p><p className="text-xs font-medium text-muted-foreground">Total</p></div></CardContent></Card>
             <Card><CardContent className="p-4"><div className="text-center"><p className="text-2xl font-bold text-green-600">{estatisticas.ativos}</p><p className="text-xs font-medium text-green-600">Ativos</p></div></CardContent></Card>
             <Card><CardContent className="p-4"><div className="text-center"><p className="text-2xl font-bold text-red-600">{estatisticas.inativos}</p><p className="text-xs font-medium text-red-600">Inativos</p></div></CardContent></Card>
-            <Card><CardContent className="p-4"><div className="text-center"><p className="text-2xl font-bold text-orange-600">{estatisticas.mediaIdade} anos</p><p className="text-xs font-medium text-orange-600">Idade Média</p></div></CardContent></Card>
+            <Card><CardContent className="p-4"><div className="text-center"><p className="text-2xl font-bold text-orange-600">{estatisticas.aniversariantes}</p><p className="text-xs font-medium text-orange-600">Aniversariantes em {MESES[mesAniversarioReferencia]}</p></div></CardContent></Card>
         </div>
         
         {/* Card de Filtros */}
@@ -143,7 +190,7 @@ export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: 
             <CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5" /> Filtros</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-2">
                 <Label htmlFor="search">Buscar paciente</Label>
                 <div className="relative"><Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input id="search" placeholder="Nome, CPF ou responsável..." className="pl-8" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
@@ -155,6 +202,18 @@ export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: 
               <div className="space-y-2">
                 <Label htmlFor="status">Status</Label>
                 <Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent><SelectItem value="todos">Todos</SelectItem><SelectItem value="ativo">Ativo</SelectItem><SelectItem value="inativo">Inativo</SelectItem><SelectItem value="suspenso">Suspenso</SelectItem></SelectContent></Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="mes-aniversario">Mês de aniversário</Label>
+                <Select value={mesAniversarioFilter} onValueChange={setMesAniversarioFilter}>
+                  <SelectTrigger id="mes-aniversario"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os meses</SelectItem>
+                    {MESES.map((mes, index) => (
+                      <SelectItem key={mes} value={String(index)}>{mes}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </CardContent>
@@ -168,7 +227,7 @@ export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: 
               <Table>
                 <TableHeader><TableRow>
                     <TableHead>Nome</TableHead>
-                    <TableHead className="hidden sm:table-cell">Idade</TableHead>
+                    <TableHead className="hidden sm:table-cell">Data de nascimento</TableHead>
                     <TableHead className="hidden lg:table-cell">Responsável</TableHead>
                     <TableHead className="hidden md:table-cell">Convênio</TableHead>
                     <TableHead>Status</TableHead>
@@ -178,7 +237,7 @@ export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: 
                   {pacientesFiltrados.length > 0 ? pacientesFiltrados.map((paciente) => (
                     <TableRow key={paciente.id}>
                       <TableCell className="font-medium">{paciente.fullName}</TableCell>
-                      <TableCell className="hidden sm:table-cell">{calcularIdade(paciente.dataNascimento)} anos</TableCell>
+                      <TableCell className="hidden sm:table-cell">{formatDate(paciente.dataNascimento)}</TableCell>
                       <TableCell className="hidden lg:table-cell">{paciente.responsavel?.nome}</TableCell>
                       <TableCell className="hidden md:table-cell">{getConvenioBadge(paciente.convenio)}</TableCell>
                       <TableCell>{getStatusBadge(paciente.status)}</TableCell>
