@@ -1,0 +1,188 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- 1. FUNÇÕES AUXILIARES ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.profile;
+    }
+
+    function isApproved() {
+      return isSignedIn() && getUserProfile().status == 'aprovado';
+    }
+
+    function isAdmin() {
+      return isApproved() && getUserProfile().role == 'admin';
+    }
+
+    function isFuncionario() {
+      return isApproved() && getUserProfile().role == 'funcionario';
+    }
+
+    function isProfissional() {
+      return isApproved() && getUserProfile().role == 'profissional';
+    }
+
+    function isCoordenador() {
+      return isApproved() && getUserProfile().role == 'coordenador';
+    }
+
+    function isFamiliar() {
+      return isApproved() && getUserProfile().role == 'familiar';
+    }
+
+    function isAdminOrCoordinator() {
+      return isAdmin() || isCoordenador();
+    }
+
+    function canManage() {
+      return isAdmin() || isCoordenador() || isFuncionario();
+    }
+
+    function canAccessPatientObservations() {
+      return canManage() || isProfissional();
+    }
+
+    function isComercialTeam() {
+      return isAdmin() || isCoordenador();
+    }
+
+    // --- 2. REGRAS DE USUÁRIOS ---
+    match /users/{userId} {
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow read: if isApproved();
+      allow update: if isAdmin() || request.auth.uid == userId;
+      allow delete: if isAdmin();
+    }
+
+    // --- 3. REGRAS DE CHAT ---
+    match /chat_groups/{groupId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid in resource.data.memberIds || isAdminOrCoordinator()
+      );
+      allow create: if isSignedIn() && isAdminOrCoordinator() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isSignedIn() && (
+        request.auth.uid in resource.data.memberIds || isAdminOrCoordinator()
+      );
+    }
+
+    match /chat_groups/{groupId}/messages/{messageId} {
+      allow read, create: if isSignedIn() && (
+        request.auth.uid in get(/databases/$(database)/documents/chat_groups/$(groupId)).data.memberIds
+        || isAdminOrCoordinator()
+      );
+    }
+
+    // --- 4. OUTRAS REGRAS DO SISTEMA ---
+
+    // --- PACIENTES (Lógica de Auto-Vínculo Atualizada) ---
+    match /patients/{patientId} {
+      // Familiar pode LER para encontrar seus filhos/dependentes
+      allow read: if isApproved() && (canManage() || isProfissional() || isFamiliar());
+
+      // Create e Delete continuam restritos APENAS à gestão
+      allow create, delete: if canManage();
+
+      // Update: Permite se for Gestão OU se for o Auto-Vínculo seguro
+      allow update: if canManage() || (
+        isSignedIn() &&
+        resource.data.emailCadastro == request.auth.token.email &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userId']) &&
+        request.resource.data.userId == request.auth.uid
+      );
+
+      // Histórico clínico separado do documento principal do paciente.
+      // Familiares não têm acesso a esta subcoleção.
+      match /observations/{observationId} {
+        allow read: if canAccessPatientObservations();
+
+        allow create: if canAccessPatientObservations()
+          && exists(/databases/$(database)/documents/patients/$(patientId))
+          && request.resource.data.keys().hasAll([
+            'texto',
+            'criadoEm',
+            'autorId',
+            'autorNome',
+            'autorPerfil'
+          ])
+          && request.resource.data.keys().hasOnly([
+            'texto',
+            'criadoEm',
+            'autorId',
+            'autorNome',
+            'autorPerfil'
+          ])
+          && request.resource.data.texto is string
+          && request.resource.data.texto.size() > 0
+          && request.resource.data.texto.size() <= 2000
+          && request.resource.data.autorId == request.auth.uid
+          && request.resource.data.autorNome
+            == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
+          && request.resource.data.autorPerfil == getUserProfile().role
+          && request.resource.data.criadoEm == request.time;
+
+        // Observações não podem ser editadas. O autor pode excluir a própria
+        // observação; administradores e coordenadores podem excluir qualquer uma.
+        allow update: if false;
+        allow delete: if canAccessPatientObservations() && (
+          isAdminOrCoordinator() ||
+          resource.data.autorId == request.auth.uid
+        );
+      }
+    }
+
+    match /professionals/{professionalId} {
+      allow read: if isApproved();
+      allow write: if isAdmin() || isCoordenador();
+    }
+
+    match /specialties/{specialtyId} {
+      allow read: if isApproved();
+      allow write: if isAdmin();
+    }
+
+    match /rooms/{roomId} {
+      allow read: if isApproved();
+      allow write: if canManage();
+    }
+
+    match /appointments/{appointmentId} {
+      allow read: if isApproved() && (canManage() || isProfissional() || isFamiliar());
+      allow create: if canManage();
+      allow update, delete: if canManage() || isProfissional();
+    }
+
+    match /comercial_eventos/{eventoId} {
+      allow list, get: if isComercialTeam();
+      allow create, update, delete: if isComercialTeam();
+    }
+
+    match /comercial_leads/{leadId} {
+      allow list, get: if isComercialTeam();
+      allow create, update, delete: if isComercialTeam();
+    }
+
+    // Financeiro
+    match /settings/{docId} { allow read, write: if canManage(); }
+    match /costCenters/{docId} { allow read, write: if canManage(); }
+    match /suppliers/{docId} { allow read, write: if canManage(); }
+    match /covenants/{docId} { allow read, write: if canManage(); }
+    match /bankAccounts/{docId} { allow read, write: if canManage(); }
+    match /accountPlans/{docId} { allow read, write: if canManage(); }
+    match /transactions/{docId} { allow read, write: if canManage(); }
+    match /budgets/{docId} { allow read, write: if canManage(); }
+
+    match /communications/{communicationId} {
+      allow read: if isApproved();
+      allow create, delete: if isAdmin() || isFuncionario() || isCoordenador();
+      allow update: if isApproved()
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy'])
+                    && request.resource.data.readBy.diff(resource.data.readBy).affectedKeys().hasOnly([request.auth.uid]);
+    }
+  }
+}

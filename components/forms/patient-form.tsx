@@ -7,16 +7,26 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
-import { User, Phone, MapPin, AlertCircle } from "lucide-react"
+import { User, Phone, MapPin, AlertCircle, CalendarDays, MessageSquareText } from "lucide-react"
 
 import { createPatient, updatePatient, PatientFormData, Patient } from "@/services/patientService"
+import { PatientObservations } from "@/components/patients/patient-observations"
 
 interface PatientFormProps {
   initialData?: Patient | null;
 }
+
+const timestampToDateInput = (timestamp?: Patient["dataNascimento"]) => {
+  if (!timestamp?.toDate) return "";
+
+  const date = timestamp.toDate();
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 export function PatientForm({ initialData }: PatientFormProps) {
   const router = useRouter();
@@ -51,6 +61,8 @@ export function PatientForm({ initialData }: PatientFormProps) {
     cidade: "", 
     cep: "", 
     estado: "",
+    dataInicio: "",
+    dataTermino: "",
     observacoes: "",
   });
 
@@ -72,7 +84,7 @@ export function PatientForm({ initialData }: PatientFormProps) {
 
       setFormData({
         fullName: initialData.fullName || "",
-        dataNascimento: initialData.dataNascimento?.toDate().toISOString().split('T')[0] || "",
+        dataNascimento: timestampToDateInput(initialData.dataNascimento),
         cpf: initialData.cpf || "",
         rg: initialData.rg || "",
         sexo: initialData.sexo || "",
@@ -95,6 +107,8 @@ export function PatientForm({ initialData }: PatientFormProps) {
         cidade: initialData.cidade || "",
         cep: initialData.cep || "",
         estado: initialData.estado || "",
+        dataInicio: timestampToDateInput(initialData.dataInicio),
+        dataTermino: timestampToDateInput(initialData.dataTermino),
         observacoes: initialData.observacoes || "",
       });
     }
@@ -135,6 +149,12 @@ export function PatientForm({ initialData }: PatientFormProps) {
     // Validação básica que estava nas páginas
     if (!formData.fullName || !formData.dataNascimento || !formData.cpf || !formData.responsavel?.celular || !formData.responsavel?.nome) {
         setError("Nome do Paciente, Data de Nascimento, CPF, Nome do Responsável e Celular do Responsável são obrigatórios.");
+        setLoading(false);
+        return;
+    }
+
+    if (formData.dataInicio && formData.dataTermino && formData.dataTermino < formData.dataInicio) {
+        setError("A Data de Término não pode ser anterior à Data de Início.");
         setLoading(false);
         return;
     }
@@ -226,6 +246,24 @@ export function PatientForm({ initialData }: PatientFormProps) {
         </CardContent>
       </Card>
 
+      {/* Vínculo com a clínica */}
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2"><CalendarDays className="h-5 w-5" /> Período na Clínica</CardTitle></CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="dataInicio">Data de Início</Label>
+              <Input id="dataInicio" type="date" value={formData.dataInicio || ""} onChange={(e) => handleInputChange("dataInicio", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="dataTermino">Data de Término</Label>
+              <Input id="dataTermino" type="date" min={formData.dataInicio || undefined} value={formData.dataTermino || ""} onChange={(e) => handleInputChange("dataTermino", e.target.value)} />
+              <p className="text-xs text-muted-foreground">Deixe em branco enquanto o paciente estiver em acompanhamento.</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Dados do RESPONSÁVEL */}
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><Phone className="h-5 w-5" /> Contato do Responsável</CardTitle></CardHeader>
@@ -267,11 +305,17 @@ export function PatientForm({ initialData }: PatientFormProps) {
         </CardContent>
       </Card>
 
-      {/* Observações */}
+      {/* Histórico de observações */}
       <Card>
-        <CardHeader><CardTitle>Observações Adicionais</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><MessageSquareText className="h-5 w-5" /> Observações Adicionais</CardTitle></CardHeader>
         <CardContent>
-          <Textarea id="observacoes" placeholder="Informações adicionais sobre o paciente..." value={formData.observacoes || ''} onChange={(e) => handleInputChange("observacoes", e.target.value)} rows={4} />
+          {initialData ? (
+            <PatientObservations patientId={initialData.id} legacyObservation={initialData.observacoes} />
+          ) : (
+            <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              Cadastre o paciente primeiro. Depois, na edição ou nos detalhes, você poderá registrar observações com data, horário e usuário responsável.
+            </p>
+          )}
         </CardContent>
       </Card>
       

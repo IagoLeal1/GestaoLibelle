@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 // Adicione Dispatch e SetStateAction aqui
 import { Dispatch, SetStateAction } from "react" 
-import { Search, Filter, MoreHorizontal, User, Phone, MapPin } from "lucide-react"
+import { Search, Filter, MoreHorizontal, User, Phone, MapPin, MessageSquareText } from "lucide-react"
 import { Timestamp } from "firebase/firestore"
 import { Patient, updatePatientStatus } from "@/services/patientService"
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { PatientObservations } from "@/components/patients/patient-observations"
 
 // --- 1. DEFINIÇÃO DA INTERFACE DAS PROPS ---
 interface PatientClientPageProps {
@@ -277,6 +278,8 @@ export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: 
                         <div><Label className="text-sm font-medium text-gray-500">Sexo</Label><div className="mt-1">{getSexoBadge(pacienteSelecionado.sexo)}</div></div>
                         <div><Label className="text-sm font-medium text-gray-500">CPF</Label><p>{pacienteSelecionado.cpf}</p></div>
                         <div><Label className="text-sm font-medium text-gray-500">Status</Label><div className="mt-1">{getStatusBadge(pacienteSelecionado.status)}</div></div>
+                        <div><Label className="text-sm font-medium text-gray-500">Data de Início</Label><p>{formatDate(pacienteSelecionado.dataInicio)}</p></div>
+                        <div><Label className="text-sm font-medium text-gray-500">Data de Término</Label><p>{formatDate(pacienteSelecionado.dataTermino)}</p></div>
                     </div></CardContent>
                 </Card>
                 <Card>
@@ -296,6 +299,12 @@ export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: 
                         <div><Label className="text-sm font-medium text-gray-500">Cidade / Estado</Label><p>{`${pacienteSelecionado.cidade || 'Não informado'} - ${pacienteSelecionado.estado || 'N/A'}`}</p></div>
                         <div><Label className="text-sm font-medium text-gray-500">CEP</Label><p>{pacienteSelecionado.cep || "Não informado"}</p></div>
                     </div></CardContent>
+                </Card>
+                <Card>
+                    <CardHeader><CardTitle className="flex items-center gap-2"><MessageSquareText /> Observações Adicionais</CardTitle></CardHeader>
+                    <CardContent>
+                      <PatientObservations patientId={pacienteSelecionado.id} legacyObservation={pacienteSelecionado.observacoes} />
+                    </CardContent>
                 </Card>
               </div>
             )}
