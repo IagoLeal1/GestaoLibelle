@@ -1,7 +1,7 @@
 // components/pages/grade-terapias-client-page.tsx
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { startOfWeek, endOfWeek, eachDayOfInterval, format, addWeeks, subWeeks, set } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -13,6 +13,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandInput, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { QuickAppointmentModal } from "@/components/modals/quick-appointment-modal";
+import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
 
 // Icons
 import { ChevronLeft, ChevronRight, ChevronsUpDown, Check, Calendar, Search, Palette, MapPin } from "lucide-react";
@@ -20,7 +23,8 @@ import { ChevronLeft, ChevronRight, ChevronsUpDown, Check, Calendar, Search, Pal
 // Services and Types
 import { Professional, getProfessionals } from "@/services/professionalService";
 import { Specialty, getSpecialties } from "@/services/specialtyService";
-import { Appointment, getAppointmentsBySpecialties } from "@/services/appointmentService";
+import { Appointment, QuickAppointmentData, createAppointmentFromTherapyGrid, getAppointmentsBySpecialties } from "@/services/appointmentService";
+import { Patient, getPatients } from "@/services/patientService";
 import { Room, getRooms } from "@/services/roomService";
 import { formatSpecialtyName } from "@/lib/formatters";
 
@@ -35,18 +39,31 @@ const stringToColor = (str: string) => {
 };
 
 export function GradeTerapiasClientPage() {
+    const { firestoreUser } = useAuth();
+    const canCreate = ['admin', 'coordenador', 'funcionario'].includes(firestoreUser?.profile.role ?? '');
     const [professionals, setProfessionals] = useState<Professional[]>([]);
     const [specialties, setSpecialties] = useState<Specialty[]>([]);
     const [appointments, setAppointments] = useState<Appointment[]>([]);
     const [rooms, setRooms] = useState<Room[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loadingInitial, setLoadingInitial] = useState(true);
+    const [loadingWeek, setLoadingWeek] = useState(false);
+    const [weekError, setWeekError] = useState(false);
     const [selectedTherapyGroup, setSelectedTherapyGroup] = useState<string>("");
     const [currentDate, setCurrentDate] = useState(new Date());
     const [popoverOpen, setPopoverOpen] = useState(false);
+    const [patients, setPatients] = useState<Patient[]>([]);
+    const [patientsLoaded, setPatientsLoaded] = useState(false);
+    const [loadingPatients, setLoadingPatients] = useState(false);
+    const [selectedPatientId, setSelectedPatientId] = useState('');
+    const [selectedSlot, setSelectedSlot] = useState<{ date: Date; time: string } | null>(null);
+    const [quickModalOpen, setQuickModalOpen] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const savingRef = useRef(false);
+    const requestIdRef = useRef(0);
+    const [refreshVersion, setRefreshVersion] = useState(0);
 
     useEffect(() => {
         const fetchInitialData = async () => {
-            setLoading(true);
             const [professionalsData, specialtiesData, roomsData] = await Promise.all([ 
                 getProfessionals('ativo'), 
                 getSpecialties(),
@@ -55,7 +72,7 @@ export function GradeTerapiasClientPage() {
             setProfessionals(professionalsData);
             setSpecialties(specialtiesData);
             setRooms(roomsData);
-            setLoading(false);
+            setLoadingInitial(false);
         };
         fetchInitialData();
     }, []);
@@ -77,28 +94,83 @@ export function GradeTerapiasClientPage() {
         return Array.from(groups).sort();
     }, [specialties]);
 
+    const matchingSpecialtyNames = useMemo(() => specialties
+        .filter(s => s.name.toLowerCase().startsWith(selectedTherapyGroup.toLowerCase()))
+        .map(s => s.name), [specialties, selectedTherapyGroup]);
+    const selectedPatient = patients.find(patient => patient.id === selectedPatientId) ?? null;
+
     const fetchWeekAppointments = useCallback(async () => {
-        if (!selectedTherapyGroup) {
+        const requestId = ++requestIdRef.current;
+        if (loadingInitial || !selectedTherapyGroup || matchingSpecialtyNames.length === 0) {
             setAppointments([]);
+            setLoadingWeek(false);
             return;
         }
-        setLoading(true);
-        const matchingSpecialtyNames = specialties.filter(s => s.name.toLowerCase().startsWith(selectedTherapyGroup.toLowerCase())).map(s => s.name);
-        if (matchingSpecialtyNames.length === 0) {
-            setAppointments([]);
-            setLoading(false);
-            return;
-        }
+        setLoadingWeek(true);
+        setWeekError(false);
+        setAppointments([]);
         const start = startOfWeek(currentDate, { weekStartsOn: 1 });
         const end = endOfWeek(currentDate, { weekStartsOn: 1 });
-        const allAppointments = await getAppointmentsBySpecialties(matchingSpecialtyNames, start, end);
-        setAppointments(allAppointments);
-        setLoading(false);
-    }, [selectedTherapyGroup, currentDate, specialties]);
+        try {
+            const allAppointments = await getAppointmentsBySpecialties(matchingSpecialtyNames, start, end);
+            if (requestId === requestIdRef.current) setAppointments(allAppointments);
+        } catch (error) {
+            console.error('Erro ao carregar grade por terapia:', error);
+            if (requestId === requestIdRef.current) setWeekError(true);
+        } finally {
+            if (requestId === requestIdRef.current) setLoadingWeek(false);
+        }
+    }, [selectedTherapyGroup, currentDate, loadingInitial, matchingSpecialtyNames]);
 
     useEffect(() => {
         fetchWeekAppointments();
-    }, [fetchWeekAppointments]);
+        return () => { requestIdRef.current++; };
+    }, [fetchWeekAppointments, refreshVersion]);
+
+    const loadPatients = async () => {
+        if (patientsLoaded || loadingPatients) return;
+        setLoadingPatients(true);
+        try {
+            setPatients(await getPatients('ativo'));
+            setPatientsLoaded(true);
+        } catch (error) {
+            console.error('Erro ao carregar pacientes:', error);
+            toast.error('Não foi possível carregar os pacientes.');
+        } finally {
+            setLoadingPatients(false);
+        }
+    };
+
+    const openSlot = (date: Date, time: string) => {
+        if (!canCreate || loadingWeek || weekError) return;
+        setSelectedSlot({ date, time });
+        setSelectedPatientId('');
+        setQuickModalOpen(true);
+        void loadPatients();
+    };
+
+    const saveAppointment = async (data: QuickAppointmentData) => {
+        if (savingRef.current || !selectedPatient || !matchingSpecialtyNames.includes(data.specialty)) return;
+        savingRef.current = true;
+        setSaving(true);
+        try {
+            const result = await createAppointmentFromTherapyGrid(selectedPatient.id, data, matchingSpecialtyNames);
+            if (!result.success) {
+                toast.error(result.error || 'Não foi possível salvar o agendamento.');
+                return;
+            }
+            toast.success(data.isRecurring ? 'Sessões agendadas com sucesso.' : 'Agendamento salvo com sucesso.');
+            setQuickModalOpen(false);
+            setSelectedSlot(null);
+            setRefreshVersion(version => version + 1);
+        } catch (error) {
+            console.error('Erro inesperado ao salvar agendamento:', error);
+            toast.error('Não foi possível salvar o agendamento.');
+        } finally {
+            savingRef.current = false;
+            setSaving(false);
+        }
+    };
 
     const weekDays = eachDayOfInterval({
         start: startOfWeek(currentDate, { weekStartsOn: 1 }),
@@ -142,7 +214,7 @@ export function GradeTerapiasClientPage() {
                         <div className="text-center font-semibold w-48"><Calendar className="inline h-4 w-4 mr-2"/>{weekLabel}</div>
                         <Button variant="outline" size="icon" onClick={() => setCurrentDate(addWeeks(currentDate, 1))}><ChevronRight className="h-4 w-4" /></Button>
                     </div>
-                    <div className="w-full md:w-1/3" />
+                    <div className="hidden w-1/3 md:block" />
                 </CardContent>
             </Card>
             
@@ -152,10 +224,12 @@ export function GradeTerapiasClientPage() {
 
             <div className="overflow-x-auto">
                 {!selectedTherapyGroup && <p className="text-center text-muted-foreground p-8">Selecione uma terapia para ver a grade.</p>}
-                {loading && selectedTherapyGroup && <Skeleton className="h-[calc(13*6rem)] w-full"/>}
-                {!loading && selectedTherapyGroup && appointments.length === 0 && <p className="text-center text-muted-foreground p-8">Nenhum agendamento encontrado para esta terapia na semana selecionada.</p>}
-                {!loading && appointments.length > 0 && (
-                    <table className="w-full border-collapse">
+                {canCreate && selectedTherapyGroup && !loadingInitial && !loadingWeek && !weekError && <p className="pb-2 text-xs text-muted-foreground">Clique ou toque em um espaço da grade para agendar.</p>}
+                {(loadingInitial || loadingWeek) && selectedTherapyGroup && <Skeleton className="h-[calc(13*6rem)] w-full"/>}
+                {!loadingInitial && !loadingWeek && weekError && selectedTherapyGroup && <p role="alert" className="text-center text-destructive p-8">Não foi possível carregar a grade. Tente mudar de semana e voltar.</p>}
+                {!loadingInitial && !loadingWeek && !weekError && selectedTherapyGroup && appointments.length === 0 && <p className="text-center text-muted-foreground p-4">Nenhum agendamento nesta semana.{canCreate ? ' Você pode adicionar um pelo horário desejado.' : ''}</p>}
+                {!loadingInitial && !loadingWeek && !weekError && selectedTherapyGroup && (
+                    <table className="w-full min-w-[900px] border-collapse">
                         <thead><tr className="bg-muted"><th className="p-2 border w-24">Horário</th>{weekDays.map(day => (<th key={day.toISOString()} className="p-2 border text-center capitalize">{format(day, 'EEEE', { locale: ptBR })} <br/><span className="font-normal text-sm">{format(day, 'dd/MM')}</span></th>))}</tr></thead>
                         <tbody>
                             {timeSlots.map(time => {
@@ -173,11 +247,10 @@ export function GradeTerapiasClientPage() {
                                             );
                                             
                                             return (
-                                                <td key={day.toISOString()} className="p-1 border align-top">
-                                                    {/* NOVO: Usando .map() para renderizar cada agendamento encontrado */}
-                                                    <div className="space-y-1">
+                                                <td key={day.toISOString()} className={`p-1 border align-top ${canCreate ? 'cursor-pointer transition-colors hover:bg-green-50' : ''}`} onClick={canCreate ? () => openSlot(day, time) : undefined}>
+                                                    <div className="min-h-20 space-y-1">
                                                         {appointmentsInSlot.map(appointment => (
-                                                            <div key={appointment.id} className="p-2 rounded shadow-sm text-xs bg-white border-l-4" style={{ borderColor: professionalColors.get(appointment.professionalId) || '#ccc' }}>
+                                                            <div key={appointment.id} className="p-2 rounded shadow-sm text-xs bg-white border-l-4" style={{ borderColor: professionalColors.get(appointment.professionalId) || '#ccc' }} onClick={event => event.stopPropagation()}>
                                                                 <p className="font-bold">{appointment.patientName}</p>
                                                                 <p className="text-sm">{appointment.professionalName}</p>
                                                                 <p className="text-muted-foreground">{format(appointment.start.toDate(), 'HH:mm')} - {format(appointment.end.toDate(), 'HH:mm')}</p>
@@ -201,6 +274,26 @@ export function GradeTerapiasClientPage() {
                     </table>
                 )}
             </div>
+            {canCreate && (
+                    <QuickAppointmentModal
+                        isOpen={quickModalOpen}
+                        onClose={() => { if (!savingRef.current) setQuickModalOpen(false); }}
+                        onSave={saveAppointment}
+                        slotInfo={selectedSlot}
+                        patient={selectedPatient}
+                        patientOptions={patients}
+                        onPatientChange={setSelectedPatientId}
+                        loadingPatients={loadingPatients}
+                        professionals={professionals}
+                        specialties={specialties}
+                        rooms={rooms}
+                        allowedSpecialtyNames={matchingSpecialtyNames}
+                        restrictProfessionalsToSpecialty
+                        saveLabel="Salvar agendamento"
+                        saving={saving}
+                        maxSessions={24}
+                    />
+            )}
         </div>
     );
 }

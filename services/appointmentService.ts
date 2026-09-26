@@ -228,6 +228,23 @@ export const getAppointmentsByProfessional = async (professionalId: string, date
       return [];
     }
 };
+
+export const getAppointmentsByProfessionalInRange = async (
+  professionalId: string,
+  startDate: Date,
+  endDate: Date
+): Promise<Appointment[]> => {
+  const q = query(
+    collection(db, 'appointments'),
+    where('professionalId', '==', professionalId),
+    where('start', '>=', Timestamp.fromDate(startOfDay(startDate))),
+    where('start', '<=', Timestamp.fromDate(endOfDay(endDate))),
+    orderBy('start')
+  );
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
+};
+
 export const getAppointmentsForReport = async (options: { professionalId?: string, patientId?: string, startDate: Date, endDate: Date }): Promise<Appointment[]> => {
     try {
         const appointmentsRef = collection(db, 'appointments');
@@ -387,6 +404,111 @@ export const createMultipleAppointments = async (patientId: string, appointments
     return { success: false, error: errorMessage };
   }
 };
+
+// Fluxo da grade por terapia: consulta apenas os agendamentos do paciente e do
+// profissional no período envolvido, antes de fazer uma única gravação em lote.
+export const createAppointmentFromTherapyGrid = async (
+  patientId: string,
+  data: QuickAppointmentData,
+  allowedSpecialtyNames: string[],
+  fixedProfessionalId?: string
+): Promise<{ success: boolean; error?: string }> => {
+  if (!patientId || !allowedSpecialtyNames.includes(data.specialty) ||
+      (fixedProfessionalId && data.professionalId !== fixedProfessionalId)) {
+    return { success: false, error: "Paciente ou terapia inválida para esta grade." };
+  }
+  const sessions = data.isRecurring ? data.sessions : 1;
+  if (!Number.isInteger(sessions) || sessions < 1 || sessions > 24 ||
+      Number.isNaN(data.start.getTime()) || Number.isNaN(data.end.getTime()) || data.end <= data.start) {
+    return { success: false, error: "Informe de 1 a 24 sessões com horário válido." };
+  }
+
+  const slots = Array.from({ length: sessions }, (_, index) => {
+    const start = index === 0 ? data.start : data.frequency === 'daily'
+      ? addDays(data.start, index)
+      : addWeeks(data.start, index * (data.frequency === 'bi-weekly' ? 2 : 1));
+    return { start, end: new Date(start.getTime() + (data.end.getTime() - data.start.getTime())) };
+  });
+  const rangeStart = startOfDay(slots[0].start);
+  const rangeEnd = endOfDay(slots[slots.length - 1].end);
+
+  try {
+    const [patientSnap, professionalSnap] = await Promise.all([
+      getDoc(doc(db, 'patients', patientId)),
+      getDoc(doc(db, 'professionals', data.professionalId)),
+    ]);
+    if (!patientSnap.exists() || patientSnap.data().status !== 'ativo') {
+      return { success: false, error: "Paciente não encontrado ou inativo." };
+    }
+    if (!professionalSnap.exists() || professionalSnap.data().status !== 'ativo') {
+      return { success: false, error: "Profissional não encontrado ou inativo." };
+    }
+    const professionalSpecialty = String(professionalSnap.data().especialidade ?? '').trim().toLowerCase();
+    if (!professionalSpecialty || !data.specialty.toLowerCase().startsWith(professionalSpecialty)) {
+      return { success: false, error: "O profissional não atende a terapia selecionada." };
+    }
+
+    const overlaps = (appointment: Appointment) => appointment.status !== 'cancelado' &&
+      slots.some(slot => appointment.start.toDate() < slot.end && appointment.end.toDate() > slot.start);
+    const professionalAppointments = await getDocs(query(collection(db, 'appointments'),
+      where('professionalId', '==', data.professionalId),
+      where('start', '>=', Timestamp.fromDate(rangeStart)),
+      where('start', '<=', Timestamp.fromDate(rangeEnd))
+    ));
+    if (professionalAppointments.docs.some(doc => overlaps(doc.data() as Appointment))) {
+      return { success: false, error: "O profissional já tem atendimento em um dos horários escolhidos." };
+    }
+    const patientAppointments = await getDocs(query(collection(db, 'appointments'),
+      where('patientId', '==', patientId),
+      where('start', '>=', Timestamp.fromDate(rangeStart)),
+      where('start', '<=', Timestamp.fromDate(rangeEnd))
+    ));
+    if (patientAppointments.docs.some(doc => overlaps(doc.data() as Appointment))) {
+      return { success: false, error: "O paciente já tem atendimento em um dos horários escolhidos." };
+    }
+    if (data.roomId) {
+      const roomAppointments = await getDocs(query(collection(db, 'appointments'),
+        where('sala', '==', data.roomId),
+        where('start', '>=', Timestamp.fromDate(rangeStart)),
+        where('start', '<=', Timestamp.fromDate(rangeEnd))
+      ));
+      if (roomAppointments.docs.some(doc => overlaps(doc.data() as Appointment))) {
+        return { success: false, error: "A sala já está ocupada em um dos horários escolhidos." };
+      }
+    }
+
+    const batch = writeBatch(db);
+    const blockId = doc(collection(db, 'appointments')).id;
+    slots.forEach((slot, index) => {
+      const appointmentRef = index === 0 ? doc(db, 'appointments', blockId) : doc(collection(db, 'appointments'));
+      batch.set(appointmentRef, {
+        title: `${patientSnap.data().fullName} - ${professionalSnap.data().fullName}`,
+        patientId,
+        patientName: patientSnap.data().fullName,
+        professionalId: data.professionalId,
+        professionalName: professionalSnap.data().fullName,
+        tipo: data.specialty,
+        sala: data.roomId || null,
+        convenio: data.convenio || patientSnap.data().convenio || '',
+        valorConsulta: data.valorConsulta || 0,
+        start: Timestamp.fromDate(slot.start),
+        end: Timestamp.fromDate(slot.end),
+        status: 'agendado' as AppointmentStatus,
+        blockId,
+        isLastInBlock: index === slots.length - 1,
+      });
+    });
+    await batch.commit();
+    return { success: true };
+  } catch (error) {
+    console.error("Erro ao salvar agendamento na grade por terapia:", error);
+    if (error instanceof Error && error.message.toLowerCase().includes('index')) {
+      return { success: false, error: "Falta um índice no Firebase para verificar os horários. Nenhum agendamento foi salvo." };
+    }
+    return { success: false, error: "Não foi possível verificar os horários ou salvar. Tente novamente." };
+  }
+};
+
 export const updateAppointment = async (id: string, data: Partial<AppointmentFormData & { status: AppointmentStatus }>) => {
   try {
     const docRef = doc(db, 'appointments', id);

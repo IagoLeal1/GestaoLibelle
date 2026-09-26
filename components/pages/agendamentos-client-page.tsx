@@ -439,6 +439,7 @@ export function AgendamentosClientPage() {
                   <Link href="/agendamentos/novo" passHref><DropdownMenuItem>Agendamento Único/Sequencial</DropdownMenuItem></Link>
                   <Link href="/agendamentos/grade" passHref><DropdownMenuItem>Agendamento em Grade por paciente</DropdownMenuItem></Link>
                   <Link href="/agendamentos/terapia" passHref><DropdownMenuItem>Agendamento em Grade por terapia</DropdownMenuItem></Link>
+                  <DropdownMenuItem asChild><Link href="/agendamentos/terapeuta">Grade por terapeuta</Link></DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <Link href="/agendamentos/assistente" passHref>
                     <DropdownMenuItem>

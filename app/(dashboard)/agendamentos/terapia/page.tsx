@@ -13,7 +13,7 @@ export default function GradeTerapiaPage() {
         </Link>
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Grade por Terapia</h2>
-          <p className="text-muted-foreground">Visualize os horários dos acompanhantes terapêuticos por especialidade.</p>
+          <p className="text-muted-foreground">Visualize os horários por terapia e adicione agendamentos diretamente na grade.</p>
         </div>
       </div>
       <GradeTerapiasClientPage />

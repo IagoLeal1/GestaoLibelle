@@ -2,6 +2,7 @@
 
 import {
     createAppointment,
+    createAppointmentFromTherapyGrid,
     deleteAppointment,
     updateAppointment,
     updateAppointmentBlock,
@@ -10,6 +11,7 @@ import {
     getOccupiedRoomIdsByTime,
     findAvailableSlots,
     Appointment,
+    QuickAppointmentData,
 } from '@/services/appointmentService';
 import { db } from '@/lib/firebaseConfig';
 import {
@@ -150,6 +152,87 @@ describe('Appointment Service - Cobertura Completa', () => {
 
 
     // --- Testes de CRUD ---
+    describe('Grade por terapia', () => {
+        beforeEach(() => {
+            mockedGetDocs.mockReset();
+            mockedGetDocs.mockResolvedValue({ docs: [], empty: true });
+        });
+
+        const quickData: QuickAppointmentData = {
+            start: new Date('2025-10-10T10:00:00'),
+            end: new Date('2025-10-10T10:50:00'),
+            professionalId: 'prof-123',
+            specialty: 'Psicologia ABA',
+            valorConsulta: 150,
+            isRecurring: false,
+            sessions: 1,
+            frequency: 'weekly',
+        };
+
+        it('não consulta nem grava quando a terapia não pertence à grade', async () => {
+            const result = await createAppointmentFromTherapyGrid('paciente-123', quickData, ['Fonoaudiologia']);
+            expect(result.success).toBe(false);
+            expect(mockedGetDoc).not.toHaveBeenCalled();
+            expect(mockedGetDocs).not.toHaveBeenCalled();
+            expect(mockedWriteBatch).not.toHaveBeenCalled();
+        });
+
+        it('não consulta nem grava se tentar trocar o profissional fixo da grade', async () => {
+            const result = await createAppointmentFromTherapyGrid('paciente-123', quickData, ['Psicologia ABA'], 'outro-profissional');
+            expect(result.success).toBe(false);
+            expect(mockedGetDoc).not.toHaveBeenCalled();
+            expect(mockedGetDocs).not.toHaveBeenCalled();
+            expect(mockedWriteBatch).not.toHaveBeenCalled();
+        });
+
+        it('não grava quando o profissional tem conflito de horário', async () => {
+            mockedGetDoc
+                .mockResolvedValueOnce({ exists: () => true, data: () => ({ fullName: 'João Paciente', status: 'ativo' }) })
+                .mockResolvedValueOnce({ exists: () => true, data: () => mockProfessional });
+            mockedGetDocs
+                .mockResolvedValueOnce({ docs: [{ data: () => mockAppointment }] })
+                .mockResolvedValueOnce({ docs: [] });
+
+            const result = await createAppointmentFromTherapyGrid('paciente-123', quickData, ['Psicologia ABA']);
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/profissional/);
+            expect(mockedGetDocs).toHaveBeenCalledTimes(1);
+            expect(mockedWriteBatch).not.toHaveBeenCalled();
+        });
+
+        it('não grava quando a sala escolhida está ocupada', async () => {
+            mockedGetDoc
+                .mockResolvedValueOnce({ exists: () => true, data: () => ({ fullName: 'João Paciente', status: 'ativo' }) })
+                .mockResolvedValueOnce({ exists: () => true, data: () => mockProfessional });
+            mockedGetDocs
+                .mockResolvedValueOnce({ docs: [] })
+                .mockResolvedValueOnce({ docs: [] })
+                .mockResolvedValueOnce({ docs: [{ data: () => ({ ...mockAppointment, sala: 'sala-1' }) }] });
+
+            const result = await createAppointmentFromTherapyGrid('paciente-123', {
+                ...quickData, roomId: 'sala-1',
+            }, ['Psicologia ABA']);
+            expect(result.success).toBe(false);
+            expect(result.error).toMatch(/sala/);
+            expect(mockedWriteBatch).not.toHaveBeenCalled();
+        });
+
+        it('grava a recorrência em um lote após consultar os horários', async () => {
+            mockedGetDoc
+                .mockResolvedValueOnce({ exists: () => true, data: () => ({ fullName: 'João Paciente', status: 'ativo' }) })
+                .mockResolvedValueOnce({ exists: () => true, data: () => mockProfessional });
+            mockedGetDocs.mockResolvedValue({ docs: [] });
+
+            const result = await createAppointmentFromTherapyGrid('paciente-123', {
+                ...quickData, isRecurring: true, sessions: 2,
+            }, ['Psicologia ABA']);
+            expect(result.success).toBe(true);
+            expect(mockedGetDocs).toHaveBeenCalledTimes(2);
+            expect(mockBatch.set).toHaveBeenCalledTimes(2);
+            expect(mockBatch.commit).toHaveBeenCalledTimes(1);
+        });
+    });
+
     describe('CRUD Operations', () => {
         it('should create a single appointment successfully', async () => {
             mockedGetDoc

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { format, addMinutes, setHours, setMinutes, setSeconds, setMilliseconds } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -23,12 +23,21 @@ interface QuickAppointmentModalProps {
   onSave: (data: QuickAppointmentData) => void;
   slotInfo: { date: Date; time: string } | null;
   patient: Patient | null;
+  patientOptions?: Patient[];
+  onPatientChange?: (patientId: string) => void;
+  loadingPatients?: boolean;
   professionals: Professional[];
   specialties: Specialty[];
   rooms: Room[];
+  allowedSpecialtyNames?: string[];
+  restrictProfessionalsToSpecialty?: boolean;
+  saveLabel?: string;
+  saving?: boolean;
+  maxSessions?: number;
+  fixedProfessionalId?: string;
 }
 
-export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patient, professionals, specialties, rooms }: QuickAppointmentModalProps) {
+export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patient, patientOptions, onPatientChange, loadingPatients = false, professionals, specialties, rooms, allowedSpecialtyNames, restrictProfessionalsToSpecialty = false, saveLabel = "Adicionar à Grade", saving = false, maxSessions, fixedProfessionalId }: QuickAppointmentModalProps) {
     const [professionalId, setProfessionalId] = useState<string>('');
     const [specialty, setSpecialty] = useState<string>('');
     const [valorConsulta, setValorConsulta] = useState<number>(0);
@@ -40,11 +49,23 @@ export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patie
     const [availableSpecialties, setAvailableSpecialties] = useState<Specialty[]>([]);
     const [convenio, setConvenio] = useState<string>('');
     const [availableConvenios, setAvailableConvenios] = useState<string[]>([]);
+    const specialtiesForModal = useMemo(
+        () => allowedSpecialtyNames ? specialties.filter(spec => allowedSpecialtyNames.includes(spec.name)) : specialties,
+        [specialties, allowedSpecialtyNames]
+    );
+    const professionalOptions = useMemo(() => {
+        if (!restrictProfessionalsToSpecialty) return professionals;
+        const relevantNames = specialty ? [specialty] : specialtiesForModal.map(spec => spec.name);
+        return professionals.filter(prof => {
+            const name = prof.especialidade.trim().toLowerCase();
+            return name && relevantNames.some(relevant => relevant.toLowerCase().startsWith(name));
+        });
+    }, [professionals, restrictProfessionalsToSpecialty, specialtiesForModal, specialty]);
 
     useEffect(() => {
         if (isOpen) {
             // Resetar o estado ao abrir
-            setProfessionalId('');
+            setProfessionalId(fixedProfessionalId ?? '');
             setSpecialty('');
             setValorConsulta(0);
             setRoomId(undefined);
@@ -63,7 +84,7 @@ export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patie
                 setConvenio(defaultConvenio);
 
                 const convenioLower = defaultConvenio.toLowerCase();
-                const filtered = specialties.filter(spec => {
+                const filtered = specialtiesForModal.filter(spec => {
                     const specNameLower = spec.name.toLowerCase();
                     if (convenioLower === 'particular') {
                         return !['unimed', 'bradesco', 'amil', 'sulamerica'].some(conv => specNameLower.includes(conv));
@@ -74,14 +95,14 @@ export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patie
             } else {
                 setAvailableConvenios([]);
                 setConvenio('');
-                setAvailableSpecialties(specialties);
+                setAvailableSpecialties(specialtiesForModal);
             }
         }
-    }, [isOpen, patient, specialties]);
+    }, [isOpen, patient, specialtiesForModal, fixedProfessionalId]);
 
     const filterSpecialtiesByConvenio = (conv: string) => {
         const convenioLower = conv.toLowerCase();
-        const filtered = specialties.filter(spec => {
+        const filtered = specialtiesForModal.filter(spec => {
             const specNameLower = spec.name.toLowerCase();
             if (convenioLower === 'particular') {
                 return !['unimed', 'bradesco', 'amil', 'sulamerica'].some(c => specNameLower.includes(c));
@@ -100,14 +121,28 @@ export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patie
     };
 
     const handleSpecialtyChange = (specialtyName: string) => {
-        const selectedSpecialty = specialties.find(s => s.name === specialtyName);
+        const selectedSpecialty = specialtiesForModal.find(s => s.name === specialtyName);
         setSpecialty(specialtyName);
         setValorConsulta(selectedSpecialty?.value || 0);
+        if (restrictProfessionalsToSpecialty && professionalId && !fixedProfessionalId) {
+            const professional = professionals.find(p => p.id === professionalId);
+            if (!professional || !specialtyName.toLowerCase().startsWith(professional.especialidade.trim().toLowerCase())) {
+                setProfessionalId('');
+            }
+        }
     };
 
     const handleSaveClick = () => {
-        if (!professionalId || !specialty || !slotInfo) {
+        if (patientOptions && !patient) {
+            toast.error("Selecione um paciente.");
+            return;
+        }
+        if (!professionalId || !specialty || !slotInfo || !availableSpecialties.some(spec => spec.name === specialty) || !professionalOptions.some(prof => prof.id === professionalId) || (fixedProfessionalId && professionalId !== fixedProfessionalId)) {
             toast.error("Profissional e Especialidade são obrigatórios.");
+            return;
+        }
+        if (maxSessions && isRecurring && (!Number.isInteger(sessions) || sessions < 1 || sessions > maxSessions)) {
+            toast.error(`Informe entre 1 e ${maxSessions} sessões.`);
             return;
         }
 
@@ -134,19 +169,29 @@ export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patie
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent>
+            <DialogContent className="max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Agendamento Rápido</DialogTitle>
                     <DialogDescription>{title}</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
+                    {patientOptions && onPatientChange && (
+                        <div className="space-y-2">
+                            <Label htmlFor="quick-patient">Paciente *</Label>
+                            <Select value={patient?.id || undefined} onValueChange={onPatientChange} disabled={loadingPatients || saving}>
+                                <SelectTrigger id="quick-patient"><SelectValue placeholder={loadingPatients ? "Carregando pacientes..." : "Selecione um paciente"} /></SelectTrigger>
+                                <SelectContent>{patientOptions.map(option => <SelectItem key={option.id} value={option.id}>{option.fullName}</SelectItem>)}</SelectContent>
+                            </Select>
+                            {!loadingPatients && patientOptions.length === 0 && <p className="text-sm text-muted-foreground">Nenhum paciente ativo encontrado.</p>}
+                        </div>
+                    )}
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2"><Label htmlFor="professional">Profissional *</Label><Select value={professionalId} onValueChange={setProfessionalId}><SelectTrigger id="professional"><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{professionals.map(p => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent></Select></div>
+                        <div className="space-y-2"><Label htmlFor="professional">Profissional *</Label><Select value={professionalId} onValueChange={setProfessionalId} disabled={Boolean(fixedProfessionalId)}><SelectTrigger id="professional"><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{professionalOptions.map(p => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent></Select></div>
                         <div className="space-y-2"><Label>Modalidade / Convênio</Label><Select value={convenio || undefined} onValueChange={(val) => { setConvenio(val); filterSpecialtiesByConvenio(val); }} disabled={!patient}><SelectTrigger><SelectValue placeholder={!patient ? "Selecione um paciente" : "Selecione..."} /></SelectTrigger><SelectContent>{availableConvenios.map((c, idx) => <SelectItem key={idx} value={c}>{c}</SelectItem>)}</SelectContent></Select></div>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2"><Label htmlFor="specialty">Especialidade *</Label><Select value={specialty || undefined} onValueChange={handleSpecialtyChange} disabled={!patient}><SelectTrigger id="specialty"><SelectValue placeholder={!patient ? "Selecione um paciente" : "Selecione..."} /></SelectTrigger><SelectContent>{availableSpecialties.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+                        <div className="space-y-2"><Label htmlFor="specialty">Especialidade *</Label><Select value={specialty || undefined} onValueChange={handleSpecialtyChange} disabled={!patient || availableSpecialties.length === 0}><SelectTrigger id="specialty"><SelectValue placeholder={!patient ? "Selecione um paciente" : availableSpecialties.length === 0 ? "Sem opção para este convênio" : "Selecione..."} /></SelectTrigger><SelectContent>{availableSpecialties.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
                         <div className="space-y-2"><Label htmlFor="room">Sala</Label><Select value={roomId} onValueChange={(value) => setRoomId(value === "none" ? undefined : value)}><SelectTrigger id="room"><SelectValue placeholder="Opcional..." /></SelectTrigger><SelectContent><SelectItem value="none">Nenhuma</SelectItem>{rooms.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent></Select></div>
                     </div>
                     
@@ -171,14 +216,14 @@ export function QuickAppointmentModal({ isOpen, onClose, onSave, slotInfo, patie
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div className="space-y-2"><Label htmlFor="sessions">Nº de Sessões</Label><Input id="sessions" type="number" value={sessions} onChange={(e) => setSessions(Number(e.target.value))} min={1} /></div>
+                                <div className="space-y-2"><Label htmlFor="sessions">Nº de Sessões</Label><Input id="sessions" type="number" value={sessions} onChange={(e) => setSessions(Number(e.target.value))} min={1} max={maxSessions} /></div>
                             </div>
                         )}
                     </div>
                 </div>
                 <DialogFooter>
-                    <Button variant="outline" onClick={onClose}>Cancelar</Button>
-                    <Button onClick={handleSaveClick}>Adicionar à Grade</Button>
+                    <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+                    <Button onClick={handleSaveClick} disabled={saving || Boolean(patientOptions && (!patient || loadingPatients))}>{saving ? "Salvando..." : saveLabel}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

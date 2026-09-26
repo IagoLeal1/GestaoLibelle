@@ -172,6 +172,12 @@ const { user, firestoreUser: userProfile } = useAuth();
                                 Ver Detalhes
                             </DropdownMenuItem>
 
+                            <DropdownMenuItem asChild>
+                              <Link href={`/agendamentos/terapeuta?professionalId=${encodeURIComponent(profissional.id)}`}>
+                                Ver grade de horários
+                              </Link>
+                            </DropdownMenuItem>
+
                             <Link href={`/profissionais/editar/${profissional.id}`} passHref>
                                 <DropdownMenuItem>Editar</DropdownMenuItem>
                             </Link>
