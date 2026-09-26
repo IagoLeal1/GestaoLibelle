@@ -77,6 +77,12 @@ const MESES = [
   "Dezembro",
 ];
 
+const normalizeConvenio = (convenio: string) =>
+  convenio.trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
+
+const getConvenios = (convenio?: string) =>
+  (convenio || "").split(",").map((item) => item.trim()).filter(Boolean);
+
 const getDataNascimento = (dataNascimento?: Timestamp) => {
   if (!dataNascimento?.toDate) return null;
 
@@ -112,6 +118,7 @@ export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: 
   const [sexoFilter, setSexoFilter] = useState("todos");
   const [statusFilter, setStatusFilter] = useState("todos");
   const [mesAniversarioFilter, setMesAniversarioFilter] = useState("todos");
+  const [convenioFilter, setConvenioFilter] = useState("todos");
   const [pacienteSelecionado, setPacienteSelecionado] = useState<Patient | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
 
@@ -134,6 +141,15 @@ export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: 
     }
   };
 
+  const conveniosDisponiveis = Array.from(
+    new Map(
+      pacientes.flatMap((paciente) => getConvenios(paciente.convenio))
+        .map((convenio) => [normalizeConvenio(convenio), convenio])
+    ).entries()
+  ).sort((a, b) => a[1].localeCompare(b[1], "pt-BR"));
+
+  const temPacienteSemConvenio = pacientes.some((paciente) => getConvenios(paciente.convenio).length === 0);
+
   // LÓGICA DE FILTRO (Usa a lista 'pacientes' que veio do Pai)
   const pacientesFiltrados = pacientes.filter((paciente) => {
     const search = searchTerm.toLowerCase();
@@ -146,7 +162,12 @@ export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: 
     const matchesStatus = statusFilter === "todos" || paciente.status === statusFilter;
     const matchesMesAniversario = mesAniversarioFilter === "todos" ||
       dataNascimento?.getUTCMonth() === Number(mesAniversarioFilter);
-    return matchesSearch && matchesSexo && matchesStatus && matchesMesAniversario;
+    const conveniosPaciente = getConvenios(paciente.convenio);
+    const matchesConvenio = convenioFilter === "todos" ||
+      (convenioFilter === "sem-convenio"
+        ? conveniosPaciente.length === 0
+        : conveniosPaciente.some((convenio) => `convenio:${normalizeConvenio(convenio)}` === convenioFilter));
+    return matchesSearch && matchesSexo && matchesStatus && matchesMesAniversario && matchesConvenio;
   }).sort((a, b) => {
     if (mesAniversarioFilter === "todos") return 0;
 
@@ -191,7 +212,7 @@ export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: 
             <CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5" /> Filtros</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
               <div className="space-y-2">
                 <Label htmlFor="search">Buscar paciente</Label>
                 <div className="relative"><Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input id="search" placeholder="Nome, CPF ou responsável..." className="pl-8" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
@@ -213,6 +234,19 @@ export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: 
                     {MESES.map((mes, index) => (
                       <SelectItem key={mes} value={String(index)}>{mes}</SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="convenio-filter">Convênio</Label>
+                <Select value={convenioFilter} onValueChange={setConvenioFilter}>
+                  <SelectTrigger id="convenio-filter"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os convênios</SelectItem>
+                    {conveniosDisponiveis.map(([value, label]) => (
+                      <SelectItem key={value} value={`convenio:${value}`}>{label}</SelectItem>
+                    ))}
+                    {temPacienteSemConvenio && <SelectItem value="sem-convenio">Sem convênio</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
