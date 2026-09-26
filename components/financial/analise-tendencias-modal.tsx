@@ -52,7 +52,7 @@ export function AnaliseTendenciasModal({ isOpen, onClose }: AnaliseTendenciasMod
       }
 
       transacoes.forEach(tx => {
-        const monthKey = format(tx.date.toDate(), 'MMM', { locale: ptBR });
+        const monthKey = format(tx.dataMovimento.toDate(), 'MMM', { locale: ptBR });
         if (monthlyData[monthKey]) {
           if (tx.type === 'receita') {
             monthlyData[monthKey].Receitas += tx.value;
