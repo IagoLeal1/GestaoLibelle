@@ -54,9 +54,22 @@ service cloud.firestore {
 
     // --- 2. REGRAS DE USUÁRIOS ---
     match /users/{userId} {
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow read: if isApproved();
-      allow update: if isAdmin() || request.auth.uid == userId;
+      // O próprio cadastro sempre nasce pendente e com um dos papéis do formulário:
+      // quem aprova e quem dá papel de admin ou coordenação é o admin
+      allow create: if isSignedIn() && request.auth.uid == userId
+        && request.resource.data.uid == userId
+        && request.resource.data.profile.status == 'pendente'
+        && request.resource.data.profile.role in ['familiar', 'profissional', 'funcionario'];
+      // Cada pessoa lê o próprio cadastro, mesmo pendente: é assim que o login avisa que falta aprovação
+      allow read: if isApproved() || (isSignedIn() && request.auth.uid == userId);
+      // O admin altera tudo. A própria pessoa só troca o nome (tela "Minha conta").
+      allow update: if isAdmin() || (
+        request.auth.uid == userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0
+        && request.resource.data.displayName.size() <= 120
+      );
       allow delete: if isAdmin();
     }
 
@@ -72,7 +85,13 @@ service cloud.firestore {
         isApproved()
         && request.auth.uid in resource.data.memberIds
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'updatedAt'])
+        && request.resource.data.lastMessage.keys().hasOnly(['content', 'senderId', 'senderName', 'createdAt'])
+        && request.resource.data.lastMessage.content is string
+        && request.resource.data.lastMessage.content.size() > 0
+        && request.resource.data.lastMessage.content.size() <= 2000
         && request.resource.data.lastMessage.senderId == request.auth.uid
+        && request.resource.data.lastMessage.senderName
+          == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
         && request.resource.data.lastMessage.createdAt == request.time
         && request.resource.data.updatedAt == request.time
       );

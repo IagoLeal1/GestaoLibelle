@@ -126,6 +126,23 @@ describe('atualização do grupo', () => {
     await assertFails(updateDoc(grupo, previaDe('terapeuta', 'Paula Fonoaudióloga')));
   });
 
+  it('membro não grava a prévia com um nome diferente do cadastro', async () => {
+    const grupo = doc(bancoDe('familia'), 'chat_groups', GRUPO);
+    await assertFails(updateDoc(grupo, previaDe('familia', 'Paula Fonoaudióloga')));
+  });
+
+  it('a prévia só aceita os campos da mensagem', async () => {
+    const grupo = doc(bancoDe('familia'), 'chat_groups', GRUPO);
+    const previa = previaDe('familia', 'Maria Souza');
+    await assertFails(updateDoc(grupo, { ...previa, lastMessage: { ...previa.lastMessage, destaque: true } }));
+  });
+
+  it('a prévia não aceita texto com mais de 2000 caracteres', async () => {
+    const grupo = doc(bancoDe('familia'), 'chat_groups', GRUPO);
+    const previa = previaDe('familia', 'Maria Souza');
+    await assertFails(updateDoc(grupo, { ...previa, lastMessage: { ...previa.lastMessage, content: 'a'.repeat(2001) } }));
+  });
+
   it('membro não grava a prévia com o horário do aparelho', async () => {
     const grupo = doc(bancoDe('familia'), 'chat_groups', GRUPO);
     const horarioDoAparelho = Timestamp.fromMillis(Date.UTC(2020, 0, 1));
