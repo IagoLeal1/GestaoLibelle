@@ -6,6 +6,18 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 3000
+    },
+    {
+      "name": "firebase-emulador",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "emulators"],
+      "port": 4000
+    },
+    {
+      "name": "gestao-libelle-emulador",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:emulator"],
+      "port": 3001
     }
   ]
 }

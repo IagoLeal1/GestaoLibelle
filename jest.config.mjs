@@ -13,7 +13,10 @@ const customJestConfig = {
   
   // Define o ambiente de teste como o jsdom (simula um navegador)
   testEnvironment: 'jest-environment-jsdom',
-  
+
+  // Os testes de __tests__/firebase precisam do emulador: rode com npm run test:firebase
+  testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/__tests__/firebase/'],
+
   // Mapeia o alias de importação '@/*' que está no seu tsconfig.json para o Jest entender
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
