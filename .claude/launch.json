@@ -9,8 +9,8 @@
     },
     {
       "name": "firebase-emulador",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "emulators"],
+      "runtimeExecutable": "zsh",
+      "runtimeArgs": ["-ic", "exec npm run emulators"],
       "port": 4000
     },
     {
