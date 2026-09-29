@@ -108,6 +108,9 @@ export const subscribeToUserGroups = (
   }, onError);
 };
 
+// Quantas mensagens recentes a conversa acompanha ao vivo; as anteriores vêm por loadOlderMessages
+export const LIVE_WINDOW_SIZE = 100;
+
 export const subscribeToChatMessages = (
   groupId: string,
   callback: (messages: ChatMessage[]) => void,
@@ -116,7 +119,7 @@ export const subscribeToChatMessages = (
   const q = query(
     collection(db, "chat_groups", groupId, "messages"),
     orderBy("createdAt", "asc"),
-    limitToLast(100)
+    limitToLast(LIVE_WINDOW_SIZE)
   );
 
   return onSnapshot(q, (snapshot) => {
@@ -126,12 +129,15 @@ export const subscribeToChatMessages = (
   }, onError);
 };
 
-// Junta as mensagens da tela com as que chegaram (janela ao vivo ou página antiga).
-// Nenhuma some da tela, a versão mais nova de cada uma prevalece e a lista sai em ordem de envio.
-export const mergeMessages = (current: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] => {
-  const byId = new Map(current.map(message => [message.id, message]));
-  incoming.forEach(message => byId.set(message.id, message));
-  return [...byId.values()].sort((a, b) => a.createdAt.toMillis() - b.createdAt.toMillis());
+// Junta a lista `earlier` com a `latest`, as duas em ordem de envio.
+// Uso: (mensagens da tela, janela ao vivo nova) ou (página antiga, mensagens da tela).
+// A partir do início de `latest`, vale só `latest`: assim some da tela uma mensagem que o
+// servidor recusou. De `earlier` ficam só as mais antigas, como as que saíram da janela ao vivo
+// porque chegaram novas.
+export const mergeMessages = (earlier: ChatMessage[], latest: ChatMessage[]): ChatMessage[] => {
+  if (latest.length === 0) return [];
+  const latestStart = latest[0].createdAt.toMillis();
+  return [...earlier.filter(message => message.createdAt.toMillis() < latestStart), ...latest];
 };
 
 // Página de mensagens imediatamente anteriores a `before` (a mais antiga já exibida), em ordem crescente.

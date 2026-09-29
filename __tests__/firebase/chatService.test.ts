@@ -149,18 +149,34 @@ describe('chatService', () => {
       expect(pagina.hasMore).toBe(false);
     });
 
-    it('mantém na tela as mensagens que saem da janela ao vivo quando chegam novas', () => {
+    describe('junção da tela com a janela ao vivo', () => {
       const mensagem = (n: number) =>
         ({ id: `msg-${n}`, content: `Mensagem ${n}`, createdAt: Timestamp.fromMillis(n * 60_000) }) as ChatMessage;
-      const naTela = [1, 2, 3, 4, 5].map(mensagem);
-      // A janela ao vivo andou: a 2 saiu dela e a 6 chegou
-      const janelaAoVivo = [3, 4, 5, 6].map(mensagem);
 
-      const resultado = mergeMessages(naTela, janelaAoVivo);
+      it('mantém na tela as mensagens que saem da janela ao vivo quando chegam novas', () => {
+        const naTela = [1, 2, 3, 4, 5].map(mensagem);
+        // A janela ao vivo andou: a 2 saiu dela e a 6 chegou
+        const janelaAoVivo = [3, 4, 5, 6].map(mensagem);
 
-      expect(resultado.map((m) => m.content)).toEqual([
-        'Mensagem 1', 'Mensagem 2', 'Mensagem 3', 'Mensagem 4', 'Mensagem 5', 'Mensagem 6',
-      ]);
+        const resultado = mergeMessages(naTela, janelaAoVivo);
+
+        expect(resultado.map((m) => m.content)).toEqual([
+          'Mensagem 1', 'Mensagem 2', 'Mensagem 3', 'Mensagem 4', 'Mensagem 5', 'Mensagem 6',
+        ]);
+      });
+
+      it('tira da tela a mensagem que o servidor recusou', () => {
+        // A 6 foi enviada e apareceu na hora, ainda pendente, empurrando a 1 para fora da janela
+        const naTela = [1, 2, 3, 4, 5, 6].map(mensagem);
+        // O servidor recusou a 6: ela some da janela, que volta a começar na 2
+        const janelaAoVivo = [2, 3, 4, 5].map(mensagem);
+
+        const resultado = mergeMessages(naTela, janelaAoVivo);
+
+        expect(resultado.map((m) => m.content)).toEqual([
+          'Mensagem 1', 'Mensagem 2', 'Mensagem 3', 'Mensagem 4', 'Mensagem 5',
+        ]);
+      });
     });
   });
 
