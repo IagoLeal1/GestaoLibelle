@@ -19,6 +19,9 @@ const customJestConfig = {
 
   // Todos os arquivos usam o mesmo emulador; em paralelo, um apagaria os dados do outro
   maxWorkers: 1,
+
+  // Lista cada teste; as regras são lidas como especificação
+  verbose: true,
 }
 
 export default createJestConfig(customJestConfig)

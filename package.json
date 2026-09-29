@@ -11,7 +11,7 @@
     "emulators": "firebase emulators:start --only auth,firestore",
     "seed:emulator": "node scripts/seed-emulator.mjs",
     "dev:emulator": "node --env-file=.env.emulator node_modules/next/dist/bin/next dev -p 3001",
-    "test:firebase": "firebase emulators:exec --only auth,firestore \"node --env-file=.env.emulator node_modules/jest/bin/jest.js --ci --config jest.firebase.config.mjs\""
+    "test:firebase": "firebase emulators:exec --config firebase.test.json --only auth,firestore \"node --env-file=.env.emulator node_modules/jest/bin/jest.js --ci --config jest.firebase.config.mjs\""
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
