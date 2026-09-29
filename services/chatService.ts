@@ -10,8 +10,13 @@ import {
   doc,
   updateDoc,
   getDoc,
+  getDocs,
   Timestamp,
-  limit
+  limitToLast,
+  endBefore,
+  writeBatch,
+  serverTimestamp,
+  FirestoreError
 } from "firebase/firestore";
 
 // --- INTERFACES (Obrigatório ter 'export' nelas) ---
@@ -29,10 +34,16 @@ export interface ChatGroup {
   updatedAt: Timestamp;
   lastMessage?: {
     content: string;
+    senderId?: string; // ausente nos grupos antigos
     senderName: string;
     createdAt: Timestamp;
   };
   unreadCounts: Record<string, number>;
+}
+
+export interface OlderMessagesPage {
+  messages: ChatMessage[];
+  hasMore: boolean;
 }
 
 export interface ChatMessage {
@@ -87,27 +98,66 @@ export const subscribeToUserGroups = (userId: string, callback: (groups: ChatGro
   );
 
   return onSnapshot(q, (snapshot) => {
-    const groups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatGroup));
+    // Prévia recém-enviada ainda sem o horário do servidor: usa a estimativa local
+    const groups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data({ serverTimestamps: 'estimate' }) } as ChatGroup));
     callback(groups);
   });
 };
 
-export const subscribeToChatMessages = (groupId: string, callback: (messages: ChatMessage[]) => void) => {
+export const subscribeToChatMessages = (
+  groupId: string,
+  callback: (messages: ChatMessage[]) => void,
+  onError?: (error: FirestoreError) => void
+) => {
   const q = query(
     collection(db, "chat_groups", groupId, "messages"),
     orderBy("createdAt", "asc"),
-    limit(100)
+    limitToLast(100)
   );
 
   return onSnapshot(q, (snapshot) => {
-    const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatMessage));
+    // Mensagem recém-enviada ainda sem o horário do servidor: usa a estimativa local
+    const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data({ serverTimestamps: 'estimate' }) } as ChatMessage));
     callback(messages);
-  });
+  }, onError);
+};
+
+// Junta as mensagens da tela com as que chegaram (janela ao vivo ou página antiga).
+// Nenhuma some da tela, a versão mais nova de cada uma prevalece e a lista sai em ordem de envio.
+export const mergeMessages = (current: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] => {
+  const byId = new Map(current.map(message => [message.id, message]));
+  incoming.forEach(message => byId.set(message.id, message));
+  return [...byId.values()].sort((a, b) => a.createdAt.toMillis() - b.createdAt.toMillis());
+};
+
+// Página de mensagens imediatamente anteriores a `before` (a mais antiga já exibida), em ordem crescente.
+export const loadOlderMessages = async (
+  groupId: string,
+  before: ChatMessage,
+  pageSize = 50
+): Promise<OlderMessagesPage> => {
+  const q = query(
+    collection(db, "chat_groups", groupId, "messages"),
+    orderBy("createdAt", "asc"),
+    endBefore(before.createdAt),
+    // Uma a mais, só para saber se ainda existem mensagens antes desta página
+    limitToLast(pageSize + 1)
+  );
+
+  const snapshot = await getDocs(q);
+  const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatMessage));
+  const hasMore = messages.length > pageSize;
+
+  return {
+    messages: hasMore ? messages.slice(1) : messages,
+    hasMore,
+  };
 };
 
 export const sendMessage = async (groupId: string, message: { content: string; senderId: string; senderName: string; senderRole: string; type?: 'text' | 'image' | 'file' }) => {
   try {
-    const agora = Timestamp.now(); 
+    // Horário do servidor: o relógio do aparelho pode estar errado e bagunçar a ordem
+    const agora = serverTimestamp();
     const msgData = {
       ...message,
       type: message.type || 'text',
@@ -115,17 +165,19 @@ export const sendMessage = async (groupId: string, message: { content: string; s
       readBy: [message.senderId]
     };
 
-    await addDoc(collection(db, "chat_groups", groupId, "messages"), msgData);
-
-    const groupRef = doc(db, "chat_groups", groupId);
-    await updateDoc(groupRef, {
+    // Mensagem e prévia da conversa vão juntas: ou as duas são gravadas, ou nenhuma
+    const batch = writeBatch(db);
+    batch.set(doc(collection(db, "chat_groups", groupId, "messages")), msgData);
+    batch.update(doc(db, "chat_groups", groupId), {
       lastMessage: {
         content: message.type === 'image' ? '📷 Imagem' : message.content,
+        senderId: message.senderId,
         senderName: message.senderName,
         createdAt: agora
       },
       updatedAt: agora
     });
+    await batch.commit();
 
     return { success: true };
   } catch (error) {
