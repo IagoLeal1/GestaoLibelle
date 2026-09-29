@@ -17,7 +17,13 @@ import {
   writeBatch,
   serverTimestamp,
   FirestoreError,
-  getCountFromServer
+  getCountFromServer,
+  runTransaction,
+  arrayUnion,
+  arrayRemove,
+  QuerySnapshot,
+  documentId,
+  limit
 } from "firebase/firestore";
 
 // --- INTERFACES (Obrigatório ter 'export' nelas) ---
@@ -64,7 +70,121 @@ export interface ChatMessage {
   type: 'text' | 'image' | 'file';
 }
 
+// Participante de uma conversa (papel = profile.role do cadastro)
+export interface ChatMember {
+  uid: string;
+  nome: string;
+  papel: string;
+}
+
 // --- FUNÇÕES ---
+
+// Cada paciente tem no máximo um grupo, com id fixo
+export const patientGroupId = (pacienteId: string) => `paciente-${pacienteId}`;
+
+// Grupos antigos foram criados com a conta da família no lugar do paciente
+export const isLegacyGroup = (group: ChatGroup) => group.pacienteId === group.responsavelId;
+
+// Coloca pessoas no grupo (só a coordenação pode). arrayUnion evita perder quem outra pessoa adicionou ao mesmo tempo.
+export const addGroupMembers = async (groupId: string, membros: ChatMember[]) => {
+  await updateDoc(doc(db, "chat_groups", groupId), {
+    memberIds: arrayUnion(...membros.map(m => m.uid)),
+  });
+};
+
+// Tira uma pessoa do grupo (só a coordenação pode); ela perde o acesso à conversa na hora
+export const removeGroupMember = async (groupId: string, uid: string) => {
+  await updateDoc(doc(db, "chat_groups", groupId), {
+    memberIds: arrayRemove(uid),
+    terapeutaIds: arrayRemove(uid),
+  });
+};
+
+// Nome e papel de cada participante, lidos do cadastro (users), na ordem de `memberIds`.
+// Quem foi excluído do sistema não aparece.
+export const getGroupMembers = async (memberIds: string[]): Promise<ChatMember[]> => {
+  const encontrados = new Map<string, ChatMember>();
+  // O Firestore aceita no máximo 30 ids por consulta "in"
+  for (let i = 0; i < memberIds.length; i += 30) {
+    const lote = query(collection(db, "users"), where(documentId(), "in", memberIds.slice(i, i + 30)));
+    (await getDocs(lote)).forEach(usuario => {
+      const dados = usuario.data();
+      encontrados.set(usuario.id, { uid: usuario.id, nome: dados.displayName, papel: dados.profile?.role });
+    });
+  }
+  return memberIds.flatMap(id => encontrados.get(id) ?? []);
+};
+
+// Quem sugerir para o grupo novo de um paciente: a conta da família vinculada e os terapeutas
+// com atendimento nos últimos 90 dias ou nos próximos 60 (profissional ligado à conta por professionals.userId).
+export const getPatientTeamSuggestion = async (patientId: string): Promise<{ familia: string[]; terapeutas: string[] }> => {
+  const paciente = (await getDoc(doc(db, "patients", patientId))).data();
+  const familia = paciente?.userId ? [paciente.userId as string] : [];
+
+  // Só pelo paciente (índice simples) e o período filtrado aqui: evita exigir índice composto em produção
+  const agendamentos = await getDocs(query(collection(db, "appointments"), where("patientId", "==", patientId), limit(500)));
+  const dia = 24 * 60 * 60 * 1000;
+  const inicio = Date.now() - 90 * dia;
+  const fim = Date.now() + 60 * dia;
+  const profissionalIds = new Set(
+    agendamentos.docs
+      .map(agendamento => agendamento.data())
+      .filter(a => a.start?.toMillis() >= inicio && a.start?.toMillis() <= fim)
+      .map(a => a.professionalId as string)
+  );
+
+  const profissionais = await Promise.all([...profissionalIds].map(id => getDoc(doc(db, "professionals", id))));
+  const terapeutas = [...new Set(profissionais.map(p => p.data()?.userId as string | undefined).filter((uid): uid is string => !!uid))];
+
+  return { familia, terapeutas };
+};
+
+// Liga um grupo antigo à criança (só a coordenação pode)
+export const linkGroupToPatient = async (groupId: string, paciente: { id: string; nome: string }) => {
+  await updateDoc(doc(db, "chat_groups", groupId), {
+    pacienteId: paciente.id,
+    pacienteNome: paciente.nome,
+  });
+};
+
+// Cria o grupo de conversa de um paciente. Se ele já existir, não sobrescreve e avisa.
+export const createPatientChatGroup = async ({ paciente, membros, criadoPor }: {
+  paciente: { id: string; nome: string };
+  membros: ChatMember[];
+  criadoPor: string;
+}): Promise<{ success: true; id: string } | { success: false; id: string; error: "ja-existe" | "falha" }> => {
+  const id = patientGroupId(paciente.id);
+  const ref = doc(db, "chat_groups", id);
+  const familia = membros.filter(m => m.papel === "familiar");
+  const terapeutas = membros.filter(m => m.papel === "profissional");
+
+  try {
+    await runTransaction(db, async (transacao) => {
+      if ((await transacao.get(ref)).exists()) throw new Error("ja-existe");
+      const agora = serverTimestamp();
+      transacao.set(ref, {
+        pacienteId: paciente.id,
+        pacienteNome: paciente.nome,
+        responsavelId: familia[0]?.uid ?? "",
+        responsavelNome: familia.map(f => f.nome).join(", "),
+        terapeutaIds: terapeutas.map(t => t.uid),
+        terapeutaNomes: terapeutas.map(t => t.nome),
+        memberIds: [...new Set([criadoPor, ...membros.map(m => m.uid)])],
+        createdBy: criadoPor,
+        createdAt: agora,
+        updatedAt: agora,
+        unreadCounts: {},
+        lastReadAt: {},
+        lastMessage: null,
+      });
+    });
+    return { success: true, id };
+  } catch (error) {
+    if (error instanceof Error && error.message === "ja-existe") return { success: false, id, error: "ja-existe" };
+    console.error("Erro ao criar grupo do paciente:", error);
+    return { success: false, id, error: "falha" };
+  }
+};
 
 // Registra que `uid` leu a conversa até agora (horário do servidor)
 export const markChatAsRead = async (groupId: string, uid: string) => {
@@ -128,12 +248,21 @@ export const subscribeToUserGroups = (
     orderBy("updatedAt", "desc")
   );
 
-  return onSnapshot(q, (snapshot) => {
-    // Prévia recém-enviada ainda sem o horário do servidor: usa a estimativa local
-    const groups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data({ serverTimestamps: 'estimate' }) } as ChatGroup));
-    callback(groups);
-  }, onError);
+  return onSnapshot(q, (snapshot) => callback(groupsFromSnapshot(snapshot)), onError);
 };
+
+// Todas as conversas da clínica, para a supervisão da coordenação (as regras barram os demais perfis)
+export const subscribeToAllGroups = (
+  callback: (groups: ChatGroup[]) => void,
+  onError?: (error: FirestoreError) => void
+) => {
+  const q = query(collection(db, "chat_groups"), orderBy("updatedAt", "desc"));
+  return onSnapshot(q, (snapshot) => callback(groupsFromSnapshot(snapshot)), onError);
+};
+
+// Prévia recém-enviada ainda sem o horário do servidor: usa a estimativa local
+const groupsFromSnapshot = (snapshot: QuerySnapshot) =>
+  snapshot.docs.map(doc => ({ id: doc.id, ...doc.data({ serverTimestamps: 'estimate' }) } as ChatGroup));
 
 // Quantas mensagens recentes a conversa acompanha ao vivo; as anteriores vêm por loadOlderMessages
 export const LIVE_WINDOW_SIZE = 100;

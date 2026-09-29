@@ -154,6 +154,47 @@ export async function criarGrupo(membros: UsuarioDeTeste[], criadoPor: UsuarioDe
   return grupoId;
 }
 
+/** Cadastra um paciente (patients/{id}), opcionalmente já vinculado à conta da família. */
+export async function criarPaciente(id: string, fullName: string, familia?: UsuarioDeTeste) {
+  await testEnv.withSecurityRulesDisabled(async (contexto) => {
+    await setDoc(doc(contexto.firestore(), 'patients', id), {
+      fullName,
+      status: 'ativo',
+      cpf: '000.000.000-00',
+      dataNascimento: Timestamp.fromMillis(Date.UTC(2019, 4, 10)),
+      dataCadastro: Timestamp.now(),
+      responsavel: { nome: familia?.displayName ?? '' },
+      ...(familia ? { userId: familia.uid, emailCadastro: familia.email } : {}),
+    });
+  });
+  return { id, nome: fullName };
+}
+
+/** Cadastra um profissional (professionals/{id}) ligado à conta de um usuário. */
+export async function criarProfissional(id: string, usuario: UsuarioDeTeste) {
+  await testEnv.withSecurityRulesDisabled(async (contexto) => {
+    await setDoc(doc(contexto.firestore(), 'professionals', id), {
+      userId: usuario.uid,
+      fullName: usuario.displayName,
+      status: 'ativo',
+    });
+  });
+}
+
+/** Marca um atendimento do paciente com o profissional, `dias` a partir de hoje (negativo = passado). */
+export async function criarAgendamento(patientId: string, professionalId: string, dias: number) {
+  const inicio = Date.now() + dias * 24 * 60 * 60 * 1000;
+  await testEnv.withSecurityRulesDisabled(async (contexto) => {
+    await setDoc(doc(contexto.firestore(), 'appointments', `ag-${patientId}-${professionalId}-${dias}`), {
+      patientId,
+      professionalId,
+      start: Timestamp.fromMillis(inicio),
+      end: Timestamp.fromMillis(inicio + 50 * 60 * 1000),
+      status: 'agendado',
+    });
+  });
+}
+
 /**
  * Grava "Mensagem 1" ... "Mensagem N", um minuto uma da outra,
  * alternando os autores, no formato atual de produção.
