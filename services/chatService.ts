@@ -285,6 +285,67 @@ export const subscribeToChatMessages = (
   }, onError);
 };
 
+// Como a conversa aparece na tela: divisória de dia, divisória "Novas mensagens" e grupos
+// de mensagens seguidas da mesma pessoa (mesmo dia, até 5 minutos entre uma e outra).
+export type TimelineItem =
+  | { kind: "day"; key: string; date: Date }
+  | { kind: "unread"; key: string }
+  | {
+      kind: "group";
+      key: string;
+      senderId: string;
+      senderName: string;
+      senderRole: string;
+      mine: boolean;
+      messages: ChatMessage[];
+    };
+
+const GROUP_WINDOW_MS = 5 * 60 * 1000;
+
+// `readUntil`: até quando `uid` tinha lido ao abrir a conversa (null = não marcar novas)
+export const buildTimeline = (messages: ChatMessage[], uid: string, readUntil: Timestamp | null): TimelineItem[] => {
+  const items: TimelineItem[] = [];
+  let currentDay = "";
+  let group: Extract<TimelineItem, { kind: "group" }> | null = null;
+  let unreadMarked = false;
+
+  for (const message of messages) {
+    const date = message.createdAt.toDate();
+    const day = date.toDateString();
+    if (day !== currentDay) {
+      currentDay = day;
+      group = null;
+      items.push({ kind: "day", key: `day-${day}`, date });
+    }
+
+    const isNew = readUntil !== null && message.senderId !== uid && message.createdAt.toMillis() > readUntil.toMillis();
+    if (isNew && !unreadMarked) {
+      unreadMarked = true;
+      group = null;
+      items.push({ kind: "unread", key: "unread" });
+    }
+
+    const previous = group?.messages.at(-1);
+    const continues = group !== null && previous !== undefined && group.senderId === message.senderId
+      && message.createdAt.toMillis() - previous.createdAt.toMillis() <= GROUP_WINDOW_MS;
+    if (continues && group) {
+      group.messages.push(message);
+    } else {
+      group = {
+        kind: "group",
+        key: message.id,
+        senderId: message.senderId,
+        senderName: message.senderName,
+        senderRole: message.senderRole,
+        mine: message.senderId === uid,
+        messages: [message],
+      };
+      items.push(group);
+    }
+  }
+  return items;
+};
+
 // Junta a lista `earlier` com a `latest`, as duas em ordem de envio.
 // Uso: (mensagens da tela, janela ao vivo nova) ou (página antiga, mensagens da tela).
 // A partir do início de `latest`, vale só `latest`: assim some da tela uma mensagem que o
