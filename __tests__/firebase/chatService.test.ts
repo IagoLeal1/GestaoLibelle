@@ -18,6 +18,7 @@ import {
   entrarComo,
   iniciarAmbiente,
   limparDados,
+  removerCadastro,
   UsuarioDeTeste,
 } from './helpers';
 
@@ -251,6 +252,18 @@ describe('chatService', () => {
 
       const erro = await new Promise((resolve) => {
         subscribeToChatMessages(grupoId, () => {}, resolve);
+      });
+
+      expect(erro).toMatchObject({ code: 'permission-denied' });
+    });
+
+    it('avisa quando a lista de conversas não pode ser carregada', async () => {
+      await criarGrupo([familia, terapeuta, coordenacao], coordenacao);
+      await removerCadastro(familia);
+      await entrarComo(familia);
+
+      const erro = await new Promise((resolve) => {
+        subscribeToUserGroups(familia.uid, () => {}, resolve);
       });
 
       expect(erro).toMatchObject({ code: 'permission-denied' });

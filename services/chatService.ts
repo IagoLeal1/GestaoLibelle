@@ -53,8 +53,8 @@ export interface ChatMessage {
   senderName: string;
   senderRole: string;
   content: string;
-  createdAt: Timestamp; 
-  readBy: string[];
+  createdAt: Timestamp;
+  readBy?: string[]; // só nas mensagens antigas; nunca foi usado
   type: 'text' | 'image' | 'file';
 }
 
@@ -90,7 +90,11 @@ export const createChatGroup = async (
   }
 };
 
-export const subscribeToUserGroups = (userId: string, callback: (groups: ChatGroup[]) => void) => {
+export const subscribeToUserGroups = (
+  userId: string,
+  callback: (groups: ChatGroup[]) => void,
+  onError?: (error: FirestoreError) => void
+) => {
   const q = query(
     collection(db, "chat_groups"),
     where("memberIds", "array-contains", userId),
@@ -101,7 +105,7 @@ export const subscribeToUserGroups = (userId: string, callback: (groups: ChatGro
     // Prévia recém-enviada ainda sem o horário do servidor: usa a estimativa local
     const groups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data({ serverTimestamps: 'estimate' }) } as ChatGroup));
     callback(groups);
-  });
+  }, onError);
 };
 
 export const subscribeToChatMessages = (
@@ -161,8 +165,7 @@ export const sendMessage = async (groupId: string, message: { content: string; s
     const msgData = {
       ...message,
       type: message.type || 'text',
-      createdAt: agora,
-      readBy: [message.senderId]
+      createdAt: agora
     };
 
     // Mensagem e prévia da conversa vão juntas: ou as duas são gravadas, ou nenhuma

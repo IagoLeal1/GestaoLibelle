@@ -4,7 +4,7 @@ import { readFileSync } from 'fs';
 import { initializeTestEnvironment, RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { deleteApp } from 'firebase/app';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { doc, setDoc, terminate, Timestamp, writeBatch } from 'firebase/firestore';
+import { deleteDoc, doc, setDoc, terminate, Timestamp, writeBatch } from 'firebase/firestore';
 import { app, auth, db } from '@/lib/firebaseConfig';
 
 const PROJECT_ID = 'demo-libelle';
@@ -65,6 +65,13 @@ export async function criarUsuario(
   });
 
   return { uid: user.uid, email, displayName, role };
+}
+
+/** Apaga o documento em users e mantém o login, como faz o "excluir usuário" do app. */
+export async function removerCadastro(usuario: UsuarioDeTeste) {
+  await testEnv.withSecurityRulesDisabled(async (contexto) => {
+    await deleteDoc(doc(contexto.firestore(), 'users', usuario.uid));
+  });
 }
 
 export async function entrarComo(usuario: UsuarioDeTeste) {

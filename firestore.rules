@@ -62,20 +62,51 @@ service cloud.firestore {
 
     // --- 3. REGRAS DE CHAT ---
     match /chat_groups/{groupId} {
-      allow read: if isSignedIn() && (
+      // Só quem tem cadastro aprovado: pendentes e usuários removidos perdem o acesso
+      allow read: if isApproved() && (
         request.auth.uid in resource.data.memberIds || isAdminOrCoordinator()
       );
       allow create: if isSignedIn() && isAdminOrCoordinator() && request.resource.data.createdBy == request.auth.uid;
-      allow update: if isSignedIn() && (
-        request.auth.uid in resource.data.memberIds || isAdminOrCoordinator()
+      // A coordenação altera qualquer campo. Membros só atualizam a prévia da conversa.
+      allow update: if isAdminOrCoordinator() || (
+        isApproved()
+        && request.auth.uid in resource.data.memberIds
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'updatedAt'])
+        && request.resource.data.lastMessage.senderId == request.auth.uid
+        && request.resource.data.lastMessage.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
       );
     }
 
     match /chat_groups/{groupId}/messages/{messageId} {
-      allow read, create: if isSignedIn() && (
-        request.auth.uid in get(/databases/$(database)/documents/chat_groups/$(groupId)).data.memberIds
-        || isAdminOrCoordinator()
-      );
+      function canAccessChat() {
+        return isApproved() && (
+          request.auth.uid in get(/databases/$(database)/documents/chat_groups/$(groupId)).data.memberIds
+          || isAdminOrCoordinator()
+        );
+      }
+
+      allow read: if canAccessChat();
+
+      allow create: if canAccessChat()
+        && request.resource.data.keys().hasAll([
+          'senderId', 'senderName', 'senderRole', 'content', 'type', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'senderId', 'senderName', 'senderRole', 'content', 'type', 'createdAt'
+        ])
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.senderName
+          == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
+        && request.resource.data.senderRole == getUserProfile().role
+        && request.resource.data.content is string
+        && request.resource.data.content.size() > 0
+        && request.resource.data.content.size() <= 2000
+        && request.resource.data.type == 'text'
+        && request.resource.data.createdAt == request.time;
+
+      // Mensagens não podem ser editadas nem apagadas.
+      allow update, delete: if false;
     }
 
     // --- 4. OUTRAS REGRAS DO SISTEMA ---
