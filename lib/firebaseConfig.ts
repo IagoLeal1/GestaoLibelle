@@ -21,7 +21,8 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // Emulador local (npm run dev:emulator e npm run test:firebase).
-// Só aceita projetos "demo-", que nunca acessam a nuvem. As portas são as do firebase.json.
+// Só aceita projetos "demo-", que nunca acessam a nuvem.
+// No navegador valem as portas do firebase.json; nos testes, as que o CLI informa pelo ambiente.
 if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === 'true') {
   if (!firebaseConfig.projectId?.startsWith('demo-')) {
     throw new Error('O emulador do Firebase exige um projectId que comece com "demo-".');
@@ -30,8 +31,10 @@ if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === 'true') {
   // O hot reload reexecuta este módulo; conectar duas vezes lança erro.
   const globalState = globalThis as typeof globalThis & { __firebaseEmulatorsConnected?: boolean };
   if (!globalState.__firebaseEmulatorsConnected) {
-    connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-    connectFirestoreEmulator(db, '127.0.0.1', 8080);
+    const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST ?? '127.0.0.1:9099';
+    const [firestoreHost, firestorePort] = (process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8080').split(':');
+    connectAuthEmulator(auth, `http://${authHost}`, { disableWarnings: true });
+    connectFirestoreEmulator(db, firestoreHost, Number(firestorePort));
     globalState.__firebaseEmulatorsConnected = true;
   }
 }
