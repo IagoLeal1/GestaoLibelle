@@ -152,6 +152,21 @@ describe('atualização do grupo', () => {
     }));
   });
 
+  it('membro marca a própria leitura da conversa', async () => {
+    const grupo = doc(bancoDe('familia'), 'chat_groups', GRUPO);
+    await assertSucceeds(updateDoc(grupo, { 'lastReadAt.familia': serverTimestamp() }));
+  });
+
+  it('membro não marca a leitura de outra pessoa', async () => {
+    const grupo = doc(bancoDe('familia'), 'chat_groups', GRUPO);
+    await assertFails(updateDoc(grupo, { 'lastReadAt.terapeuta': serverTimestamp() }));
+  });
+
+  it('a leitura usa o horário do servidor, não o do aparelho', async () => {
+    const grupo = doc(bancoDe('familia'), 'chat_groups', GRUPO);
+    await assertFails(updateDoc(grupo, { 'lastReadAt.familia': Timestamp.fromMillis(Date.UTC(2030, 0, 1)) }));
+  });
+
   it('coordenação altera os participantes', async () => {
     const grupo = doc(bancoDe('coordenacao'), 'chat_groups', GRUPO);
     await assertSucceeds(updateDoc(grupo, { memberIds: arrayUnion('outra-familia') }));

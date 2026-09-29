@@ -6,6 +6,7 @@ import { deleteApp } from 'firebase/app';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { deleteDoc, doc, setDoc, terminate, Timestamp, writeBatch } from 'firebase/firestore';
 import { app, auth, db } from '@/lib/firebaseConfig';
+import { ChatGroup, ChatMessage, subscribeToChatMessages, subscribeToUserGroups } from '@/services/chatService';
 
 const PROJECT_ID = 'demo-libelle';
 const SENHA = 'senha-de-teste';
@@ -44,6 +45,55 @@ export async function encerrarAmbiente() {
   await testEnv.cleanup();
   await terminate(db);
   await deleteApp(app);
+}
+
+/**
+ * Assina a conversa e resolve com a primeira lista que atende a condição.
+ * Se ela não aparecer no prazo, falha mostrando como terminava a última lista recebida.
+ */
+export function aguardarLeitura(
+  grupoId: string,
+  condicao: (mensagens: ChatMessage[]) => boolean = () => true,
+  prazoMs = 3000
+): Promise<ChatMessage[]> {
+  return new Promise((resolve, reject) => {
+    let ultima: ChatMessage[] = [];
+    const prazo = setTimeout(() => {
+      cancelar();
+      reject(new Error(`Condição não atendida em ${prazoMs} ms; a última lista terminava em "${ultima.at(-1)?.content}"`));
+    }, prazoMs);
+    const cancelar = subscribeToChatMessages(grupoId, (mensagens) => {
+      ultima = mensagens;
+      if (condicao(mensagens)) {
+        clearTimeout(prazo);
+        cancelar();
+        resolve(mensagens);
+      }
+    });
+  });
+}
+
+/** Igual a aguardarLeitura, mas para a lista de conversas do usuário. */
+export function aguardarGrupos(
+  uid: string,
+  condicao: (grupos: ChatGroup[]) => boolean,
+  prazoMs = 3000
+): Promise<ChatGroup[]> {
+  return new Promise((resolve, reject) => {
+    let ultima: ChatGroup[] = [];
+    const prazo = setTimeout(() => {
+      cancelar();
+      reject(new Error(`Condição não atendida em ${prazoMs} ms; última prévia: ${JSON.stringify(ultima[0]?.lastMessage)}`));
+    }, prazoMs);
+    const cancelar = subscribeToUserGroups(uid, (grupos) => {
+      ultima = grupos;
+      if (condicao(grupos)) {
+        clearTimeout(prazo);
+        cancelar();
+        resolve(grupos);
+      }
+    });
+  });
 }
 
 /** Cria a conta de login e o documento em users, como no cadastro do app. */

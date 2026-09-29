@@ -2,7 +2,6 @@
 // Roda contra o emulador do Firebase: npm run test:firebase
 import { Timestamp } from 'firebase/firestore';
 import {
-  ChatGroup,
   ChatMessage,
   loadOlderMessages,
   mergeMessages,
@@ -11,6 +10,8 @@ import {
   subscribeToUserGroups,
 } from '@/services/chatService';
 import {
+  aguardarGrupos,
+  aguardarLeitura,
   criarGrupo,
   criarMensagens,
   criarUsuario,
@@ -21,55 +22,6 @@ import {
   removerCadastro,
   UsuarioDeTeste,
 } from './helpers';
-
-/**
- * Assina a conversa e resolve com a primeira lista que atende a condição.
- * Se ela não aparecer no prazo, falha mostrando como terminava a última lista recebida.
- */
-function aguardarLeitura(
-  grupoId: string,
-  condicao: (mensagens: ChatMessage[]) => boolean = () => true,
-  prazoMs = 3000
-): Promise<ChatMessage[]> {
-  return new Promise((resolve, reject) => {
-    let ultima: ChatMessage[] = [];
-    const prazo = setTimeout(() => {
-      cancelar();
-      reject(new Error(`Condição não atendida em ${prazoMs} ms; a última lista terminava em "${ultima.at(-1)?.content}"`));
-    }, prazoMs);
-    const cancelar = subscribeToChatMessages(grupoId, (mensagens) => {
-      ultima = mensagens;
-      if (condicao(mensagens)) {
-        clearTimeout(prazo);
-        cancelar();
-        resolve(mensagens);
-      }
-    });
-  });
-}
-
-/** Igual a aguardarLeitura, mas para a lista de conversas do usuário. */
-function aguardarGrupos(
-  uid: string,
-  condicao: (grupos: ChatGroup[]) => boolean,
-  prazoMs = 3000
-): Promise<ChatGroup[]> {
-  return new Promise((resolve, reject) => {
-    let ultima: ChatGroup[] = [];
-    const prazo = setTimeout(() => {
-      cancelar();
-      reject(new Error(`Condição não atendida em ${prazoMs} ms; última prévia: ${JSON.stringify(ultima[0]?.lastMessage)}`));
-    }, prazoMs);
-    const cancelar = subscribeToUserGroups(uid, (grupos) => {
-      ultima = grupos;
-      if (condicao(grupos)) {
-        clearTimeout(prazo);
-        cancelar();
-        resolve(grupos);
-      }
-    });
-  });
-}
 
 describe('chatService', () => {
   let familia: UsuarioDeTeste;

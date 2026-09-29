@@ -16,7 +16,8 @@ import {
   endBefore,
   writeBatch,
   serverTimestamp,
-  FirestoreError
+  FirestoreError,
+  getCountFromServer
 } from "firebase/firestore";
 
 // --- INTERFACES (Obrigatório ter 'export' nelas) ---
@@ -39,7 +40,12 @@ export interface ChatGroup {
     createdAt: Timestamp;
   };
   unreadCounts: Record<string, number>;
+  lastReadAt?: Record<string, Timestamp>; // até quando cada participante leu a conversa
 }
+
+// Conversa sem registro de leitura conta como lida até esta data: assim, ao publicar,
+// as conversas antigas não aparecem todas como novas.
+export const UNREAD_TRACKING_START = new Date("2026-09-29T00:00:00-03:00");
 
 export interface OlderMessagesPage {
   messages: ChatMessage[];
@@ -59,6 +65,27 @@ export interface ChatMessage {
 }
 
 // --- FUNÇÕES ---
+
+// Registra que `uid` leu a conversa até agora (horário do servidor)
+export const markChatAsRead = async (groupId: string, uid: string) => {
+  await updateDoc(doc(db, "chat_groups", groupId), { [`lastReadAt.${uid}`]: serverTimestamp() });
+};
+
+// Quantas mensagens chegaram depois da última leitura de `uid` (conta no servidor, sem baixar as mensagens)
+export const countUnreadMessages = async (group: ChatGroup, uid: string): Promise<number> => {
+  const desde = group.lastReadAt?.[uid] ?? Timestamp.fromDate(UNREAD_TRACKING_START);
+  const q = query(collection(db, "chat_groups", group.id, "messages"), where("createdAt", ">", desde));
+  const snapshot = await getCountFromServer(q);
+  return snapshot.data().count;
+};
+
+// A última mensagem da conversa é de outra pessoa e chegou depois da última leitura de `uid`?
+export const hasUnread = (group: ChatGroup, uid: string): boolean => {
+  const last = group.lastMessage;
+  if (!last?.createdAt || last.senderId === uid) return false;
+  const lidoAte = group.lastReadAt?.[uid]?.toMillis() ?? UNREAD_TRACKING_START.getTime();
+  return last.createdAt.toMillis() > lidoAte;
+};
 
 export const createChatGroup = async (
   paciente: { uid: string; nome: string; responsavelNome: string },
