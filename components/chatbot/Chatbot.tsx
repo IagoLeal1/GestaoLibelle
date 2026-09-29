@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { MessageCircle, Send, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -12,6 +13,7 @@ interface ChatMessage {
 
 export function Chatbot() {
   const { firestoreUser } = useAuth();
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -67,6 +69,9 @@ export function Chatbot() {
       setLoading(false);
     }
   };
+
+  // Na conversa, o botão flutuante ficaria em cima do botão de enviar
+  if (pathname?.startsWith("/mensagens/")) return null;
 
   return (
     <>

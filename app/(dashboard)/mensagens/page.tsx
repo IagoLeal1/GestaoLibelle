@@ -5,27 +5,16 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Search, MessageCircle, Users } from "lucide-react"
+import { Search, MessageCircle, Users, MessageCircleOff } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/context/AuthContext"
 import { subscribeToUserGroups, ChatGroup } from "@/services/chatService"
 import { CreateChatGroupModal } from "@/components/modals/create-chat-group-modal"
+import { getIniciais } from "@/lib/formatters"
 
 // --- Funções Auxiliares ---
 
-function getIniciais(nome: string) {
-  if (!nome) return "GL";
-  return nome
-    .split(" ")
-    .map((n) => n[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase()
-}
-
-function formatarData(dataString: string) {
-  if (!dataString) return "";
-  const data = new Date(dataString)
+function formatarData(data: Date) {
   const hoje = new Date()
   const ontem = new Date(hoje)
   ontem.setDate(ontem.getDate() - 1)
@@ -46,15 +35,25 @@ export default function MensagensPage() {
   const [busca, setBusca] = useState("")
   const [conversas, setConversas] = useState<ChatGroup[]>([]);
   const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(false);
 
   useEffect(() => {
     if (!firestoreUser) return;
 
     // Iniciar escuta em tempo real
-    const unsubscribe = subscribeToUserGroups(firestoreUser.uid, (grupos) => {
-      setConversas(grupos);
-      setLoading(false);
-    });
+    const unsubscribe = subscribeToUserGroups(
+      firestoreUser.uid,
+      (grupos) => {
+        setConversas(grupos);
+        setErro(false);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Erro ao carregar conversas:", error);
+        setErro(true);
+        setLoading(false);
+      }
+    );
 
     return () => unsubscribe();
   }, [firestoreUser]);
@@ -97,6 +96,12 @@ export default function MensagensPage() {
         <div className="h-full overflow-y-auto">
           {loading ? (
              <div className="p-8 text-center text-muted-foreground">Carregando conversas...</div>
+          ) : erro ? (
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+              <MessageCircleOff className="h-12 w-12 mb-2 opacity-50" />
+              <p>Não foi possível carregar as conversas.</p>
+              <p className="text-xs">Recarregue a página ou tente novamente mais tarde.</p>
+            </div>
           ) : conversasFiltradas.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
               <MessageCircle className="h-12 w-12 mb-2 opacity-50" />
@@ -125,13 +130,13 @@ export default function MensagensPage() {
                         </h3>
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-primary-teal/30 text-primary-teal">
                           <Users className="h-3 w-3 mr-1" />
-                          {conversa.terapeutaIds.length + 1}
+                          {conversa.memberIds.length}
                         </Badge>
                       </div>
-                      
-                      {conversa.lastMessage && (
+
+                      {conversa.lastMessage?.createdAt && (
                           <span className="text-xs text-muted-foreground flex-shrink-0">
-                            {formatarData(conversa.lastMessage.createdAt.toDate().toISOString())}
+                            {formatarData(conversa.lastMessage.createdAt.toDate())}
                           </span>
                       )}
                     </div>

@@ -82,3 +82,12 @@ export const formatSpecialtyName = (specialtyName: string): string => {
 
   return specialtyName;
 };
+
+/**
+ * Até duas iniciais de um nome, para avatares ("Maria Souza" -> "MS").
+ */
+export const getIniciais = (nome: string | null | undefined): string => {
+  const partes = (nome || "").trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 0) return "?";
+  return partes.slice(0, 2).map((parte) => parte[0]).join("").toUpperCase();
+};
