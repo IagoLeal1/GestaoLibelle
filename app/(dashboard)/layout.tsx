@@ -4,6 +4,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { Header } from "@/components/header";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { Chatbot } from "@/components/chatbot/Chatbot"; // <-- 1. IMPORTE AQUI
+import { Toaster } from "sonner";
 
 export default function DashboardLayout({
   children,
@@ -22,6 +23,8 @@ export default function DashboardLayout({
         </SidebarInset>
       </SidebarProvider>
       <Chatbot /> {/* <-- 2. ADICIONE AQUI */}
+      {/* Avisos (toast) de todas as telas do painel */}
+      <Toaster richColors />
     </AuthGuard>
   );
 }
