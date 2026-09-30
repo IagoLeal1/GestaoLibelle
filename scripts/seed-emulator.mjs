@@ -26,6 +26,7 @@ const SENHA_TESTE = 'libelle-teste-123';
 const USUARIOS = [
   { uid: 'admin-teste', email: 'admin@libelle.test', displayName: 'Ana Admin', role: 'admin', status: 'aprovado' },
   { uid: 'coord-teste', email: 'coordenacao@libelle.test', displayName: 'Carla Coordenadora', role: 'coordenador', status: 'aprovado' },
+  { uid: 'recepcao-teste', email: 'recepcao@libelle.test', displayName: 'Rafa Recepção', role: 'funcionario', status: 'aprovado' },
   { uid: 'terapeuta1-teste', email: 'terapeuta1@libelle.test', displayName: 'Paula Fonoaudióloga', role: 'profissional', status: 'aprovado' },
   { uid: 'terapeuta2-teste', email: 'terapeuta2@libelle.test', displayName: 'Rui Psicólogo', role: 'profissional', status: 'aprovado' },
   { uid: 'familia1-teste', email: 'familia1@libelle.test', displayName: 'Maria Souza', role: 'familiar', status: 'aprovado' },
@@ -128,6 +129,8 @@ for (const usuario of USUARIOS.filter((u) => u.role)) {
       telefone: null,
       createdAt: agora,
       historyHidden: false,
+      // O painel do terapeuta acha a agenda dele por aqui
+      ...(usuario.role === 'profissional' ? { professionalId: usuario.uid } : {}),
     },
   });
 }
@@ -194,24 +197,60 @@ batch.set(db.doc('patients/paciente-davi'), {
   responsavel: { nome: porUid['pendente-teste'].displayName, email: porUid['pendente-teste'].email },
 });
 
-// Atendimentos: dão a sugestão de terapeutas ao criar o grupo de cada criança
+// Atendimentos: dão a sugestão de terapeutas ao criar o grupo de cada criança, aparecem na agenda
+// (um é hoje, para testar a finalização) e geram repasse de 50% do valor quando finalizados
 const DIA = 24 * 60 * 60 * 1000;
-for (const [pacienteId, profissionalId, dias] of [
-  ['paciente-lucas', 'terapeuta1-teste', -7],
-  ['paciente-lucas', 'terapeuta1-teste', 7],
-  ['paciente-bia', 'terapeuta2-teste', -3],
-  ['paciente-theo', 'terapeuta2-teste', 2],
-  ['paciente-davi', 'terapeuta1-teste', 1],
+const NOMES_DOS_PACIENTES = { 'paciente-lucas': 'Lucas Souza', 'paciente-bia': 'Bia Lima', 'paciente-theo': 'Theo Martins', 'paciente-davi': 'Davi Rocha' };
+const TERAPIAS = { 'terapeuta1-teste': 'Fonoaudiologia', 'terapeuta2-teste': 'Psicologia' };
+for (const [pacienteId, profissionalId, dias, status] of [
+  ['paciente-lucas', 'terapeuta1-teste', -7, 'finalizado'],
+  ['paciente-lucas', 'terapeuta1-teste', 0, 'agendado'],
+  ['paciente-lucas', 'terapeuta1-teste', 7, 'agendado'],
+  ['paciente-bia', 'terapeuta2-teste', -3, 'agendado'],
+  ['paciente-theo', 'terapeuta2-teste', 2, 'agendado'],
+  ['paciente-davi', 'terapeuta1-teste', 1, 'agendado'],
 ]) {
   const inicio = agora.toMillis() + dias * DIA;
+  const paciente = NOMES_DOS_PACIENTES[pacienteId];
+  const profissional = porUid[profissionalId].displayName;
   batch.set(db.doc(`appointments/ag-${pacienteId}-${dias}`), {
     patientId: pacienteId,
+    patientName: paciente,
     professionalId: profissionalId,
+    professionalName: profissional,
+    title: `${paciente} - ${profissional}`,
     start: Timestamp.fromMillis(inicio),
     end: Timestamp.fromMillis(inicio + 50 * 60 * 1000),
-    status: 'agendado',
+    status,
+    statusSecundario: '',
+    tipo: TERAPIAS[profissionalId],
+    convenio: 'particular',
+    valorConsulta: 150,
+    observacoes: '',
   });
 }
+
+// Financeiro: conta padrão (recebe os repasses) e o repasse já pago da sessão da semana passada
+batch.set(db.doc('bankAccounts/conta-principal'), { name: 'Conta principal', agency: '0001', account: '12345-6', type: 'Conta Corrente', initialBalance: 0, currentBalance: 0, isDefault: true });
+batch.set(db.doc('bankAccounts/conta-reserva'), { name: 'Reserva', agency: '0001', account: '65432-1', type: 'Conta Poupança', initialBalance: 0, currentBalance: 0, isDefault: false });
+batch.set(db.doc('accountPlans/plano-repasse'), { name: 'Repasse de Profissional', category: 'despesa', code: 'd.repa.0001' });
+for (const nome of Object.values(TERAPIAS)) batch.set(db.doc(`costCenters/${nome.toLowerCase()}`), { name: nome });
+const sessaoPassada = Timestamp.fromMillis(agora.toMillis() - 7 * DIA);
+batch.set(db.doc('transactions/repasse-pago-lucas'), {
+  type: 'despesa',
+  description: 'Repasse Paula Fonoaudióloga - Sessão Lucas Souza',
+  value: 75,
+  dataMovimento: Timestamp.fromMillis(sessaoPassada.toMillis() + 30 * DIA),
+  dataEmissao: sessaoPassada,
+  status: 'pago',
+  category: 'Repasse de Profissional',
+  costCenter: 'Fonoaudiologia',
+  bankAccountId: 'conta-principal',
+  professionalId: 'terapeuta1-teste',
+  patientId: 'paciente-lucas',
+  patientName: 'Lucas Souza',
+  appointmentId: 'ag-paciente-lucas--7',
+});
 
 // Os dois grupos abaixo usam o formato antigo (paciente = conta da família), para testar "Vincular à criança".
 // Grupo A: 150 mensagens, para reproduzir o limite de 100
