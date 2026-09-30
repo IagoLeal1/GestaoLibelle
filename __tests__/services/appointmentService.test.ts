@@ -44,6 +44,7 @@ jest.mock('firebase/firestore', () => {
         Timestamp: {
             fromDate: jest.fn((date) => ({
                 toDate: () => date,
+                toMillis: () => date.getTime(),
                 seconds: date.getTime() / 1000,
             })),
         },
@@ -406,8 +407,8 @@ describe('Appointment Service - Cobertura Completa', () => {
             // Mock da busca: retorna o atual e o futuro
             mockedGetDocs.mockResolvedValue({
                 docs: [
-                    { id: 'app-1', data: () => currentApp },
-                    { id: 'app-2', data: () => futureApp }
+                    { id: 'app-1', ref: { id: 'app-1' }, data: () => currentApp },
+                    { id: 'app-2', ref: { id: 'app-2' }, data: () => futureApp }
                 ],
                 empty: false
             });

@@ -210,7 +210,7 @@ export function EditAppointmentModal({
                     <div className="mt-3 flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded animate-in fade-in slide-in-from-top-2">
                     <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
                     <p>
-                        <strong>Modo Série Ativado:</strong> O botão "Salvar" recriará a série e o botão "Excluir" apagará todos os futuros.
+                        <strong>Modo Série Ativado:</strong> "Salvar" aplica o que você mudou a este e aos próximos atendimentos; cada um mantém o próprio status e o que você não mudou. "Excluir" apaga todos os futuros.
                     </p>
                     </div>
                 )}

@@ -168,7 +168,7 @@ export function AgendamentosClientPage() {
         if (result.success) {
             toast.success("Atualizado com Sucesso", {
                 description: isBlockUpdate 
-                  ? "Série de agendamentos recriada." 
+                  ? "Série de agendamentos atualizada." 
                   : "Agendamento atualizado."
             });
             setIsEditModalOpen(false);

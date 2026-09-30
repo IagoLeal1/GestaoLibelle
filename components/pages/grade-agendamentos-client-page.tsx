@@ -181,7 +181,7 @@ export function GradeAgendamentosClientPage() {
             if (result.success) {
                 toast.success("Sucesso", {
                     description: isBlockUpdate 
-                        ? "Série recriada e atualizada com sucesso." 
+                        ? "Série atualizada com sucesso." 
                         : "Agendamento atualizado com sucesso."
                 });
                 setIsEditModalOpen(false);

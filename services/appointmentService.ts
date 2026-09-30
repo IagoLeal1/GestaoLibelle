@@ -88,6 +88,11 @@ export interface QuickAppointmentData {
   frequency: RecurrenceFrequency;
 }
 
+// Atendimento que gera repasse: finalizado, ou falta não justificada do paciente
+const geraRepasse = (appointment: Pick<Appointment, 'status' | 'statusSecundario'>) =>
+  appointment.status === 'finalizado' ||
+  (appointment.status === 'nao_compareceu' && appointment.statusSecundario === 'fnj_paciente');
+
 // --- ✅ FUNÇÃO DE REPASSE ATUALIZADA ✅ ---
 const handleRepasseTransaction = async (appointment: Appointment) => {
   // 1. Repasse já pago fica como está: o pagamento é do Financeiro, e não se gera outro
@@ -99,11 +104,7 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
   await deletePendingRepasses(appointment.id);
 
   // 2. Verifica se as condições para gerar um novo repasse são atendidas
-  const shouldGenerateRepasse =
-    appointment.status === 'finalizado' ||
-    (appointment.status === 'nao_compareceu' && appointment.statusSecundario === 'fnj_paciente');
-
-  if (!shouldGenerateRepasse) {
+  if (!geraRepasse(appointment)) {
     return { success: true, message: "Nenhuma condição para repasse atendida." };
   }
 
@@ -998,7 +999,47 @@ export const findPotentialSwapCandidates = async (
   return candidatos;
 };
 
-// --- 🔥 VERSÃO FINAL BLINDADA: CLONAR, DETECTAR E MIGRAR ---
+// Campos do formulário de edição que valem para a série inteira quando a pessoa os muda. O que ela
+// não mudou fica como está em cada atendimento (a sala, o valor ou a observação de um dia específico).
+const CAMPOS_DA_SERIE = ['patientId', 'professionalId', 'tipo', 'sala', 'convenio', 'valorConsulta', 'observacoes'] as const;
+
+// O formulário chega preenchido com os dados do atendimento editado: só o que difere dele foi mudado
+const camposMudados = (editado: Appointment, data: Partial<AppointmentFormData>) => {
+  const igual = (campo: typeof CAMPOS_DA_SERIE[number]) =>
+    campo === 'valorConsulta'
+      ? (data.valorConsulta ?? 0) === (editado.valorConsulta ?? 0)
+      : (data[campo] ?? '') === (editado[campo] ?? '');
+  return Object.fromEntries(
+    CAMPOS_DA_SERIE.filter(campo => data[campo] !== undefined && !igual(campo)).map(campo => [campo, data[campo]])
+  );
+};
+
+// Nova data e hora de um atendimento da série. Se o dia do atendimento editado mudou, todos andam os
+// mesmos dias, e os intervalos e buracos da série continuam iguais. Se o horário mudou, todos passam
+// para o novo horário.
+export const reposicionarNaSerie = (
+  atendimento: { start: Date; end: Date },
+  editado: { start: Date; end: Date },
+  formulario: { data: string; horaInicio: string; horaFim: string }
+) => {
+  const [ano, mes, dia] = formulario.data.split('-').map(Number);
+  const dias = differenceInCalendarDays(new Date(ano, mes - 1, dia), editado.start);
+  const horarioMudou =
+    formulario.horaInicio !== format(editado.start, 'HH:mm') || formulario.horaFim !== format(editado.end, 'HH:mm');
+  if (!horarioMudou) {
+    return { start: addDays(atendimento.start, dias), end: addDays(atendimento.end, dias) };
+  }
+  const naHora = (hora: string) => {
+    const [h, m] = hora.split(':').map(Number);
+    return setMinutes(setHours(addDays(atendimento.start, dias), h), m);
+  };
+  return { start: naHora(formulario.horaInicio), end: naHora(formulario.horaFim) };
+};
+
+// Aplica a edição de um atendimento a ele e aos seguintes da série, atualizando cada um no lugar.
+// Os códigos continuam os mesmos, então os lançamentos do financeiro seguem ligados:
+// - o que a pessoa mudou no formulário vale para todos; o resto de cada atendimento fica como está;
+// - status e status secundário valem só para o atendimento editado, que tem o repasse refeito.
 export const updateAppointmentBlock = async (
   currentAppointment: Appointment,
   data: Partial<AppointmentFormData & { status: AppointmentStatus }>
@@ -1006,121 +1047,76 @@ export const updateAppointmentBlock = async (
   if (!currentAppointment.blockId) {
     return { success: false, error: "Agendamento sem série (blockId)." };
   }
+  const { data: dia, horaInicio, horaFim } = data;
+  if (!dia || !horaInicio || !horaFim) {
+    return { success: false, error: "Dados incompletos." };
+  }
 
   try {
+    const snapshot = await getDocs(query(collection(db, "appointments"), where("blockId", "==", currentAppointment.blockId)));
+    // Este e os próximos (com folga de 1 minuto para o próprio atendimento editado)
+    const inicioDoEditado = currentAppointment.start.toMillis();
+    const serie = snapshot.docs
+      .map(atendimento => ({ ...(atendimento.data() as Appointment), id: atendimento.id, ref: atendimento.ref }))
+      .filter(atendimento => atendimento.start.toMillis() >= inicioDoEditado - 60000);
+
+    if (serie.length === 0) return await updateAppointment(currentAppointment.id, data);
+
+    const mudancas: Record<string, unknown> = camposMudados(currentAppointment, data);
+    // Troca de terapeuta ou de criança: o nome e o título acompanham
+    if (mudancas.professionalId) {
+      const profissional = await getDoc(doc(db, 'professionals', mudancas.professionalId as string));
+      if (profissional.exists()) mudancas.professionalName = profissional.data().fullName;
+    }
+    if (mudancas.patientId) {
+      const paciente = await getDoc(doc(db, 'patients', mudancas.patientId as string));
+      if (paciente.exists()) mudancas.patientName = paciente.data().fullName;
+    }
+
+    const editado = { start: currentAppointment.start.toDate(), end: currentAppointment.end.toDate() };
+    const statusDoEditado = {
+      ...(data.status ? { status: data.status } : {}),
+      ...(data.statusSecundario !== undefined
+        ? { statusSecundario: data.statusSecundario === 'nenhum' ? '' : data.statusSecundario }
+        : {}),
+    };
+
     const batch = writeBatch(db);
-    
-    // 1. Busca TODOS os agendamentos da série antiga
-    const q = query(
-      collection(db, "appointments"),
-      where("blockId", "==", currentAppointment.blockId)
-    );
-    const snapshot = await getDocs(q);
-
-    if (snapshot.empty) return { success: true };
-
-    const getMillis = (d: any) => d?.toMillis ? d.toMillis() : new Date(d).getTime();
-    const currentStartMs = getMillis(currentAppointment.start);
-
-    // 2. Separa e Ordena (Do atual para o futuro)
-    const futureOldAppointments = snapshot.docs
-      .map(doc => ({ id: doc.id, ref: doc.ref, ...doc.data() } as Appointment & { ref: any }))
-      .filter(app => getMillis(app.start) >= (currentStartMs - 60000))
-      .sort((a, b) => getMillis(a.start) - getMillis(b.start));
-
-    if (futureOldAppointments.length === 0) {
-        return await updateAppointment(currentAppointment.id, data);
+    for (const atendimento of serie) {
+      const { start, end } = reposicionarNaSerie(
+        { start: atendimento.start.toDate(), end: atendimento.end.toDate() },
+        editado,
+        { data: dia, horaInicio, horaFim }
+      );
+      const nomesMudaram = 'patientName' in mudancas || 'professionalName' in mudancas;
+      batch.update(atendimento.ref, {
+        ...mudancas,
+        ...(nomesMudaram
+          ? { title: `${mudancas.patientName ?? atendimento.patientName} - ${mudancas.professionalName ?? atendimento.professionalName}` }
+          : {}),
+        start: Timestamp.fromDate(start),
+        end: Timestamp.fromDate(end),
+        ...(atendimento.id === currentAppointment.id ? statusDoEditado : {}),
+      });
     }
-
-    // 3. 🕵️ DETECTIVE DE FREQUÊNCIA
-    let intervalDays = 7; 
-    if (futureOldAppointments.length > 1) {
-        const first = futureOldAppointments[0];
-        const second = futureOldAppointments[1];
-        const diff = differenceInCalendarDays(second.start.toDate(), first.start.toDate());
-        intervalDays = diff <= 8 ? 7 : 14;
-    }
-
-    // 4. PREPARAÇÃO DA NOVA SÉRIE
-    const newBlockId = doc(collection(db, "idGenerator")).id;
-    
-    const { data: dateStr, horaInicio, horaFim, ...restData } = data;
-    if (!dateStr || !horaInicio || !horaFim) throw new Error("Dados incompletos.");
-
-    const [year, month, day] = dateStr.split('-').map(Number);
-    const [startHour, startMinute] = horaInicio.split(':').map(Number);
-    const [endHour, endMinute] = horaFim.split(':').map(Number);
-
-    const newBaseStart = new Date(year, month - 1, day, startHour, startMinute);
-    const durationMinutes = differenceInMinutes(
-      new Date(year, month - 1, day, endHour, endMinute),
-      newBaseStart
-    );
-
-    // Atualiza nomes se necessário
-    let newProfName = currentAppointment.professionalName;
-    let newPatName = currentAppointment.patientName;
-    if (restData.professionalId) {
-        const pDoc = await getDoc(doc(db, 'professionals', restData.professionalId));
-        if (pDoc.exists()) newProfName = pDoc.data().fullName;
-    }
-    if (restData.patientId) {
-        const pDoc = await getDoc(doc(db, 'patients', restData.patientId));
-        if (pDoc.exists()) newPatName = pDoc.data().fullName;
-    }
-
-    // 5. 🚀 CRIAÇÃO DA NOVA SÉRIE
-    for (let i = 0; i < futureOldAppointments.length; i++) {
-        const newStart = addDays(newBaseStart, i * intervalDays);
-        const newEnd = addMinutes(newStart, durationMinutes);
-        
-        const newDocRef = doc(collection(db, "appointments"));
-
-        // 🛡️ SANITIZAÇÃO: Garante que nada seja undefined
-        // Prioridade: 1. Novo Dado (restData) -> 2. Dado Antigo (currentAppointment) -> 3. Valor Padrão
-        const appointmentData = {
-            patientId: restData.patientId || currentAppointment.patientId,
-            patientName: newPatName,
-            professionalId: restData.professionalId || currentAppointment.professionalId,
-            professionalName: newProfName,
-            title: `${newPatName} - ${newProfName}`,
-            start: Timestamp.fromDate(newStart),
-            end: Timestamp.fromDate(newEnd),
-            
-            // Campos Opcionais com Fallback Seguro
-            tipo: restData.tipo ?? currentAppointment.tipo ?? "",
-            sala: restData.sala ?? currentAppointment.sala ?? null,
-            convenio: restData.convenio ?? currentAppointment.convenio ?? "",
-            valorConsulta: restData.valorConsulta ?? currentAppointment.valorConsulta ?? 0,
-            observacoes: restData.observacoes ?? currentAppointment.observacoes ?? "", // 🔥 AQUI ESTAVA O ERRO
-            
-            // Controle da Série
-            blockId: newBlockId,
-            status: i === 0 ? (data.status || 'agendado') : 'agendado',
-            statusSecundario: i === 0 ? (data.statusSecundario || '') : '',
-            isLastInBlock: (i === futureOldAppointments.length - 1)
-        };
-
-        // Remove chaves que ainda possam ser undefined (segurança extra)
-        Object.keys(appointmentData).forEach(key => (appointmentData as any)[key] === undefined && delete (appointmentData as any)[key]);
-
-        batch.set(newDocRef, appointmentData);
-    }
-
-    // 6. 🗑️ DELEÇÃO DA SÉRIE VELHA
-    futureOldAppointments.forEach(oldApp => {
-        batch.delete(oldApp.ref);
-    });
-
     await batch.commit();
 
-    return { success: true };
+    // Repasse: o do atendimento editado sempre (o status pode ter mudado). Os outros, só os que já
+    // geravam repasse e só se mudou algo que entra no cálculo.
+    const mudouOCalculo = ['valorConsulta', 'professionalId', 'tipo', 'convenio'].some(campo => campo in mudancas);
+    for (const atendimento of serie) {
+      if (atendimento.id !== currentAppointment.id && !(mudouOCalculo && geraRepasse(atendimento))) continue;
+      const atualizado = await getDoc(atendimento.ref);
+      if (atualizado.exists()) {
+        await handleRepasseTransaction({ ...(atualizado.data() as Appointment), id: atualizado.id });
+      }
+    }
 
+    return { success: true };
   } catch (error) {
-    console.error("Erro na migração de bloco:", error);
-    // Retorna o erro detalhado para facilitar o debug se acontecer de novo
+    console.error("Erro ao atualizar a série de agendamentos:", error);
     const errorMessage = error instanceof Error ? error.message : "Falha desconhecida";
-    return { success: false, error: `Erro ao recriar série: ${errorMessage}` };
+    return { success: false, error: `Erro ao atualizar a série: ${errorMessage}` };
   }
 };
 
