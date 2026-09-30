@@ -7,7 +7,8 @@ import {
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import Image from "next/image"
-import { useAuth } from "@/context/AuthContext" 
+import { useAuth } from "@/context/AuthContext"
+import { useConversas } from "@/hooks/use-conversas"
 
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -35,8 +36,9 @@ const menuItems = [
 
 export function AppSidebar() {
   const pathname = usePathname()
-  const { firestoreUser, unreadCount } = useAuth() 
+  const { firestoreUser, unreadCount } = useAuth()
   const { setOpenMobile } = useSidebar(); // <-- USE O HOOK AQUI
+  const { naoLidas: conversasNaoLidas } = useConversas()
 
   const accessibleItems = menuItems.filter(item => {
     if (!firestoreUser?.profile) return false;
@@ -57,7 +59,7 @@ export function AppSidebar() {
             <SidebarMenu>
               {accessibleItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={pathname === item.url}>
+                  <SidebarMenuButton asChild isActive={pathname === item.url || (item.url !== "/" && pathname.startsWith(`${item.url}/`))}>
                     {/* ADICIONE O onClick AQUI */}
                     <Link href={item.url} className="flex items-center justify-between w-full" onClick={() => setOpenMobile(false)}>
                       <div className="flex items-center gap-2">
@@ -67,6 +69,14 @@ export function AppSidebar() {
                       {/* --- LÓGICA DA NOTIFICAÇÃO --- */}
                       {item.title === "Comunicação" && unreadCount > 0 && (
                         <span className="h-2 w-2 rounded-full bg-red-500" />
+                      )}
+                      {item.title === "Mensagens" && conversasNaoLidas > 0 && (
+                        <span
+                          aria-label={`${conversasNaoLidas} conversas com mensagens novas`}
+                          className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#1da7ac] px-1.5 text-xs font-bold text-white"
+                        >
+                          {conversasNaoLidas}
+                        </span>
                       )}
                     </Link>
                   </SidebarMenuButton>

@@ -1,132 +1,136 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { MultiSelectFilter } from "@/components/ui/multi-select-filter" // Assumindo que você tem esse componente ou similar, senão use checkboxes
-import { createChatGroup } from "@/services/chatService"
-import { getUsersByRole, UserDetails } from "@/services/communicationService"
-import { useAuth } from "@/context/AuthContext"
+import { AlertCircle, Loader2, Plus } from "lucide-react"
 import { toast } from "sonner"
-import { Plus, Loader2 } from "lucide-react"
+import { useAuth } from "@/context/AuthContext"
+import { Patient } from "@/services/patientService"
+import { ChatMember, createPatientChatGroup, getApprovedPeople, getPatientTeamSuggestion } from "@/services/chatService"
+import { EscolherPaciente } from "@/components/mensagens/escolher-paciente"
+import { SeletorDePessoas } from "@/components/mensagens/seletor-de-pessoas"
 
-export function CreateChatGroupModal({ onGroupCreated }: { onGroupCreated?: () => void }) {
-    const { firestoreUser } = useAuth();
-    const [open, setOpen] = useState(false);
-    const [loading, setLoading] = useState(false);
-    
-    const [pacientes, setPacientes] = useState<UserDetails[]>([]);
-    const [profissionais, setProfissionais] = useState<UserDetails[]>([]);
-    
-    const [selectedPacienteId, setSelectedPacienteId] = useState("");
-    const [selectedProfissionaisIds, setSelectedProfissionaisIds] = useState<string[]>([]);
+// Novo grupo de conversa de um paciente: a família vinculada e os terapeutas que atendem a criança já vêm marcados
+export function CreateChatGroupModal() {
+    const { firestoreUser } = useAuth()
+    const router = useRouter()
+    const [open, setOpen] = useState(false)
+    const [paciente, setPaciente] = useState<Patient | null>(null)
+    const [pessoas, setPessoas] = useState<ChatMember[]>([])
+    const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
+    const [sugeridos, setSugeridos] = useState<Set<string>>(new Set())
+    const [semFamilia, setSemFamilia] = useState(false)
+    const [carregando, setCarregando] = useState(false)
+    const [salvando, setSalvando] = useState(false)
 
-    // Carregar listas ao abrir
     useEffect(() => {
-        if (open) {
-            const loadData = async () => {
-                const [famUsers, profUsers] = await Promise.all([
-                    getUsersByRole('familiar'),
-                    getUsersByRole('profissional')
-                ]);
-                setPacientes(famUsers);
-                setProfissionais(profUsers);
-            };
-            loadData();
+        if (!open) return
+        getApprovedPeople().then(setPessoas)
+    }, [open])
+
+    const reiniciar = () => {
+        setPaciente(null)
+        setSelecionados(new Set())
+        setSugeridos(new Set())
+        setSemFamilia(false)
+    }
+
+    const escolherPaciente = async (escolhido: Patient, grupoExistente?: string) => {
+        if (grupoExistente) {
+            setOpen(false)
+            reiniciar()
+            router.push(`/mensagens/${grupoExistente}`)
+            return
         }
-    }, [open]);
-
-    const handleCreate = async () => {
-        if (!selectedPacienteId || selectedProfissionaisIds.length === 0) {
-            toast.error("Selecione um paciente e pelo menos um terapeuta.");
-            return;
+        setPaciente(escolhido)
+        setCarregando(true)
+        try {
+            const sugestao = await getPatientTeamSuggestion(escolhido.id)
+            const marcados = new Set([...sugestao.familia, ...sugestao.terapeutas])
+            setSugeridos(marcados)
+            setSelecionados(marcados)
+            setSemFamilia(sugestao.familia.length === 0)
+        } catch (error) {
+            console.error("Erro ao sugerir participantes:", error)
+        } finally {
+            setCarregando(false)
         }
+    }
 
-        setLoading(true);
-        const paciente = pacientes.find(p => p.uid === selectedPacienteId);
-        const terapeutasSelecionados = profissionais.filter(p => selectedProfissionaisIds.includes(p.uid));
+    const alternar = (uid: string) => {
+        setSelecionados(atual => {
+            const novo = new Set(atual)
+            if (novo.has(uid)) novo.delete(uid)
+            else novo.add(uid)
+            return novo
+        })
+    }
 
-        if (!paciente || !firestoreUser) return;
+    const criar = async () => {
+        if (!paciente || !firestoreUser) return
+        setSalvando(true)
+        const resultado = await createPatientChatGroup({
+            paciente: { id: paciente.id, nome: paciente.fullName },
+            membros: pessoas.filter(p => selecionados.has(p.uid)),
+            criadoPor: firestoreUser.uid,
+        })
+        setSalvando(false)
 
-        // Formata os dados
-        const result = await createChatGroup(
-            { uid: paciente.uid, nome: paciente.displayName, responsavelNome: paciente.displayName },
-            terapeutasSelecionados.map(t => ({ uid: t.uid, nome: t.displayName })),
-            firestoreUser.uid
-        );
-
-        setLoading(false);
-
-        if (result.success) {
-            toast.success("Grupo criado com sucesso!");
-            setOpen(false);
-            setSelectedPacienteId("");
-            setSelectedProfissionaisIds([]);
-            if (onGroupCreated) onGroupCreated();
+        if (resultado.success) {
+            toast.success(`Grupo de ${paciente.fullName} criado.`)
+        } else if (resultado.error === "ja-existe") {
+            toast.info(`${paciente.fullName} já tem um grupo. Abrindo a conversa.`)
         } else {
-            toast.error("Erro ao criar grupo.");
+            toast.error("Não foi possível criar o grupo. Tente novamente.")
+            return
         }
-    };
-
-    // Opções para o MultiSelect (adapte conforme seu componente de UI)
-    const profissionalOptions = profissionais.map(p => ({ label: p.displayName, value: p.uid }));
+        setOpen(false)
+        reiniciar()
+        router.push(`/mensagens/${resultado.id}`)
+    }
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(aberto) => { setOpen(aberto); if (!aberto) reiniciar() }}>
             <DialogTrigger asChild>
-                <Button className="bg-primary-teal hover:bg-primary-teal/90">
-                    <Plus className="mr-2 h-4 w-4" /> Novo Grupo
+                <Button size="sm" className="bg-[#1da7ac] hover:bg-[#1da7ac]/90">
+                    <Plus className="mr-1 h-4 w-4" /> Novo grupo
                 </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Criar Grupo de Paciente</DialogTitle>
+                    <DialogTitle>{paciente ? `Grupo de ${paciente.fullName}` : "Novo grupo de conversa"}</DialogTitle>
+                    <DialogDescription>
+                        {paciente ? "Confira quem vai participar da conversa." : "Escolha a criança. A família e os terapeutas dela já vêm marcados."}
+                    </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                        <Label>Paciente (Família)</Label>
-                        <Select value={selectedPacienteId} onValueChange={setSelectedPacienteId}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Selecione a família/paciente" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {pacientes.map(p => (
-                                    <SelectItem key={p.uid} value={p.uid}>{p.displayName}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
 
-                    <div className="space-y-2">
-                        <Label>Equipe Terapêutica</Label>
-                        {/* Se não tiver o MultiSelectFilter, use um select multiple nativo ou map de checkboxes */}
-                        <div className="border rounded-md p-2 max-h-40 overflow-y-auto space-y-2">
-                            {profissionais.map(prof => (
-                                <div key={prof.uid} className="flex items-center gap-2">
-                                    <input 
-                                        type="checkbox" 
-                                        id={prof.uid}
-                                        checked={selectedProfissionaisIds.includes(prof.uid)}
-                                        onChange={(e) => {
-                                            if(e.target.checked) setSelectedProfissionaisIds([...selectedProfissionaisIds, prof.uid]);
-                                            else setSelectedProfissionaisIds(selectedProfissionaisIds.filter(id => id !== prof.uid));
-                                        }}
-                                        className="rounded border-gray-300"
-                                    />
-                                    <Label htmlFor={prof.uid} className="cursor-pointer font-normal">{prof.displayName}</Label>
-                                </div>
-                            ))}
+                {!paciente ? (
+                    <EscolherPaciente onEscolher={escolherPaciente} />
+                ) : carregando ? (
+                    <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+                ) : (
+                    <div className="space-y-3">
+                        {semFamilia && (
+                            <p className="flex gap-2 rounded-md bg-amber-50 p-3 text-sm text-amber-900">
+                                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                                A família de {paciente.fullName.split(" ")[0]} ainda não criou acesso ao sistema. Você pode criar o grupo agora e adicioná-la depois.
+                            </p>
+                        )}
+                        {/* Quem cria o grupo entra nele sempre, por isso não aparece na lista */}
+                        <SeletorDePessoas pessoas={pessoas.filter(p => p.uid !== firestoreUser?.uid)} selecionados={selecionados} onAlternar={alternar} sugeridos={sugeridos} />
+                        <p className="text-xs text-slate-500">Você também entra no grupo.</p>
+                        <div className="flex gap-2">
+                            <Button variant="outline" onClick={reiniciar} className="flex-1">Trocar criança</Button>
+                            <Button onClick={criar} disabled={salvando} className="flex-1 bg-[#1da7ac] hover:bg-[#1da7ac]/90">
+                                {salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Criar grupo ({new Set([...selecionados, firestoreUser?.uid]).size} pessoas)
+                            </Button>
                         </div>
                     </div>
-
-                    <Button onClick={handleCreate} disabled={loading} className="w-full">
-                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Criar Grupo
-                    </Button>
-                </div>
+                )}
             </DialogContent>
         </Dialog>
-    );
+    )
 }

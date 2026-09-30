@@ -84,6 +84,36 @@ export const formatSpecialtyName = (specialtyName: string): string => {
 };
 
 /**
+ * "Hoje", "Ontem" ou "12 de setembro" (com o ano, se não for o ano atual).
+ */
+export const rotuloDoDia = (data: Date): string => {
+  const hoje = new Date();
+  const ontem = new Date();
+  ontem.setDate(hoje.getDate() - 1);
+  if (data.toDateString() === hoje.toDateString()) return "Hoje";
+  if (data.toDateString() === ontem.toDateString()) return "Ontem";
+  return data.toLocaleDateString("pt-BR", {
+    day: "numeric",
+    month: "long",
+    ...(data.getFullYear() !== hoje.getFullYear() ? { year: "numeric" } : {}),
+  });
+};
+
+/** "09:05" */
+export const horaCurta = (data: Date): string =>
+  data.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+/**
+ * Para listas: a hora se for hoje, "Ontem", ou dia/mês ("12/09").
+ */
+export const quandoCurto = (data: Date): string => {
+  const dia = rotuloDoDia(data);
+  if (dia === "Hoje") return horaCurta(data);
+  if (dia === "Ontem") return dia;
+  return data.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+};
+
+/**
  * Até duas iniciais de um nome, para avatares ("Maria Souza" -> "MS").
  */
 export const getIniciais = (nome: string | null | undefined): string => {

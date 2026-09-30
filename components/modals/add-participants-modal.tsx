@@ -1,121 +1,86 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { useEffect, useState } from "react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { addProfessionalsToGroup } from "@/services/chatService"
-import { getUsersByRole, UserDetails } from "@/services/communicationService"
+import { Loader2, UserPlus } from "lucide-react"
 import { toast } from "sonner"
-import { UserPlus, Loader2 } from "lucide-react"
+import { addGroupMembers, ChatMember, getApprovedPeople } from "@/services/chatService"
+import { SeletorDePessoas } from "@/components/mensagens/seletor-de-pessoas"
 
 interface AddParticipantsModalProps {
-    groupId: string;
-    existingIds?: string[];
-    onAdded?: () => void;
+    groupId: string
+    memberIds: string[]
+    onAdded?: () => void
 }
 
-export function AddParticipantsModal({ groupId, existingIds = [], onAdded }: AddParticipantsModalProps) {
-    const [open, setOpen] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [fetching, setFetching] = useState(false);
-    
-    const [profissionais, setProfissionais] = useState<UserDetails[]>([]);
-    const [selectedProfissionaisIds, setSelectedProfissionaisIds] = useState<string[]>([]);
+// Coloca qualquer pessoa aprovada no grupo: família (inclusive um segundo responsável), terapeutas e equipe
+export function AddParticipantsModal({ groupId, memberIds, onAdded }: AddParticipantsModalProps) {
+    const [open, setOpen] = useState(false)
+    const [pessoas, setPessoas] = useState<ChatMember[] | null>(null)
+    const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
+    const [salvando, setSalvando] = useState(false)
 
+    // A lista de membros chega como um array novo a cada atualização; a chave em texto evita recarregar à toa
+    const chaveDosMembros = memberIds.join(",")
     useEffect(() => {
-        if (open) {
-            setFetching(true);
-            const loadData = async () => {
-                const profUsers = await getUsersByRole('profissional');
-                // Remove out already existing professionals in the group
-                const availableProf = profUsers.filter(p => !existingIds.includes(p.uid));
-                setProfissionais(availableProf);
-                setFetching(false);
-            };
-            loadData();
-        } else {
-            setSelectedProfissionaisIds([]);
+        if (!open) return
+        setSelecionados(new Set())
+        const atuais = chaveDosMembros.split(",")
+        getApprovedPeople().then(todas => setPessoas(todas.filter(p => !atuais.includes(p.uid))))
+    }, [open, chaveDosMembros])
+
+    const alternar = (uid: string) => {
+        setSelecionados(atual => {
+            const novo = new Set(atual)
+            if (novo.has(uid)) novo.delete(uid)
+            else novo.add(uid)
+            return novo
+        })
+    }
+
+    const adicionar = async () => {
+        if (!pessoas || selecionados.size === 0) return
+        setSalvando(true)
+        try {
+            await addGroupMembers(groupId, pessoas.filter(p => selecionados.has(p.uid)))
+            toast.success(selecionados.size === 1 ? "Pessoa adicionada à conversa." : `${selecionados.size} pessoas adicionadas à conversa.`)
+            setOpen(false)
+            onAdded?.()
+        } catch (error) {
+            console.error("Erro ao adicionar participantes:", error)
+            toast.error("Não foi possível adicionar. Tente novamente.")
+        } finally {
+            setSalvando(false)
         }
-    }, [open, existingIds]);
-
-    const handleAdd = async () => {
-        if (selectedProfissionaisIds.length === 0) {
-            toast.error("Selecione pelo menos um profissional.");
-            return;
-        }
-
-        setLoading(true);
-        const terapeutasSelecionados = profissionais.filter(p => selectedProfissionaisIds.includes(p.uid));
-
-        const result = await addProfessionalsToGroup(
-            groupId,
-            terapeutasSelecionados.map(t => ({ uid: t.uid, nome: t.displayName }))
-        );
-
-        setLoading(false);
-
-        if (result.success) {
-            toast.success("Profissionais adicionados com sucesso!");
-            setOpen(false);
-            setSelectedProfissionaisIds([]);
-            if (onAdded) onAdded();
-        } else {
-            toast.error("Erro ao adicionar profissionais.");
-        }
-    };
+    }
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs text-primary-teal border-primary-teal/30 hover:bg-primary-teal/10">
-                    <UserPlus className="h-4 w-4" /> 
-                    <span className="hidden sm:inline">Adicionar</span>
+                <Button variant="outline" size="sm" className="w-full gap-1.5 border-[#1da7ac]/40 text-[#1da7ac] hover:bg-[#1da7ac]/10">
+                    <UserPlus className="h-4 w-4" /> Adicionar pessoas
                 </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Adicionar Profissionais ao Grupo</DialogTitle>
+                    <DialogTitle>Adicionar à conversa</DialogTitle>
+                    <DialogDescription>Família, terapeutas ou alguém da equipe da clínica.</DialogDescription>
                 </DialogHeader>
-                <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                        <Label>Selecione a equipe de profissionais</Label>
-                        
-                        {fetching ? (
-                            <div className="flex justify-center p-4"><Loader2 className="animate-spin text-primary-teal" /></div>
-                        ) : profissionais.length === 0 ? (
-                            <p className="text-sm text-muted-foreground italic">Nenhum novo profissional disponível para adicionar a este grupo.</p>
-                        ) : (
-                            <div className="border rounded-md p-2 max-h-60 overflow-y-auto space-y-2">
-                                {profissionais.map(prof => (
-                                    <div key={prof.uid} className="flex items-center gap-2">
-                                        <input 
-                                            type="checkbox" 
-                                            id={`add-prof-${prof.uid}`}
-                                            checked={selectedProfissionaisIds.includes(prof.uid)}
-                                            onChange={(e) => {
-                                                if(e.target.checked) setSelectedProfissionaisIds([...selectedProfissionaisIds, prof.uid]);
-                                                else setSelectedProfissionaisIds(selectedProfissionaisIds.filter(id => id !== prof.uid));
-                                            }}
-                                            className="rounded border-gray-300 text-primary-teal focus:ring-primary-teal"
-                                        />
-                                        <Label htmlFor={`add-prof-${prof.uid}`} className="cursor-pointer font-normal text-sm">{prof.displayName}</Label>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                {pessoas === null ? (
+                    <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+                ) : pessoas.length === 0 ? (
+                    <p className="py-4 text-center text-sm text-slate-500">Todas as pessoas aprovadas já estão nesta conversa.</p>
+                ) : (
+                    <div className="space-y-3">
+                        <SeletorDePessoas pessoas={pessoas} selecionados={selecionados} onAlternar={alternar} />
+                        <Button onClick={adicionar} disabled={salvando || selecionados.size === 0} className="w-full bg-[#1da7ac] hover:bg-[#1da7ac]/90">
+                            {salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Adicionar {selecionados.size > 0 ? `(${selecionados.size})` : ""}
+                        </Button>
                     </div>
-
-                    <Button 
-                        onClick={handleAdd} 
-                        disabled={loading || profissionais.length === 0 || selectedProfissionaisIds.length === 0} 
-                        className="w-full bg-primary-teal hover:bg-primary-teal/90"
-                    >
-                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Adicionar ao Grupo
-                    </Button>
-                </div>
+                )}
             </DialogContent>
         </Dialog>
-    );
+    )
 }

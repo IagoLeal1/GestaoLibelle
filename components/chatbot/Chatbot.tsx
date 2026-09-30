@@ -70,8 +70,8 @@ export function Chatbot() {
     }
   };
 
-  // Na conversa, o botão flutuante ficaria em cima do botão de enviar
-  if (pathname?.startsWith("/mensagens/")) return null;
+  // Nas mensagens (lista e conversa lado a lado), o botão flutuante ficaria em cima do botão de enviar
+  if (pathname?.startsWith("/mensagens")) return null;
 
   return (
     <>

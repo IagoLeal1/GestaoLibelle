@@ -2,7 +2,6 @@
 import { db } from "@/lib/firebaseConfig";
 import {
   collection,
-  addDoc,
   query,
   where,
   orderBy,
@@ -219,36 +218,6 @@ export const hasUnread = (group: ChatGroup, uid: string): boolean => {
   return last.createdAt.toMillis() > lidoAte;
 };
 
-export const createChatGroup = async (
-  paciente: { uid: string; nome: string; responsavelNome: string },
-  terapeutas: { uid: string; nome: string }[],
-  coordenadorId: string
-) => {
-  try {
-    const agora = Timestamp.now();
-    const groupData = {
-      pacienteId: paciente.uid,
-      pacienteNome: paciente.nome,
-      responsavelId: paciente.uid,
-      responsavelNome: paciente.responsavelNome,
-      terapeutaIds: terapeutas.map(t => t.uid),
-      terapeutaNomes: terapeutas.map(t => t.nome),
-      memberIds: [paciente.uid, coordenadorId, ...terapeutas.map(t => t.uid)],
-      createdBy: coordenadorId,
-      createdAt: agora,
-      updatedAt: agora,
-      unreadCounts: {},
-      lastMessage: null
-    };
-    
-    const docRef = await addDoc(collection(db, "chat_groups"), groupData);
-    return { success: true, id: docRef.id };
-  } catch (error) {
-    console.error("Erro ao criar grupo:", error);
-    return { success: false, error };
-  }
-};
-
 export const subscribeToUserGroups = (
   userId: string,
   callback: (groups: ChatGroup[]) => void,
@@ -439,39 +408,3 @@ export const getGroupDetails = async (groupId: string) => {
         return null;
     }
 }
-
-export const addProfessionalsToGroup = async (
-  groupId: string,
-  novosTerapeutas: { uid: string; nome: string }[]
-) => {
-  try {
-    const groupRef = doc(db, "chat_groups", groupId);
-    const snap = await getDoc(groupRef);
-    if (!snap.exists()) return { success: false, error: "Grupo não encontrado" };
-    
-    const data = snap.data() as ChatGroup;
-    
-    const existingIds = data.terapeutaIds || [];
-    const existingNames = data.terapeutaNomes || [];
-    const memberIds = data.memberIds || [];
-    
-    const newProfessionals = novosTerapeutas.filter(t => !existingIds.includes(t.uid));
-    
-    if (newProfessionals.length === 0) return { success: true };
-    
-    const newIds = newProfessionals.map(t => t.uid);
-    const newNames = newProfessionals.map(t => t.nome);
-    
-    await updateDoc(groupRef, {
-        terapeutaIds: [...existingIds, ...newIds],
-        terapeutaNomes: [...existingNames, ...newNames],
-        memberIds: [...memberIds, ...newIds],
-        updatedAt: Timestamp.now()
-    });
-    
-    return { success: true };
-  } catch (error) {
-    console.error("Erro ao adicionar profissionais:", error);
-    return { success: false, error };
-  }
-};
