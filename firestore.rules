@@ -52,6 +52,11 @@ service cloud.firestore {
       return isAdmin() || isCoordenador();
     }
 
+    // Lançamento de repasse ao profissional, gerado ao finalizar um atendimento
+    function isRepasse(dados) {
+      return dados.category == 'Repasse de Profissional';
+    }
+
     // --- 2. REGRAS DE USUÁRIOS ---
     match /users/{userId} {
       // O próprio cadastro sempre nasce pendente e com um dos papéis do formulário:
@@ -60,8 +65,9 @@ service cloud.firestore {
         && request.resource.data.uid == userId
         && request.resource.data.profile.status == 'pendente'
         && request.resource.data.profile.role in ['familiar', 'profissional', 'funcionario'];
-      // Cada pessoa lê o próprio cadastro, mesmo pendente: é assim que o login avisa que falta aprovação
-      allow read: if isApproved() || (isSignedIn() && request.auth.uid == userId);
+      // Cada pessoa lê o próprio cadastro, mesmo pendente: é assim que o login avisa que falta aprovação.
+      // Os cadastros dos outros (CPF, e-mail, telefone) só a gestão vê.
+      allow read: if (isSignedIn() && request.auth.uid == userId) || canManage();
       // O admin altera tudo. A própria pessoa só troca o nome (tela "Minha conta").
       allow update: if isAdmin() || (
         request.auth.uid == userId
@@ -97,9 +103,10 @@ service cloud.firestore {
           && request.resource.data.lastReadAt[request.auth.uid] == request.time;
       }
 
-      // O que só a coordenação muda: quem participa e a qual criança o grupo pertence
+      // O que só a coordenação muda: quem participa (com nome e papel) e a qual criança o grupo pertence
       function isGroupManagement() {
-        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'pacienteId', 'pacienteNome']);
+        return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['memberIds', 'membros', 'pacienteId', 'pacienteNome']);
       }
 
       // Só quem tem cadastro aprovado: pendentes e usuários removidos perdem o acesso
@@ -153,15 +160,21 @@ service cloud.firestore {
 
     // --- PACIENTES (Lógica de Auto-Vínculo Atualizada) ---
     match /patients/{patientId} {
-      // Familiar pode LER para encontrar seus filhos/dependentes
-      allow read: if isApproved() && (canManage() || isProfissional() || isFamiliar());
+      // Gestão e terapeutas veem todas as crianças. A família vê só as suas: as já ligadas a ela
+      // e, para o primeiro vínculo, as cadastradas com o e-mail dela.
+      allow read: if canManage() || isProfissional() || (
+        isFamiliar() && (
+          resource.data.userId == request.auth.uid
+          || resource.data.emailCadastro == request.auth.token.email
+        )
+      );
 
       // Create e Delete continuam restritos APENAS à gestão
       allow create, delete: if canManage();
 
-      // Update: Permite se for Gestão OU se for o Auto-Vínculo seguro
+      // Update: gestão, ou o vínculo automático da família já aprovada com a criança do e-mail dela
       allow update: if canManage() || (
-        isSignedIn() &&
+        isFamiliar() &&
         resource.data.emailCadastro == request.auth.token.email &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userId']) &&
         request.resource.data.userId == request.auth.uid
@@ -208,7 +221,8 @@ service cloud.firestore {
     }
 
     match /professionals/{professionalId} {
-      allow read: if isApproved();
+      // A família não usa o cadastro dos profissionais (CPF, repasse): só gestão e terapeutas
+      allow read: if canManage() || isProfissional();
       allow write: if isAdmin() || isCoordenador();
     }
 
@@ -223,9 +237,13 @@ service cloud.firestore {
     }
 
     match /appointments/{appointmentId} {
-      allow read: if isApproved() && (canManage() || isProfissional() || isFamiliar());
-      allow create: if canManage();
-      allow update, delete: if canManage() || isProfissional();
+      // Gestão e terapeutas veem a agenda da clínica; a família, só os atendimentos das suas crianças
+      allow read: if canManage() || isProfissional() || (
+        isFamiliar()
+        && get(/databases/$(database)/documents/patients/$(resource.data.patientId)).data.userId == request.auth.uid
+      );
+      // Só a recepção e a gestão criam, alteram e apagam atendimentos (o terapeuta consulta)
+      allow create, update, delete: if canManage();
     }
 
     match /comercial_eventos/{eventoId} {
@@ -238,15 +256,37 @@ service cloud.firestore {
       allow create, update, delete: if isComercialTeam();
     }
 
-    // Financeiro
-    match /settings/{docId} { allow read, write: if canManage(); }
-    match /costCenters/{docId} { allow read, write: if canManage(); }
-    match /suppliers/{docId} { allow read, write: if canManage(); }
-    match /covenants/{docId} { allow read, write: if canManage(); }
-    match /bankAccounts/{docId} { allow read, write: if canManage(); }
-    match /accountPlans/{docId} { allow read, write: if canManage(); }
-    match /transactions/{docId} { allow read, write: if canManage(); }
-    match /budgets/{docId} { allow read, write: if canManage(); }
+    // Financeiro: só o admin. A recepção e a coordenação apenas geram o repasse ao finalizar um
+    // atendimento: o lançamento, o plano de contas e o centro de custo dele, e a conta padrão.
+    match /transactions/{docId} {
+      allow read: if isAdmin() || (canManage() && isRepasse(resource.data));
+      allow create: if isAdmin() || (
+        canManage() && isRepasse(request.resource.data) && request.resource.data.appointmentId is string
+      );
+      allow update: if isAdmin();
+      // Repasse já pago não se apaga: o registro do pagamento é do Financeiro
+      allow delete: if isAdmin() || (
+        canManage() && isRepasse(resource.data) && resource.data.status == 'pendente'
+      );
+    }
+    match /accountPlans/{docId} {
+      allow read: if isAdmin() || (canManage() && resource.data.name == 'Repasse de Profissional');
+      allow create: if isAdmin() || (canManage() && request.resource.data.name == 'Repasse de Profissional');
+      allow update, delete: if isAdmin();
+    }
+    match /costCenters/{docId} {
+      // São os nomes das terapias; o repasse cria o que faltar
+      allow read, create: if canManage();
+      allow update, delete: if isAdmin();
+    }
+    match /bankAccounts/{docId} {
+      allow read: if isAdmin() || (canManage() && resource.data.isDefault == true);
+      allow write: if isAdmin();
+    }
+    match /settings/{docId} { allow read, write: if isAdmin(); }
+    match /suppliers/{docId} { allow read, write: if isAdmin(); }
+    match /covenants/{docId} { allow read, write: if isAdmin(); }
+    match /budgets/{docId} { allow read, write: if isAdmin(); }
 
     match /communications/{communicationId} {
       allow read: if isApproved();

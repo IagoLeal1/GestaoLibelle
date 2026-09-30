@@ -179,6 +179,19 @@ describe('atualização do grupo', () => {
     await assertSucceeds(updateDoc(grupo, { pacienteId: 'paciente-lucas', pacienteNome: 'Lucas Souza' }));
   });
 
+  it('coordenação guarda no grupo o nome e o papel de quem entra', async () => {
+    const grupo = doc(bancoDe('coordenacao'), 'chat_groups', GRUPO);
+    await assertSucceeds(updateDoc(grupo, {
+      memberIds: arrayUnion('outra-familia'),
+      'membros.outra-familia': { nome: 'João Lima', papel: 'familiar' },
+    }));
+  });
+
+  it('membro não altera os nomes e papéis guardados no grupo', async () => {
+    const grupo = doc(bancoDe('familia'), 'chat_groups', GRUPO);
+    await assertFails(updateDoc(grupo, { 'membros.familia': { nome: 'Coordenação', papel: 'coordenador' } }));
+  });
+
   it('coordenação não marca a leitura de outra pessoa', async () => {
     const grupo = doc(bancoDe('coordenacao'), 'chat_groups', GRUPO);
     await assertFails(updateDoc(grupo, { 'lastReadAt.familia': serverTimestamp() }));
