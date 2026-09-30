@@ -177,6 +177,11 @@ batch.set(db.doc('patients/paciente-theo'), {
   responsavel: { nome: 'Renata Martins', email: 'renata.martins@libelle.test' },
 });
 
+// Especialidades: aparecem como terapias no assistente de agendamento (mesmos nomes dos profissionais)
+for (const [id, name, value] of [['fono', 'Fonoaudiologia', 150], ['psico', 'Psicologia', 160]]) {
+  batch.set(db.doc(`specialties/${id}`), { name, value, description: '' });
+}
+
 // Paciente cuja família já criou a conta, mas ainda espera aprovação (Pedro Pendente)
 batch.set(db.doc('patients/paciente-davi'), {
   fullName: 'Davi Rocha',
