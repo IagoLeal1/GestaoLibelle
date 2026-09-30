@@ -134,12 +134,18 @@ describe("adminService: approveUser (com WriteBatch)", () => {
       expect.anything()
     );
 
-    // Verifica se os dados criados estão corretos
+    // Verifica se os dados criados estão no formato de "Profissionais > Novo" (interface Professional)
     const professionalData = mockBatch.set.mock.calls[0][1];
-    expect(professionalData.name).toBe("Dr. Teste");
-    expect(professionalData.cpf).toBe(CPF_NOVO);
-    expect(professionalData.userId).toBe(USER_ID);
-    expect(professionalData.registrationNumber).toBe("12345");
+    expect(professionalData).toMatchObject({
+      fullName: "Dr. Teste",
+      cpf: CPF_NOVO,
+      userId: USER_ID,
+      especialidade: "Testologia",
+      conselho: "TESTE",
+      numeroConselho: "12345",
+      telefone: "123456789",
+      status: "ativo",
+    });
 
     // Verifica se o 'update' (ATUALIZAR) foi chamado
     expect(mockBatch.update).toHaveBeenCalledTimes(1);

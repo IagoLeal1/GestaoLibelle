@@ -33,6 +33,7 @@ const getTipoBadge = (tipo: string) => {
     familiar: { label: "Familiar", className: "bg-blue-100 text-blue-800" },
     profissional: { label: "Profissional", className: "bg-purple-100 text-purple-800" },
     funcionario: { label: "Funcionário", className: "bg-indigo-100 text-indigo-800" },
+    coordenador: { label: "Coordenação", className: "bg-teal-100 text-teal-800" },
     admin: { label: "Admin", className: "bg-gray-800 text-white" },
   };
   const config = tipoConfig[tipo] || { label: 'Desconhecido', className: 'bg-gray-100 text-gray-800' };

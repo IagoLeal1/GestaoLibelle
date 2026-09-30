@@ -152,28 +152,27 @@ export const approveUser = async (userId: string) => {
         const newProfessionalRef = doc(professionalsRef); // Gera ID
         professionalId = newProfessionalRef.id;
 
-        // Prepara os dados do novo profissional
+        // Prepara os dados do novo profissional, no mesmo formato de "Profissionais > Novo"
+        // (interface Professional): é por esses campos que listas, agenda e repasse o encontram
         const newProfData = {
           userId: userId,
-          name: userData.displayName,
+          fullName: userData.displayName,
           email: userData.email,
+          status: "ativo",
+          especialidade: userProfile.professionalData?.especialidade || "",
+          conselho: userProfile.professionalData?.conselho || "",
+          numeroConselho: userProfile.professionalData?.numeroConselho || "",
           cpf: userProfile.cpf,
-          phone: userProfile.telefone || "",
-          registrationNumber:
-            userProfile.professionalData?.numeroConselho || "",
-          specialties: userProfile.professionalData?.especialidade
-            ? [userProfile.professionalData.especialidade]
-            : [],
-          council: userProfile.professionalData?.conselho || "",
-          rooms: [],
-          availability: { days: [], startTime: "08:00", endTime: "18:00" },
-          financial: userProfile.financeiro || {
+          telefone: userProfile.telefone || "",
+          celular: "",
+          diasAtendimento: [],
+          horarioInicio: "08:00",
+          horarioFim: "18:00",
+          dataContratacao: Timestamp.now(),
+          financeiro: userProfile.financeiro || {
             tipoPagamento: "repasse",
             percentualRepasse: 70,
           },
-          status: "ativo",
-          createdAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
         };
         
         // Ação 1 do Lote: Criar o profissional
