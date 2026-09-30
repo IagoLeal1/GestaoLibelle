@@ -3,7 +3,6 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Header } from "@/components/header";
 import { AuthGuard } from "@/components/auth/auth-guard";
-import { Chatbot } from "@/components/chatbot/Chatbot"; // <-- 1. IMPORTE AQUI
 import { Toaster } from "sonner";
 import { Toaster as ToasterShadcn } from "@/components/ui/toaster";
 
@@ -25,7 +24,6 @@ export default function DashboardLayout({
           </main>
         </SidebarInset>
       </SidebarProvider>
-      <Chatbot /> {/* <-- 2. ADICIONE AQUI */}
       {/* Avisos (toast) de todas as telas do painel: sonner e o do shadcn (Minha conta, Gerenciar usuários) */}
       <Toaster richColors />
       <ToasterShadcn />
