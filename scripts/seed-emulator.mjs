@@ -177,6 +177,18 @@ batch.set(db.doc('patients/paciente-theo'), {
   responsavel: { nome: 'Renata Martins', email: 'renata.martins@libelle.test' },
 });
 
+// Paciente cuja família já criou a conta, mas ainda espera aprovação (Pedro Pendente)
+batch.set(db.doc('patients/paciente-davi'), {
+  fullName: 'Davi Rocha',
+  cpf: '000.000.000-00',
+  dataNascimento: Timestamp.fromDate(new Date('2021-07-20T00:00:00Z')),
+  status: 'ativo',
+  dataCadastro: agora,
+  emailCadastro: porUid['pendente-teste'].email,
+  userId: 'pendente-teste',
+  responsavel: { nome: porUid['pendente-teste'].displayName, email: porUid['pendente-teste'].email },
+});
+
 // Atendimentos: dão a sugestão de terapeutas ao criar o grupo de cada criança
 const DIA = 24 * 60 * 60 * 1000;
 for (const [pacienteId, profissionalId, dias] of [
@@ -184,6 +196,7 @@ for (const [pacienteId, profissionalId, dias] of [
   ['paciente-lucas', 'terapeuta1-teste', 7],
   ['paciente-bia', 'terapeuta2-teste', -3],
   ['paciente-theo', 'terapeuta2-teste', 2],
+  ['paciente-davi', 'terapeuta1-teste', 1],
 ]) {
   const inicio = agora.toMillis() + dias * DIA;
   batch.set(db.doc(`appointments/ag-${pacienteId}-${dias}`), {
