@@ -6,7 +6,7 @@ import { deleteApp } from 'firebase/app';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { deleteDoc, doc, setDoc, terminate, Timestamp, writeBatch } from 'firebase/firestore';
 import { app, auth, db } from '@/lib/firebaseConfig';
-import { ChatGroup, ChatMessage, subscribeToChatMessages, subscribeToUserGroups } from '@/services/chatService';
+import { ChatGroup, ChatMessage, Papel, subscribeToChatMessages, subscribeToUserGroups } from '@/services/chatService';
 
 const PROJECT_ID = 'demo-libelle';
 const SENHA = 'senha-de-teste';
@@ -15,7 +15,7 @@ export interface UsuarioDeTeste {
   uid: string;
   email: string;
   displayName: string;
-  role: string;
+  role: Papel;
 }
 
 let testEnv: RulesTestEnvironment;
@@ -99,7 +99,7 @@ export function aguardarGrupos(
 /** Cria a conta de login e o documento em users, como no cadastro do app. */
 export async function criarUsuario(
   displayName: string,
-  { role, status = 'aprovado' }: { role: string; status?: string }
+  { role, status = 'aprovado' }: { role: Papel; status?: string }
 ): Promise<UsuarioDeTeste> {
   const email = `usuario${++contador}@libelle.test`;
   const { user } = await createUserWithEmailAndPassword(auth, email, SENHA);

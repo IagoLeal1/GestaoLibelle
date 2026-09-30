@@ -1,5 +1,10 @@
 // services/chatService.ts
 import { db } from "@/lib/firebaseConfig";
+import type { FirestoreUser } from "@/context/AuthContext";
+import { getAllApprovedUsers } from "@/services/adminService";
+import { getAppointmentsForReport } from "@/services/appointmentService";
+import { getPatientById } from "@/services/patientService";
+import { getProfessionalById } from "@/services/professionalService";
 import {
   collection,
   query,
@@ -30,6 +35,9 @@ export interface ChatGroup {
   id: string;
   pacienteId: string;
   pacienteNome: string;
+  // Gravados na criação só por compatibilidade: a versão anterior do app (aberta no navegador de
+  // alguém durante a publicação) lê esses campos e quebraria sem eles. A tela nova não os usa:
+  // a equipe vem de memberIds + users. responsavelId também identifica os grupos antigos.
   responsavelId: string;
   responsavelNome: string;
   terapeutaIds: string[];
@@ -44,13 +52,17 @@ export interface ChatGroup {
     senderName: string;
     createdAt: Timestamp;
   };
-  unreadCounts: Record<string, number>;
+  unreadCounts: Record<string, number>; // compatibilidade, como os campos acima
   lastReadAt?: Record<string, Timestamp>; // até quando cada participante leu a conversa
 }
 
 // Conversa sem registro de leitura conta como lida até esta data: assim, ao publicar,
 // as conversas antigas não aparecem todas como novas.
 export const UNREAD_TRACKING_START = new Date("2026-09-29T00:00:00-03:00");
+
+// Até quando `uid` leu a conversa (a data de corte, se nunca abriu depois dela)
+export const readUntil = (group: ChatGroup, uid: string): Timestamp =>
+  group.lastReadAt?.[uid] ?? Timestamp.fromDate(UNREAD_TRACKING_START);
 
 export interface OlderMessagesPage {
   messages: ChatMessage[];
@@ -69,11 +81,14 @@ export interface ChatMessage {
   type: 'text' | 'image' | 'file';
 }
 
-// Participante de uma conversa (papel = profile.role do cadastro)
+// Papel do cadastro (profile.role)
+export type Papel = FirestoreUser["profile"]["role"];
+
+// Participante de uma conversa
 export interface ChatMember {
   uid: string;
   nome: string;
-  papel: string;
+  papel: Papel;
 }
 
 // --- FUNÇÕES ---
@@ -83,6 +98,9 @@ export const patientGroupId = (pacienteId: string) => `paciente-${pacienteId}`;
 
 // Grupos antigos foram criados com a conta da família no lugar do paciente
 export const isLegacyGroup = (group: ChatGroup) => group.pacienteId === group.responsavelId;
+
+// Admin e coordenação acompanham todas as conversas e cuidam dos participantes (como nas regras)
+export const isChatSupervisor = (role?: string) => role === "admin" || role === "coordenador";
 
 // Coloca pessoas no grupo (só a coordenação pode). arrayUnion evita perder quem outra pessoa adicionou ao mesmo tempo.
 export const addGroupMembers = async (groupId: string, membros: ChatMember[]) => {
@@ -95,17 +113,14 @@ export const addGroupMembers = async (groupId: string, membros: ChatMember[]) =>
 export const removeGroupMember = async (groupId: string, uid: string) => {
   await updateDoc(doc(db, "chat_groups", groupId), {
     memberIds: arrayRemove(uid),
-    terapeutaIds: arrayRemove(uid),
   });
 };
 
 // Pessoas que podem entrar numa conversa: todo cadastro aprovado, em ordem alfabética
-export const getApprovedPeople = async (): Promise<ChatMember[]> => {
-  const aprovados = await getDocs(query(collection(db, "users"), where("profile.status", "==", "aprovado")));
-  return aprovados.docs
-    .map(usuario => ({ uid: usuario.id, nome: usuario.data().displayName as string, papel: usuario.data().profile?.role as string }))
+export const getApprovedPeople = async (): Promise<ChatMember[]> =>
+  (await getAllApprovedUsers())
+    .map(usuario => ({ uid: usuario.id, nome: usuario.displayName ?? "", papel: usuario.profile?.role }))
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
-};
 
 // Nome e papel de cada participante, lidos do cadastro (users), na ordem de `memberIds`.
 // Quem foi excluído do sistema não aparece.
@@ -116,7 +131,7 @@ export const getGroupMembers = async (memberIds: string[]): Promise<ChatMember[]
     const lote = query(collection(db, "users"), where(documentId(), "in", memberIds.slice(i, i + 30)));
     (await getDocs(lote)).forEach(usuario => {
       const dados = usuario.data();
-      encontrados.set(usuario.id, { uid: usuario.id, nome: dados.displayName, papel: dados.profile?.role });
+      encontrados.set(usuario.id, { uid: usuario.id, nome: dados.displayName ?? "", papel: dados.profile?.role });
     });
   }
   return memberIds.flatMap(id => encontrados.get(id) ?? []);
@@ -124,34 +139,41 @@ export const getGroupMembers = async (memberIds: string[]): Promise<ChatMember[]
 
 // Quem sugerir para o grupo novo de um paciente: a conta da família vinculada e os terapeutas
 // com atendimento nos últimos 90 dias ou nos próximos 60 (profissional ligado à conta por professionals.userId).
+// A consulta de agendamentos por paciente e período é a mesma da grade de agendamentos (índice já existente).
 export const getPatientTeamSuggestion = async (patientId: string): Promise<{ familia: string[]; terapeutas: string[] }> => {
-  const paciente = (await getDoc(doc(db, "patients", patientId))).data();
-  const familia = paciente?.userId ? [paciente.userId as string] : [];
-
-  // Só pelo paciente (índice simples) e o período filtrado aqui: evita exigir índice composto em produção
-  const agendamentos = await getDocs(query(collection(db, "appointments"), where("patientId", "==", patientId), limit(500)));
   const dia = 24 * 60 * 60 * 1000;
-  const inicio = Date.now() - 90 * dia;
-  const fim = Date.now() + 60 * dia;
-  const profissionalIds = new Set(
-    agendamentos.docs
-      .map(agendamento => agendamento.data())
-      .filter(a => a.start?.toMillis() >= inicio && a.start?.toMillis() <= fim)
-      .map(a => a.professionalId as string)
-  );
+  const [paciente, agendamentos] = await Promise.all([
+    getPatientById(patientId),
+    getAppointmentsForReport({ patientId, startDate: new Date(Date.now() - 90 * dia), endDate: new Date(Date.now() + 60 * dia) }),
+  ]);
+  const familia = paciente?.userId ? [paciente.userId] : [];
 
-  const profissionais = await Promise.all([...profissionalIds].map(id => getDoc(doc(db, "professionals", id))));
-  const terapeutas = [...new Set(profissionais.map(p => p.data()?.userId as string | undefined).filter((uid): uid is string => !!uid))];
+  const profissionais = await Promise.all([...new Set(agendamentos.map(a => a.professionalId))].map(getProfessionalById));
+  const terapeutas = [...new Set(profissionais.map(p => p?.userId).filter((uid): uid is string => !!uid))];
 
   return { familia, terapeutas };
 };
 
-// Liga um grupo antigo à criança (só a coordenação pode)
-export const linkGroupToPatient = async (groupId: string, paciente: { id: string; nome: string }) => {
+// Id do grupo já ligado à criança (inclusive um grupo antigo vinculado pela tela), fora `ignorar`
+const findPatientGroup = async (pacienteId: string, ignorar?: string): Promise<string | undefined> => {
+  const ligados = await getDocs(query(collection(db, "chat_groups"), where("pacienteId", "==", pacienteId), limit(2)));
+  return ligados.docs.map(grupo => grupo.id).find(id => id !== ignorar);
+};
+
+// Liga um grupo antigo à criança (só a coordenação pode). Cada criança tem um grupo só:
+// se ela já tiver outro, não liga e devolve o id dele.
+export const linkGroupToPatient = async (
+  groupId: string,
+  paciente: { id: string; nome: string }
+): Promise<{ success: true } | { success: false; id: string; error: "ja-existe" }> => {
+  const outro = await findPatientGroup(paciente.id, groupId);
+  if (outro) return { success: false, id: outro, error: "ja-existe" };
+
   await updateDoc(doc(db, "chat_groups", groupId), {
     pacienteId: paciente.id,
     pacienteNome: paciente.nome,
   });
+  return { success: true };
 };
 
 // Cria o grupo de conversa de um paciente. Se ele já existir, não sobrescreve e avisa.
@@ -167,11 +189,11 @@ export const createPatientChatGroup = async ({ paciente, membros, criadoPor }: {
 
   try {
     // Um grupo antigo ligado à criança pela tela tem outro id, então a transação abaixo não o enxergaria
-    const vinculado = await getDocs(query(collection(db, "chat_groups"), where("pacienteId", "==", paciente.id), limit(1)));
-    if (!vinculado.empty) return { success: false, id: vinculado.docs[0].id, error: "ja-existe" };
+    const vinculado = await findPatientGroup(paciente.id);
+    if (vinculado) return { success: false, id: vinculado, error: "ja-existe" };
 
-    await runTransaction(db, async (transacao) => {
-      if ((await transacao.get(ref)).exists()) throw new Error("ja-existe");
+    const criado = await runTransaction(db, async (transacao) => {
+      if ((await transacao.get(ref)).exists()) return false;
       const agora = serverTimestamp();
       transacao.set(ref, {
         pacienteId: paciente.id,
@@ -188,10 +210,10 @@ export const createPatientChatGroup = async ({ paciente, membros, criadoPor }: {
         lastReadAt: {},
         lastMessage: null,
       });
+      return true;
     });
-    return { success: true, id };
+    return criado ? { success: true, id } : { success: false, id, error: "ja-existe" };
   } catch (error) {
-    if (error instanceof Error && error.message === "ja-existe") return { success: false, id, error: "ja-existe" };
     console.error("Erro ao criar grupo do paciente:", error);
     return { success: false, id, error: "falha" };
   }
@@ -204,8 +226,7 @@ export const markChatAsRead = async (groupId: string, uid: string) => {
 
 // Quantas mensagens chegaram depois da última leitura de `uid` (conta no servidor, sem baixar as mensagens)
 export const countUnreadMessages = async (group: ChatGroup, uid: string): Promise<number> => {
-  const desde = group.lastReadAt?.[uid] ?? Timestamp.fromDate(UNREAD_TRACKING_START);
-  const q = query(collection(db, "chat_groups", group.id, "messages"), where("createdAt", ">", desde));
+  const q = query(collection(db, "chat_groups", group.id, "messages"), where("createdAt", ">", readUntil(group, uid)));
   const snapshot = await getCountFromServer(q);
   return snapshot.data().count;
 };
@@ -214,8 +235,7 @@ export const countUnreadMessages = async (group: ChatGroup, uid: string): Promis
 export const hasUnread = (group: ChatGroup, uid: string): boolean => {
   const last = group.lastMessage;
   if (!last?.createdAt || last.senderId === uid) return false;
-  const lidoAte = group.lastReadAt?.[uid]?.toMillis() ?? UNREAD_TRACKING_START.getTime();
-  return last.createdAt.toMillis() > lidoAte;
+  return last.createdAt.toMillis() > readUntil(group, uid).toMillis();
 };
 
 export const subscribeToUserGroups = (
@@ -389,7 +409,14 @@ export const sendMessage = async (groupId: string, message: { content: string; s
       },
       updatedAt: agora
     });
-    await batch.commit();
+    const envio = batch.commit();
+    // Quem responde já leu tudo até aqui. A marcação entra na fila logo atrás da mensagem (o SDK
+    // grava na ordem), sem esperar a confirmação: assim ela vale mesmo se a pessoa fechar a tela
+    // logo depois, e a própria mensagem não conta como nova quando alguém responder.
+    const leitura = markChatAsRead(groupId, message.senderId)
+      .catch(erro => console.error("Erro ao marcar a conversa como lida:", erro));
+    await envio;
+    await leitura;
 
     return { success: true };
   } catch (error) {

@@ -115,11 +115,24 @@ describe('grupo do paciente', () => {
     await entrarComo(carla);
     expect(isLegacyGroup((await getGroupDetails(grupoId))!)).toBe(true);
 
-    await linkGroupToPatient(grupoId, lucas);
+    const resultado = await linkGroupToPatient(grupoId, lucas);
 
+    expect(resultado).toEqual({ success: true });
     const ligado = await getGroupDetails(grupoId);
     expect(ligado).toMatchObject({ pacienteId: 'paciente-lucas', pacienteNome: 'Lucas Souza' });
     expect(isLegacyGroup(ligado!)).toBe(false);
+  });
+
+  it('não liga um grupo antigo à criança que já tem grupo', async () => {
+    const lucas = await criarPaciente('paciente-lucas', 'Lucas Souza', maria);
+    const antigo = await criarGrupo([maria, paula, carla], carla);
+    await entrarComo(carla);
+    await createPatientChatGroup({ paciente: lucas, membros: [membro(maria)], criadoPor: carla.uid });
+
+    const resultado = await linkGroupToPatient(antigo, lucas);
+
+    expect(resultado).toEqual({ success: false, id: patientGroupId('paciente-lucas'), error: 'ja-existe' });
+    expect(isLegacyGroup((await getGroupDetails(antigo))!)).toBe(true);
   });
 });
 

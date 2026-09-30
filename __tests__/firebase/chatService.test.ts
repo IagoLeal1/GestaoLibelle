@@ -3,6 +3,8 @@
 import { Timestamp } from 'firebase/firestore';
 import {
   ChatMessage,
+  countUnreadMessages,
+  getGroupDetails,
   loadOlderMessages,
   mergeMessages,
   sendMessage,
@@ -144,6 +146,30 @@ describe('chatService', () => {
   });
 
   describe('envio', () => {
+    it('a própria mensagem não conta como nova quando alguém responde depois', async () => {
+      const grupoId = await criarGrupo([familia, terapeuta, coordenacao], coordenacao);
+      // A terapeuta responde e sai da conversa logo em seguida
+      await entrarComo(terapeuta);
+      await sendMessage(grupoId, {
+        content: 'Até quinta!',
+        senderId: terapeuta.uid,
+        senderName: terapeuta.displayName,
+        senderRole: terapeuta.role,
+      });
+      await entrarComo(familia);
+      await sendMessage(grupoId, {
+        content: 'Obrigada!',
+        senderId: familia.uid,
+        senderName: familia.displayName,
+        senderRole: familia.role,
+      });
+
+      await entrarComo(terapeuta);
+      const grupo = await getGroupDetails(grupoId);
+
+      expect(await countUnreadMessages(grupo!, terapeuta.uid)).toBe(1);
+    });
+
     it('atualiza a prévia da conversa com a mensagem e quem enviou', async () => {
       const grupoId = await criarGrupo([familia, terapeuta, coordenacao], coordenacao);
       await entrarComo(terapeuta);
