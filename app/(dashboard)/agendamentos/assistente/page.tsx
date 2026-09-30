@@ -13,6 +13,7 @@ import { getSpecialties, Specialty } from "@/services/specialtyService";
 import { ArrowLeft, BrainCircuit, Sparkles, User, HeartPulse, SlidersHorizontal, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { auth } from "@/lib/firebaseConfig";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 
 interface TherapyNeed {
@@ -85,9 +86,11 @@ export default function AssistenteAgendamentoPage() {
         setAiSuggestion('');
 
         try {
+            // O servidor só atende quem manda o login (e confere o papel no cadastro)
+            const login = await auth.currentUser?.getIdToken();
             const response = await fetch('/api/schedule-assistant', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${login ?? ''}` },
                 body: JSON.stringify({ 
                     patientNeeds: therapyNeeds,
                     preferences: {
@@ -201,7 +204,10 @@ export default function AssistenteAgendamentoPage() {
                         <Card className="bg-blue-50 border-blue-200">
                             <CardHeader><CardTitle className="flex items-center gap-2 text-blue-800"><Sparkles className="h-5 w-5"/> Plano de Terapia Sugerido</CardTitle></CardHeader>
                             <CardContent>
-                                <div className="prose prose-sm max-w-none prose-p:my-2 prose-ul:my-2 prose-li:my-1" dangerouslySetInnerHTML={{ __html: aiSuggestion.replace(/\n/g, '<br />').replace(/\* /g, '• ') }} />
+                                {/* Mostrado como texto: a resposta da IA nunca entra na página como HTML */}
+                                <div className="whitespace-pre-line text-sm leading-relaxed text-slate-800">
+                                    {aiSuggestion.replace(/\*\*/g, '').replace(/^\s*\* /gm, '• ')}
+                                </div>
                             </CardContent>
                         </Card>
                     )}

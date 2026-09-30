@@ -3,6 +3,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 import { initAdmin } from "@/lib/firebaseAdmin";
+import { PAPEIS_DA_GESTAO, verificarAcesso } from "@/lib/acessoServidor";
 import { Timestamp } from "firebase-admin/firestore";
 import { startOfDay, endOfDay, addMonths, format, setHours, setMinutes, addMinutes, parse } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -159,6 +160,10 @@ const systemInstruction = `
 // --- ROTA DA API ---
 export async function POST(req: NextRequest) {
   try {
+    // Só a gestão aprovada: a rota lê a agenda da clínica inteira com acesso de administrador
+    const acesso = await verificarAcesso(req.headers.get("authorization"), PAPEIS_DA_GESTAO);
+    if (!acesso.ok) return NextResponse.json({ error: acesso.erro }, { status: acesso.status });
+
     const { patientNeeds, preferences = {} } = await req.json();
 
     if (!patientNeeds || !Array.isArray(patientNeeds) || patientNeeds.length === 0) {
@@ -189,6 +194,7 @@ export async function POST(req: NextRequest) {
 
   } catch (error: any) {
     console.error("Erro na API do Assistente de Agendamento:", error);
-    return NextResponse.json({ error: `Ocorreu um erro interno: ${error.message}` }, { status: 500 });
+    // O detalhe do erro fica só no registro do servidor
+    return NextResponse.json({ error: "Não foi possível gerar a sugestão agora. Tente de novo em alguns minutos." }, { status: 500 });
   }
 }
