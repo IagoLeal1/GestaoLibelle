@@ -100,6 +100,14 @@ export const removeGroupMember = async (groupId: string, uid: string) => {
   });
 };
 
+// Pessoas que podem entrar numa conversa: todo cadastro aprovado, em ordem alfabética
+export const getApprovedPeople = async (): Promise<ChatMember[]> => {
+  const aprovados = await getDocs(query(collection(db, "users"), where("profile.status", "==", "aprovado")));
+  return aprovados.docs
+    .map(usuario => ({ uid: usuario.id, nome: usuario.data().displayName as string, papel: usuario.data().profile?.role as string }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+};
+
 // Nome e papel de cada participante, lidos do cadastro (users), na ordem de `memberIds`.
 // Quem foi excluído do sistema não aparece.
 export const getGroupMembers = async (memberIds: string[]): Promise<ChatMember[]> => {
@@ -159,6 +167,10 @@ export const createPatientChatGroup = async ({ paciente, membros, criadoPor }: {
   const terapeutas = membros.filter(m => m.papel === "profissional");
 
   try {
+    // Um grupo antigo ligado à criança pela tela tem outro id, então a transação abaixo não o enxergaria
+    const vinculado = await getDocs(query(collection(db, "chat_groups"), where("pacienteId", "==", paciente.id), limit(1)));
+    if (!vinculado.empty) return { success: false, id: vinculado.docs[0].id, error: "ja-existe" };
+
     await runTransaction(db, async (transacao) => {
       if ((await transacao.get(ref)).exists()) throw new Error("ja-existe");
       const agora = serverTimestamp();

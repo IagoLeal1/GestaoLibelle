@@ -5,6 +5,7 @@ import {
   addGroupMembers,
   ChatGroup,
   createPatientChatGroup,
+  getApprovedPeople,
   getGroupDetails,
   getGroupMembers,
   getPatientTeamSuggestion,
@@ -71,6 +72,27 @@ describe('grupo do paciente', () => {
     expect(segunda).toMatchObject({ success: false, error: 'ja-existe' });
     const grupo = await getGroupDetails(patientGroupId('paciente-lucas'));
     expect(grupo?.memberIds).not.toContain(joao.uid);
+  });
+
+  it('não cria grupo novo para a criança que já tem um grupo antigo vinculado', async () => {
+    const lucas = await criarPaciente('paciente-lucas', 'Lucas Souza', maria);
+    const antigo = await criarGrupo([maria, paula, carla], carla);
+    await entrarComo(carla);
+    await linkGroupToPatient(antigo, lucas);
+
+    const resultado = await createPatientChatGroup({ paciente: lucas, membros: [membro(maria)], criadoPor: carla.uid });
+
+    expect(resultado).toEqual({ success: false, id: antigo, error: 'ja-existe' });
+    expect(await getGroupDetails(patientGroupId('paciente-lucas'))).toBeNull();
+  });
+
+  it('lista para escolha só as pessoas com cadastro aprovado, em ordem alfabética', async () => {
+    await criarUsuario('Pedro Pendente', { role: 'familiar', status: 'pendente' });
+    await entrarComo(carla);
+
+    const pessoas = await getApprovedPeople();
+
+    expect(pessoas.map((p) => p.nome)).toEqual(['Carla Coordenadora', 'João Souza', 'Maria Souza', 'Paula Fonoaudióloga']);
   });
 
   it('sugere a família vinculada e os terapeutas que atendem a criança', async () => {
