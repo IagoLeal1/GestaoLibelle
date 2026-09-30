@@ -17,6 +17,8 @@ import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { PatientObservations } from "@/components/patients/patient-observations"
+import { useAuth } from "@/context/AuthContext";
+import { ehGestao } from "@/lib/permissoes";
 
 // --- 1. DEFINIÇÃO DA INTERFACE DAS PROPS ---
 interface PatientClientPageProps {
@@ -114,6 +116,8 @@ const formatDate = (date?: Timestamp) => {
 
 // --- 2. APLICAÇÃO DA INTERFACE NO COMPONENTE ---
 export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: PatientClientPageProps) {
+  const { firestoreUser } = useAuth();
+  const podeEditar = ehGestao(firestoreUser?.profile?.role);
   const [searchTerm, setSearchTerm] = useState("");
   const [sexoFilter, setSexoFilter] = useState("todos");
   const [statusFilter, setStatusFilter] = useState("todos");
@@ -281,10 +285,15 @@ export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: 
                           <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => abrirDetalhes(paciente)}>Ver Detalhes</DropdownMenuItem>
-                            <Link href={`/pacientes/editar/${paciente.id}`} passHref><DropdownMenuItem>Editar</DropdownMenuItem></Link>
-                            <DropdownMenuItem className={paciente.status === 'ativo' ? "text-red-600 focus:bg-red-50 focus:text-red-700" : "text-green-600 focus:bg-green-50 focus:text-green-700"} onClick={() => handleToggleStatus(paciente)}>
-                              {paciente.status === 'ativo' ? 'Desativar' : 'Ativar'}
-                            </DropdownMenuItem>
+                            {/* Editar e ativar/desativar são da gestão; o terapeuta só consulta */}
+                            {podeEditar && (
+                              <>
+                                <Link href={`/pacientes/editar/${paciente.id}`} passHref><DropdownMenuItem>Editar</DropdownMenuItem></Link>
+                                <DropdownMenuItem className={paciente.status === 'ativo' ? "text-red-600 focus:bg-red-50 focus:text-red-700" : "text-green-600 focus:bg-green-50 focus:text-green-700"} onClick={() => handleToggleStatus(paciente)}>
+                                  {paciente.status === 'ativo' ? 'Desativar' : 'Ativar'}
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>

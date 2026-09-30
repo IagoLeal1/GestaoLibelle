@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { getCommunications, Communication, countUsersByRole } from "@/services/communicationService";
+import { ehGestao } from "@/lib/permissoes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MessageSquare } from "lucide-react";
@@ -30,20 +31,22 @@ export function CommunicationsWidget() {
     const [comms, setComms] = useState<Communication[]>([]);
     const [userCounts, setUserCounts] = useState({ profissional: 0, familiar: 0, funcionario: 0 });
     const [loading, setLoading] = useState(true);
+    // "X de Y leram" é para quem envia avisos (gestão): os demais não contam os cadastros dos outros
+    const gestao = ehGestao(firestoreUser?.profile.role);
 
     useEffect(() => {
         if (firestoreUser?.profile.role) {
             Promise.all([
                 getCommunications(firestoreUser.profile.role),
-                countUsersByRole('profissional'),
-                countUsersByRole('familiar'),
-                countUsersByRole('funcionario')
+                gestao ? countUsersByRole('profissional') : 0,
+                gestao ? countUsersByRole('familiar') : 0,
+                gestao ? countUsersByRole('funcionario') : 0,
             ]).then(([commsData, profCount, famCount, funcCount]) => {
                 setComms(commsData);
                 setUserCounts({ profissional: profCount, familiar: famCount, funcionario: funcCount });
             }).finally(() => setLoading(false));
         }
-    }, [firestoreUser]);
+    }, [firestoreUser, gestao]);
     
     if (loading) {
         return (
@@ -92,9 +95,11 @@ export function CommunicationsWidget() {
                                         </div>
                                         <div className="ml-3 flex flex-col items-end gap-1">
                                             {getTypeBadge(aviso.targetRole)}
-                                            <span className="text-xs text-gray-500">
-                                                {readCount}/{total} leram
-                                            </span>
+                                            {gestao && (
+                                                <span className="text-xs text-gray-500">
+                                                    {readCount}/{total} leram
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

@@ -9,8 +9,13 @@ import { Patient, getPatients } from "@/services/patientService";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/context/AuthContext";
+import { ehGestao } from "@/lib/permissoes";
 
 export default function PacientesPage() {
+  // Cadastrar criança é da gestão; o terapeuta só consulta
+  const { firestoreUser } = useAuth();
+  const podeCadastrar = ehGestao(firestoreUser?.profile?.role);
   const [pacientes, setPacientes] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -86,12 +91,14 @@ export default function PacientesPage() {
           </Button>
 
           {/* Botão Novo Paciente */}
-          <Link href="/pacientes/novo" className="flex-1 sm:flex-none">
-            <Button className="w-full">
-              <PlusCircle className="h-4 w-4 mr-2" />
-              Novo Paciente
-            </Button>
-          </Link>
+          {podeCadastrar && (
+            <Link href="/pacientes/novo" className="flex-1 sm:flex-none">
+              <Button className="w-full">
+                <PlusCircle className="h-4 w-4 mr-2" />
+                Novo Paciente
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 

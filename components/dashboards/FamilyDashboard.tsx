@@ -65,22 +65,22 @@ export function FamilyDashboard() {
         // Adiciona pacientes encontrados pelo ID
         snapId.forEach(d => uniquePatients.set(d.id, { id: d.id, ...d.data() } as Patient));
 
-        // Adiciona pacientes encontrados pelo Email e FAZ O VÍNCULO SE NECESSÁRIO
-        if (!snapEmail.empty) {
-            snapEmail.forEach(async (d) => {
-                const patientData = d.data();
-                // Se achou pelo email mas o userId ainda não está preenchido, preenche agora!
-                if (patientData.userId !== user.uid) {
-                    console.log(`Auto-vinculando paciente ${d.id} ao usuário ${user.uid}`);
-                    try {
-                        await updateDoc(doc(db, 'patients', d.id), { userId: user.uid });
-                    } catch (err) {
-                        console.error("Erro no auto-vínculo:", err);
-                    }
+        // Adiciona pacientes encontrados pelo Email e FAZ O VÍNCULO SE NECESSÁRIO.
+        // Espera o vínculo terminar antes de buscar os atendimentos: as regras só mostram
+        // atendimentos de criança já ligada à família.
+        await Promise.all(snapEmail.docs.map(async (d) => {
+            const patientData = d.data();
+            // Se achou pelo email mas o userId ainda não está preenchido, preenche agora!
+            if (patientData.userId !== user.uid) {
+                try {
+                    await updateDoc(doc(db, 'patients', d.id), { userId: user.uid });
+                } catch (err) {
+                    console.error("Erro no auto-vínculo:", err);
+                    return; // Não ficou ligada: os atendimentos dela não estariam visíveis
                 }
-                uniquePatients.set(d.id, { id: d.id, ...patientData } as Patient);
-            });
-        }
+            }
+            uniquePatients.set(d.id, { id: d.id, ...patientData, userId: user.uid } as Patient);
+        }));
 
         const patientIds = Array.from(uniquePatients.keys());
         const patientNames = Array.from(uniquePatients.values()).map(p => p.fullName);
@@ -93,7 +93,7 @@ export function FamilyDashboard() {
             const now = new Date();
             
             // Busca agendamentos pelos IDs dos pacientes encontrados
-            let qAppointments = query(
+            const qAppointments = query(
                 appointmentsRef, 
                 where('patientId', 'in', patientIds),
                 where('start', '>=', Timestamp.fromDate(now)),
@@ -101,19 +101,8 @@ export function FamilyDashboard() {
                 limit(5)
             );
 
-            let appSnap = await getDocs(qAppointments);
-
-            // Fallback: Busca por nome se a busca por ID falhar (segurança extra)
-            if (appSnap.empty && patientNames.length > 0) {
-                const qByName = query(
-                    appointmentsRef,
-                    where('patientName', 'in', patientNames),
-                    where('start', '>=', Timestamp.fromDate(now)),
-                    orderBy('start', 'asc'),
-                    limit(5)
-                );
-                appSnap = await getDocs(qByName);
-            }
+            // Só pelos ids das crianças da família: a busca por nome podia trazer outra criança com o mesmo nome
+            const appSnap = await getDocs(qAppointments);
             
             const appList: AppointmentDisplay[] = appSnap.docs.map(doc => {
                 const data = doc.data();

@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { ehGestao } from "@/lib/permissoes";
 import { 
   Communication, 
   getCommunications, 
@@ -59,13 +60,15 @@ export function CommunicationsClientPage() {
         if (firestoreUser?.profile?.role) {
             setLoading(true);
             try {
+                // "Quem leu" é só para quem envia avisos (gestão): os demais não leem os cadastros dos outros
+                const gestao = ehGestao(firestoreUser.profile.role);
                 const [commsData, profUsers, famUsers, funcUsers, adminUsers, coordUsers] = await Promise.all([
                     getCommunications(firestoreUser.profile.role),
-                    getUsersByRole('profissional'),
-                    getUsersByRole('familiar'),
-                    getUsersByRole('funcionario'),
-                    getUsersByRole('admin'),
-                    getUsersByRole('coordenador') 
+                    gestao ? getUsersByRole('profissional') : [],
+                    gestao ? getUsersByRole('familiar') : [],
+                    gestao ? getUsersByRole('funcionario') : [],
+                    gestao ? getUsersByRole('admin') : [],
+                    gestao ? getUsersByRole('coordenador') : [],
                 ]);
                 setAllComms(commsData);
                 setAllUsers({ 

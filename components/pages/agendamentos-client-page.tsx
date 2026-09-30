@@ -28,6 +28,8 @@ import { getRooms, Room } from "@/services/roomService"
 import { ReportModal } from "@/components/modals/report-modal"
 import { EditAppointmentModal } from "@/components/modals/edit-appointment-modal"
 import { RenewalNotificationButton } from "@/components/features/RenewalNotificationButton";
+import { useAuth } from "@/context/AuthContext";
+import { ehGestao } from "@/lib/permissoes";
 import { MultiSelectFilter, MultiSelectOption } from "@/components/ui/multi-select-filter"
 import Link from "next/link"
 import { format } from "date-fns"
@@ -79,6 +81,9 @@ const primaryStatusOptions: { value: AppointmentStatus; label: string }[] = [
 ];
 
 export function AgendamentosClientPage() {
+  // Só a recepção e a gestão alteram a agenda; o terapeuta consulta (as regras do banco também barram)
+  const { firestoreUser } = useAuth();
+  const podeEditar = ehGestao(firestoreUser?.profile?.role);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -329,6 +334,7 @@ export function AgendamentosClientPage() {
                 <TableCell>{format(appointment.start.toDate(), 'HH:mm')} - {format(appointment.end.toDate(), 'HH:mm')}</TableCell>
                 <TableCell><Badge variant="outline">{getRoomNameById(appointment.sala)}</Badge></TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
+                  {!podeEditar ? getStatusBadge(appointment.status) : (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" className="h-auto p-0 hover:bg-gray-200">
@@ -345,8 +351,10 @@ export function AgendamentosClientPage() {
                       ))}
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  )}
                 </TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
+                  {!podeEditar ? (getStatusSecundarioBadge(appointment.statusSecundario) || <Badge variant="outline">Nenhum</Badge>) : (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" className="h-auto p-0 justify-start font-normal text-xs hover:bg-gray-200">
@@ -363,8 +371,10 @@ export function AgendamentosClientPage() {
                       ))}
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  )}
                 </TableCell>
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                  {podeEditar && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
@@ -373,6 +383,7 @@ export function AgendamentosClientPage() {
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  )}
                 </TableCell>
               </TableRow>
             )) : <TableRow><TableCell colSpan={9} className="text-center h-24">Nenhum agendamento encontrado.</TableCell></TableRow>}
@@ -385,7 +396,7 @@ export function AgendamentosClientPage() {
            Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-40 w-full" />)
         ) : agendamentos.length > 0 ? (
           agendamentos.map(appointment => (
-            <Card key={appointment.id} onClick={() => handleOpenEditModal(appointment)} className="cursor-pointer">
+            <Card key={appointment.id} onClick={podeEditar ? () => handleOpenEditModal(appointment) : undefined} className={podeEditar ? "cursor-pointer" : undefined}>
                 <CardContent className="p-4 space-y-3">
                     <div className="flex justify-between items-start">
                         <div>
@@ -425,10 +436,11 @@ export function AgendamentosClientPage() {
             <p className="text-muted-foreground">Gerencie todos os agendamentos da clínica por período</p>
           </div>
           <div className="flex w-full sm:w-auto gap-2">
-            <RenewalNotificationButton />
+            {podeEditar && <RenewalNotificationButton />}
             <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => setIsReportModalOpen(true)}>
               <Download className="mr-2 h-4 w-4" /> Exportar Relatório
             </Button>
+            {podeEditar && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                   <Button className="w-full">
@@ -449,6 +461,7 @@ export function AgendamentosClientPage() {
                   </Link>
               </DropdownMenuContent>
             </DropdownMenu>
+            )}
           </div>
         </div>
         
