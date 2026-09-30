@@ -111,4 +111,8 @@ describe('edição do cadastro', () => {
     // "removido" tem login, mas o documento em users foi apagado pelo admin
     await assertFails(setDoc(doc(bancoDe('removido'), 'users', 'removido'), cadastroDeFamilia('removido', { status: 'aprovado' })));
   });
+
+  it('quem foi removido volta como pendente, esperando o admin aprovar', async () => {
+    await assertSucceeds(setDoc(doc(bancoDe('removido'), 'users', 'removido'), cadastroDeFamilia('removido')));
+  });
 });

@@ -26,6 +26,8 @@ const PESSOAS = {
   coordenacao: { uid: 'coordenacao', displayName: 'Carla Coordenadora', role: 'coordenador', status: 'aprovado' },
   outraFamilia: { uid: 'outra-familia', displayName: 'João Lima', role: 'familiar', status: 'aprovado' },
   pendente: { uid: 'pendente', displayName: 'Pedro Pendente', role: 'familiar', status: 'pendente' },
+  // Não participa do grupo: acompanha como supervisão
+  admin: { uid: 'admin', displayName: 'Ana Admin', role: 'admin', status: 'aprovado' },
 };
 // Está no grupo, mas o documento em users foi apagado (é o que o "excluir usuário" faz)
 const REMOVIDO = 'removido';
@@ -170,6 +172,36 @@ describe('atualização do grupo', () => {
   it('coordenação altera os participantes', async () => {
     const grupo = doc(bancoDe('coordenacao'), 'chat_groups', GRUPO);
     await assertSucceeds(updateDoc(grupo, { memberIds: arrayUnion('outra-familia') }));
+  });
+
+  it('coordenação liga o grupo à criança', async () => {
+    const grupo = doc(bancoDe('coordenacao'), 'chat_groups', GRUPO);
+    await assertSucceeds(updateDoc(grupo, { pacienteId: 'paciente-lucas', pacienteNome: 'Lucas Souza' }));
+  });
+
+  it('coordenação não marca a leitura de outra pessoa', async () => {
+    const grupo = doc(bancoDe('coordenacao'), 'chat_groups', GRUPO);
+    await assertFails(updateDoc(grupo, { 'lastReadAt.familia': serverTimestamp() }));
+  });
+
+  it('coordenação não grava a prévia em nome de outra pessoa', async () => {
+    const grupo = doc(bancoDe('coordenacao'), 'chat_groups', GRUPO);
+    await assertFails(updateDoc(grupo, previaDe('familia', 'Maria Souza')));
+  });
+
+  it('coordenação não altera outros dados do grupo, como quem o criou', async () => {
+    const grupo = doc(bancoDe('coordenacao'), 'chat_groups', GRUPO);
+    await assertFails(updateDoc(grupo, { createdBy: 'outra-familia' }));
+  });
+
+  it('a supervisão marca a própria leitura numa conversa de que não participa', async () => {
+    const grupo = doc(bancoDe('admin'), 'chat_groups', GRUPO);
+    await assertSucceeds(updateDoc(grupo, { 'lastReadAt.admin': serverTimestamp() }));
+  });
+
+  it('a supervisão atualiza a prévia com a própria mensagem numa conversa de que não participa', async () => {
+    const grupo = doc(bancoDe('admin'), 'chat_groups', GRUPO);
+    await assertSucceeds(updateDoc(grupo, previaDe('admin', 'Ana Admin')));
   });
 });
 

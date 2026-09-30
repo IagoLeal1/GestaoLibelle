@@ -97,16 +97,24 @@ service cloud.firestore {
           && request.resource.data.lastReadAt[request.auth.uid] == request.time;
       }
 
+      // O que só a coordenação muda: quem participa e a qual criança o grupo pertence
+      function isGroupManagement() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'pacienteId', 'pacienteNome']);
+      }
+
       // Só quem tem cadastro aprovado: pendentes e usuários removidos perdem o acesso
       allow read: if isApproved() && (
         request.auth.uid in resource.data.memberIds || isAdminOrCoordinator()
       );
       allow create: if isSignedIn() && isAdminOrCoordinator() && request.resource.data.createdBy == request.auth.uid;
-      // A coordenação altera qualquer campo. Membros só gravam a prévia ou a própria leitura.
-      allow update: if isAdminOrCoordinator() || (
-        isApproved()
-        && request.auth.uid in resource.data.memberIds
-        && (isOwnPreview() || isOwnReadMark())
+      // Quem acessa a conversa (membro ou supervisão) grava só a prévia da própria mensagem
+      // ou a própria leitura; a coordenação também muda participantes e a criança do grupo.
+      allow update: if isApproved() && (
+        (isAdminOrCoordinator() && isGroupManagement())
+        || (
+          (request.auth.uid in resource.data.memberIds || isAdminOrCoordinator())
+          && (isOwnPreview() || isOwnReadMark())
+        )
       );
     }
 
