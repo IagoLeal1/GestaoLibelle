@@ -81,11 +81,12 @@ const mockedTimestamp = Timestamp as jest.Mocked<typeof Timestamp>;
 
 // Mocks dos serviços
 const mockedAddTransaction = jest.spyOn(financialService, 'addTransaction');
-const mockedDeleteTransaction = jest.spyOn(financialService, 'deleteTransactionByAppointmentId');
+const mockedDeleteTransaction = jest.spyOn(financialService, 'deletePendingRepasses');
+const mockedGetRepasses = jest.spyOn(financialService, 'getRepassesDoAtendimento');
 const mockedGetProfessionalById = jest.spyOn(professionalService, 'getProfessionalById');
 const mockedGetProfessionals = jest.spyOn(professionalService, 'getProfessionals');
 const mockedGetRooms = jest.spyOn(roomService, 'getRooms');
-const mockedGetBankAccounts = jest.spyOn(financialService, 'getBankAccounts');
+const mockedGetDefaultBankAccount = jest.spyOn(financialService, 'getDefaultBankAccount');
 
 const mockBatch = {
     set: jest.fn(),
@@ -142,12 +143,13 @@ describe('Appointment Service - Cobertura Completa', () => {
 
         mockedQuery.mockImplementation((...args) => ({ _query: args }));
         mockedDeleteTransaction.mockResolvedValue({ success: true });
+        mockedGetRepasses.mockResolvedValue([]);
         mockedAddTransaction.mockResolvedValue({ success: true });
         mockedGetProfessionalById.mockResolvedValue(mockProfessional as any);
         mockedGetProfessionals.mockResolvedValue([mockProfessional] as any);
         mockedGetRooms.mockResolvedValue([{ id: 'sala-1', nome: 'Sala 1', status: 'ativa' }] as any);
         mockedGetDocs.mockResolvedValue({ docs: [], empty: true }); 
-        mockedGetBankAccounts.mockResolvedValue([{ id: 'conta-padrao', isDefault: true }] as any);
+        mockedGetDefaultBankAccount.mockResolvedValue({ id: 'conta-padrao', isDefault: true } as any);
     });
 
 

@@ -21,7 +21,14 @@ import {
 } from 'date-fns';
 import { ptBR } from "date-fns/locale";
 import { getProfessionalById, getProfessionals, Professional } from "./professionalService";
-import { addTransaction, deleteTransactionByAppointmentId, TransactionFormData, getBankAccounts } from "./financialService";
+import {
+  addTransaction,
+  CATEGORIA_REPASSE,
+  deletePendingRepasses,
+  getDefaultBankAccount,
+  getRepassesDoAtendimento,
+  TransactionFormData,
+} from "./financialService";
 import { findOrCreateCostCenter, findOrCreateAccountPlan } from "./settingsService";
 import { Room, getRooms } from "./roomService";
 
@@ -83,8 +90,13 @@ export interface QuickAppointmentData {
 
 // --- ✅ FUNÇÃO DE REPASSE ATUALIZADA ✅ ---
 const handleRepasseTransaction = async (appointment: Appointment) => {
-  // 1. Limpa qualquer repasse antigo associado a este agendamento
-  await deleteTransactionByAppointmentId(appointment.id);
+  // 1. Repasse já pago fica como está: o pagamento é do Financeiro, e não se gera outro
+  const repasses = await getRepassesDoAtendimento(appointment.id);
+  if (repasses.some(repasse => repasse.status === 'pago')) {
+    return { success: true, message: "Repasse já pago: mantido como está." };
+  }
+  // O pendente, se houver, é refeito abaixo com os dados atuais do atendimento
+  await deletePendingRepasses(appointment.id);
 
   // 2. Verifica se as condições para gerar um novo repasse são atendidas
   const shouldGenerateRepasse =
@@ -144,9 +156,8 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
   }
   
   await findOrCreateCostCenter(appointment.tipo);
-  await findOrCreateAccountPlan('Repasse de Profissional', 'despesa');
-  const allBankAccounts = await getBankAccounts();
-  const defaultAccount = allBankAccounts.find(acc => acc.isDefault);
+  await findOrCreateAccountPlan(CATEGORIA_REPASSE, 'despesa');
+  const defaultAccount = await getDefaultBankAccount();
 
   // --- LÓGICA DE DATAS CORRIGIDA (Incluindo 'Pacote') ---
   const convenio = appointment.convenio ? appointment.convenio.toLowerCase().trim() : "";
@@ -170,9 +181,10 @@ const handleRepasseTransaction = async (appointment: Appointment) => {
     dataMovimento: dataMovimento,
     dataEmissao: appointment.start.toDate(),
     status: 'pendente',
-    category: 'Repasse de Profissional',
+    category: CATEGORIA_REPASSE,
     costCenter: appointment.tipo || 'Não especificado',
-    bankAccountId: defaultAccount ? defaultAccount.id : undefined,
+    // Sem conta padrão, o lançamento fica sem conta (o Firestore não aceita campo indefinido)
+    ...(defaultAccount ? { bankAccountId: defaultAccount.id } : {}),
     professionalId: appointment.professionalId,
     patientId: appointment.patientId,
     patientName: appointment.patientName,
@@ -579,7 +591,7 @@ export const updateAppointment = async (id: string, data: Partial<AppointmentFor
 };
 export const deleteAppointment = async (id: string) => {
   try {
-    await deleteTransactionByAppointmentId(id);
+    await deletePendingRepasses(id);
     await deleteDoc(doc(db, 'appointments', id));
     return { success: true };
   } catch (error) {
@@ -686,7 +698,7 @@ export const deleteFutureAppointmentsInBlock = async (appointment: Appointment) 
     const batch = writeBatch(db);
     await Promise.all(snapshot.docs.map(docToDelete => {
         batch.delete(docToDelete.ref);
-        return deleteTransactionByAppointmentId(docToDelete.id);
+        return deletePendingRepasses(docToDelete.id);
     }));
     await batch.commit();
     return { success: true };

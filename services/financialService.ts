@@ -2,7 +2,7 @@
 import { db } from "@/lib/firebaseConfig";
 import { 
     collection, addDoc, updateDoc, doc, deleteDoc, getDocs, getDoc, 
-    query, orderBy, where, writeBatch, setDoc, runTransaction, increment 
+    query, orderBy, where, writeBatch, setDoc, runTransaction, increment, limit
 } from "firebase/firestore";
 import { format, addMonths, startOfDay, endOfDay, addMinutes } from "date-fns";
 import { Timestamp } from "firebase/firestore";
@@ -187,9 +187,29 @@ export const deleteTransaction = async (id: string) => {
     }
 };
 
-export const deleteTransactionByAppointmentId = async (appointmentId: string) => {
+// Categoria dos lançamentos de repasse gerados ao finalizar um atendimento (as regras usam o mesmo nome)
+export const CATEGORIA_REPASSE = 'Repasse de Profissional';
+
+// Repasses ligados a um atendimento. A recepção e a coordenação só enxergam os lançamentos de repasse.
+export const getRepassesDoAtendimento = async (appointmentId: string): Promise<Transaction[]> => {
+    const q = query(
+        collection(db, "transactions"),
+        where("appointmentId", "==", appointmentId),
+        where("category", "==", CATEGORIA_REPASSE)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(lancamento => ({ id: lancamento.id, ...lancamento.data() } as Transaction));
+};
+
+// Apaga os repasses ainda pendentes do atendimento. Repasse pago fica: o registro do pagamento é do Financeiro.
+export const deletePendingRepasses = async (appointmentId: string) => {
     const transactionsRef = collection(db, "transactions");
-    const q = query(transactionsRef, where("appointmentId", "==", appointmentId));
+    const q = query(
+        transactionsRef,
+        where("appointmentId", "==", appointmentId),
+        where("category", "==", CATEGORIA_REPASSE),
+        where("status", "==", "pendente")
+    );
     try {
         const querySnapshot = await getDocs(q);
         if (querySnapshot.empty) return { success: true }; 
@@ -394,6 +414,13 @@ export const getCovenants = async (): Promise<Covenant[]> => { try { const q = q
 export const addCovenant = async (data: Omit<Covenant, 'id' | 'status'>) => { try { await addDoc(collection(db, "covenants"), { ...data, status: "Ativo" }); return { success: true }; } catch (e) { return { success: false, error: "Falha ao adicionar convênio." }; }};
 export const updateCovenant = async (id: string, data: Partial<Omit<Covenant, 'id'>>) => { try { await updateDoc(doc(db, "covenants", id), data); return { success: true }; } catch (e) { return { success: false, error: "Falha ao atualizar convênio." }; }};
 export const deleteCovenant = async (id: string) => { try { await deleteDoc(doc(db, "covenants", id)); return { success: true }; } catch (e) { return { success: false, error: "Falha ao excluir convênio." }; }};
+
+// A conta bancária padrão, para onde vão os repasses. A recepção e a coordenação só enxergam essa conta.
+export const getDefaultBankAccount = async (): Promise<BankAccount | null> => {
+    const q = query(collection(db, "bankAccounts"), where("isDefault", "==", true), limit(1));
+    const snapshot = await getDocs(q);
+    return snapshot.empty ? null : ({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as BankAccount);
+};
 
 export const getBankAccounts = async (): Promise<BankAccount[]> => {
     try {
