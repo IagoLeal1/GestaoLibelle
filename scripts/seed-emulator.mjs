@@ -166,6 +166,36 @@ for (const [id, fullName, familiaUid] of [['paciente-lucas', 'Lucas Souza', 'fam
   });
 }
 
+// Paciente sem grupo e cuja família ainda não criou acesso (testa o aviso ao criar o grupo)
+batch.set(db.doc('patients/paciente-theo'), {
+  fullName: 'Theo Martins',
+  cpf: '000.000.000-00',
+  dataNascimento: Timestamp.fromDate(new Date('2020-02-15T00:00:00Z')),
+  status: 'ativo',
+  dataCadastro: agora,
+  emailCadastro: 'renata.martins@libelle.test',
+  responsavel: { nome: 'Renata Martins', email: 'renata.martins@libelle.test' },
+});
+
+// Atendimentos: dão a sugestão de terapeutas ao criar o grupo de cada criança
+const DIA = 24 * 60 * 60 * 1000;
+for (const [pacienteId, profissionalId, dias] of [
+  ['paciente-lucas', 'terapeuta1-teste', -7],
+  ['paciente-lucas', 'terapeuta1-teste', 7],
+  ['paciente-bia', 'terapeuta2-teste', -3],
+  ['paciente-theo', 'terapeuta2-teste', 2],
+]) {
+  const inicio = agora.toMillis() + dias * DIA;
+  batch.set(db.doc(`appointments/ag-${pacienteId}-${dias}`), {
+    patientId: pacienteId,
+    professionalId: profissionalId,
+    start: Timestamp.fromMillis(inicio),
+    end: Timestamp.fromMillis(inicio + 50 * 60 * 1000),
+    status: 'agendado',
+  });
+}
+
+// Os dois grupos abaixo usam o formato antigo (paciente = conta da família), para testar "Vincular à criança".
 // Grupo A: 150 mensagens, para reproduzir o limite de 100
 const membrosA = ['familia1-teste', 'coord-teste', 'terapeuta1-teste'];
 const mensagensA = mensagensDoGrupo(membrosA, 150, agora.toMillis() - 149 * 30 * 60 * 1000);
