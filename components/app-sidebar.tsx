@@ -9,28 +9,30 @@ import { usePathname } from "next/navigation"
 import Image from "next/image"
 import { useAuth } from "@/context/AuthContext"
 import { useConversas } from "@/hooks/use-conversas"
+import { PAPEIS_POR_TELA } from "@/lib/permissoes"
 
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, useSidebar // <-- IMPORTE O HOOK
 } from "@/components/ui/sidebar"
 
+// Os papéis de cada item vêm de lib/permissoes, a mesma lista que trava o endereço digitado
 const menuItems = [
-  { title: "Dashboard", url: "/", icon: Home, roles: ['admin', 'profissional', 'funcionario', 'familiar', 'coordenador'] },
-  { title: "Agendamentos", url: "/agendamentos", icon: Calendar, roles: ['admin', 'profissional', 'funcionario', 'coordenador'] },
-  { title: "Mapeamento de Salas", url: "/mapeamento-salas", icon: MapPin, roles: ['admin', 'funcionario','coordenador'] },
-  { title: "Pacientes", url: "/pacientes", icon: Users, roles: ['admin', 'profissional', 'funcionario', 'coordenador'] },
-  { title: "Profissionais", url: "/profissionais", icon: UserCheck, roles: ['admin', 'funcionario', 'coordenador'] },
-  { title: "Especialidades", url: "/especialidades", icon: BadgeDollarSign, roles: ['admin'] },
-  { title: "Financeiro", url: "/financeiro", icon: DollarSign, roles: ['admin'] },
+  { title: "Dashboard", url: "/", icon: Home, roles: PAPEIS_POR_TELA["/"] },
+  { title: "Agendamentos", url: "/agendamentos", icon: Calendar, roles: PAPEIS_POR_TELA["/agendamentos"] },
+  { title: "Mapeamento de Salas", url: "/mapeamento-salas", icon: MapPin, roles: PAPEIS_POR_TELA["/mapeamento-salas"] },
+  { title: "Pacientes", url: "/pacientes", icon: Users, roles: PAPEIS_POR_TELA["/pacientes"] },
+  { title: "Profissionais", url: "/profissionais", icon: UserCheck, roles: PAPEIS_POR_TELA["/profissionais"] },
+  { title: "Especialidades", url: "/especialidades", icon: BadgeDollarSign, roles: PAPEIS_POR_TELA["/especialidades"] },
+  { title: "Financeiro", url: "/financeiro", icon: DollarSign, roles: PAPEIS_POR_TELA["/financeiro"] },
   // { title: "Relatórios", url: "/relatorios", icon: FileText, roles: ['admin', 'funcionario'] },
   // { title: "Avisos", url: "/avisos", icon: MessageSquare, roles: ['admin', 'profissional', 'funcionario', 'familiar'] },
   // { title: "Tarefas", url: "/tarefas", icon: CheckCircle, roles: ['admin', 'profissional', 'funcionario'] },
-  { title: "Aprovação de Acesso", url: "/admin/usuarios", icon: UserPlus, roles: ['admin'] },
-  { title: "Comercial", url: "/comercial", icon: TrendingUp, roles: ['admin','coordenador'] },
-  { title: "Gerenciar Usuários", url: "/admin/gerenciar-usuarios", icon: Users, roles: ['admin'] },
-  { title: "Comunicação", url: "/comunicacao", icon: MessageCircle, roles: ['admin', 'profissional', 'funcionario', 'familiar','coordenador'] },
-   { title: "Mensagens", url: "/mensagens", icon: MessagesSquare, roles: ['admin', 'profissional', 'funcionario', 'familiar','coordenador'] },
+  { title: "Aprovação de Acesso", url: "/admin/usuarios", icon: UserPlus, roles: PAPEIS_POR_TELA["/admin/usuarios"] },
+  { title: "Comercial", url: "/comercial", icon: TrendingUp, roles: PAPEIS_POR_TELA["/comercial"] },
+  { title: "Gerenciar Usuários", url: "/admin/gerenciar-usuarios", icon: Users, roles: PAPEIS_POR_TELA["/admin/gerenciar-usuarios"] },
+  { title: "Comunicação", url: "/comunicacao", icon: MessageCircle, roles: PAPEIS_POR_TELA["/comunicacao"] },
+  { title: "Mensagens", url: "/mensagens", icon: MessagesSquare, roles: PAPEIS_POR_TELA["/mensagens"] },
   // { title: "Plano Evolutivo", url: "/plano-evolutivo", icon: FileText, roles: ['profissional'] },
 ]
 

@@ -5,9 +5,6 @@
 import { adminAuth, initAdmin } from "@/lib/firebaseAdmin";
 import type { Papel } from "@/services/chatService";
 
-// Quem cria e organiza agendamentos (as mesmas pessoas que as regras deixam criar atendimentos)
-export const PAPEIS_DA_GESTAO: readonly Papel[] = ["admin", "coordenador", "funcionario"];
-
 export type ResultadoDoAcesso =
   | { ok: true; uid: string; papel: Papel }
   | { ok: false; status: 401 | 403; erro: string };

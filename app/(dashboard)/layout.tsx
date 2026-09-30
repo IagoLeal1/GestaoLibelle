@@ -3,6 +3,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Header } from "@/components/header";
 import { AuthGuard } from "@/components/auth/auth-guard";
+import { RoleGuard } from "@/components/auth/role-guard";
 import { Toaster } from "sonner";
 import { Toaster as ToasterShadcn } from "@/components/ui/toaster";
 
@@ -20,7 +21,7 @@ export default function DashboardLayout({
           <Header />
           {/* Altura da tela menos o cabeçalho (h-16): sem rolagem sobrando nas telas curtas */}
           <main className="p-4 sm:p-6 bg-support-light-gray min-h-[calc(100dvh-4rem)]">
-            {children}
+            <RoleGuard>{children}</RoleGuard>
           </main>
         </SidebarInset>
       </SidebarProvider>

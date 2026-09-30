@@ -4,7 +4,8 @@
 // Roda contra o emulador: npm run test:firebase
 import admin from 'firebase-admin';
 import { auth } from '@/lib/firebaseConfig';
-import { PAPEIS_DA_GESTAO, verificarAcesso } from '@/lib/acessoServidor';
+import { verificarAcesso } from '@/lib/acessoServidor';
+import { PAPEIS_DA_GESTAO } from '@/lib/permissoes';
 import {
   criarUsuario,
   encerrarAmbiente,

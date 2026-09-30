@@ -3,7 +3,8 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 import { initAdmin } from "@/lib/firebaseAdmin";
-import { PAPEIS_DA_GESTAO, verificarAcesso } from "@/lib/acessoServidor";
+import { verificarAcesso } from "@/lib/acessoServidor";
+import { PAPEIS_DA_GESTAO } from "@/lib/permissoes";
 import { Timestamp } from "firebase-admin/firestore";
 import { startOfDay, endOfDay, addMonths, format, setHours, setMinutes, addMinutes, parse } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
