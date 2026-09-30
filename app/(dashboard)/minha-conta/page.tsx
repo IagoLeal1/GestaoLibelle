@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { updateProfile, updatePassword } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
 import { auth, db } from '@/lib/firebaseConfig';
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "@/hooks/use-toast";
 import { 
   Card, 
   CardContent, 
