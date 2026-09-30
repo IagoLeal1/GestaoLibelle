@@ -32,6 +32,15 @@ const USUARIOS = [
   { uid: 'familia1-teste', email: 'familia1@libelle.test', displayName: 'Maria Souza', role: 'familiar', status: 'aprovado' },
   { uid: 'familia2-teste', email: 'familia2@libelle.test', displayName: 'João Lima', role: 'familiar', status: 'aprovado' },
   { uid: 'pendente-teste', email: 'pendente@libelle.test', displayName: 'Pedro Pendente', role: 'familiar', status: 'pendente' },
+  // Terapeuta que se inscreveu e ainda não tem cadastro em Profissionais (testa a aprovação)
+  {
+    uid: 'terapeuta3-pendente', email: 'terapeuta3@libelle.test', displayName: 'Lia Terapeuta Ocupacional', role: 'profissional', status: 'pendente',
+    perfil: {
+      cpf: '222.333.444-55',
+      telefone: '(21) 97777-6666',
+      professionalData: { especialidade: 'Terapia Ocupacional', conselho: 'CREFITO', numeroConselho: '12345-TO' },
+    },
+  },
   // Tem login, mas não tem documento em users (é o que o "excluir usuário" deixa para trás)
   { uid: 'removido-teste', email: 'removido@libelle.test', displayName: 'Rita Removida', role: null, status: null },
 ];
@@ -129,6 +138,7 @@ for (const usuario of USUARIOS.filter((u) => u.role)) {
       telefone: null,
       createdAt: agora,
       historyHidden: false,
+      ...usuario.perfil,
       // O painel do terapeuta acha a agenda dele por aqui
       ...(usuario.role === 'profissional' ? { professionalId: usuario.uid } : {}),
     },
@@ -227,6 +237,38 @@ for (const [pacienteId, profissionalId, dias, status] of [
     convenio: 'particular',
     valorConsulta: 150,
     observacoes: '',
+  });
+}
+
+// Série semanal do Lucas com a Paula, às 9h, a partir da semana que vem: a 2ª sessão foi cancelada
+// (tem sala e observação próprias) e a 4ª semana foi excluída (buraco). Testa "este e os próximos".
+const inicioDaSerie = new Date();
+inicioDaSerie.setHours(9, 0, 0, 0);
+for (const [semana, extra] of [
+  [1, {}],
+  [2, { status: 'cancelado', sala: 'sala-2', observacoes: 'Viagem da família' }],
+  [3, {}],
+  [5, {}],
+]) {
+  const inicio = inicioDaSerie.getTime() + semana * 7 * DIA;
+  batch.set(db.doc(`appointments/serie-lucas-${semana}`), {
+    patientId: 'paciente-lucas',
+    patientName: 'Lucas Souza',
+    professionalId: 'terapeuta1-teste',
+    professionalName: porUid['terapeuta1-teste'].displayName,
+    title: `Lucas Souza - ${porUid['terapeuta1-teste'].displayName}`,
+    start: Timestamp.fromMillis(inicio),
+    end: Timestamp.fromMillis(inicio + 50 * 60 * 1000),
+    status: 'agendado',
+    statusSecundario: '',
+    tipo: 'Fonoaudiologia',
+    convenio: 'particular',
+    valorConsulta: 150,
+    sala: 'sala-1',
+    observacoes: '',
+    blockId: 'serie-lucas-fono',
+    isLastInBlock: semana === 5,
+    ...extra,
   });
 }
 
