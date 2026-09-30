@@ -16,7 +16,7 @@ import { Patient } from "@/services/patientService"
 import { getIniciais } from "@/lib/formatters"
 import { AddParticipantsModal } from "@/components/modals/add-participants-modal"
 import { EscolherPaciente } from "./escolher-paciente"
-import { ORDEM_DOS_PAPEIS, papel } from "./papeis"
+import { agruparPorPapel, infoDoPapel } from "./papeis"
 
 interface Props {
   open: boolean
@@ -33,7 +33,6 @@ export function EquipeDaConversa({ open, onOpenChange, grupo, membros, meuUid, p
   const [removendo, setRemovendo] = useState(false)
   const [vinculando, setVinculando] = useState(false)
   const souMembro = grupo.memberIds.includes(meuUid)
-  const papeis = [...ORDEM_DOS_PAPEIS, ...new Set(membros.map(m => m.papel).filter(r => !ORDEM_DOS_PAPEIS.includes(r)))]
 
   const confirmarRemocao = async () => {
     if (!remover) return
@@ -53,7 +52,12 @@ export function EquipeDaConversa({ open, onOpenChange, grupo, membros, meuUid, p
 
   const vincular = async (paciente: Patient) => {
     try {
-      await linkGroupToPatient(grupo.id, { id: paciente.id, nome: paciente.fullName })
+      const resultado = await linkGroupToPatient(grupo.id, { id: paciente.id, nome: paciente.fullName })
+      if (!resultado.success) {
+        // Cada criança tem um grupo só: esta conversa fica como está
+        toast.info(`${paciente.fullName} já tem um grupo. Esta conversa continua com o nome do responsável.`)
+        return
+      }
       toast.success(`Conversa ligada a ${paciente.fullName}.`)
       setVinculando(false)
       onMudou()
@@ -94,36 +98,32 @@ export function EquipeDaConversa({ open, onOpenChange, grupo, membros, meuUid, p
           )}
 
           <div className="space-y-4">
-            {papeis.map(role => {
-              const doPapel = membros.filter(m => m.papel === role)
-              if (doPapel.length === 0) return null
-              return (
-                <div key={role}>
-                  <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-slate-500">{papel(role).grupo}</p>
-                  <ul className="space-y-1">
-                    {doPapel.map(membro => (
-                      <li key={membro.uid} className="flex items-center gap-3 rounded-md px-1 py-1.5">
-                        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${papel(role).cor}`}>
-                          {getIniciais(membro.nome)}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-[15px] text-slate-900">
-                          {membro.nome}{membro.uid === meuUid && <span className="text-slate-500"> (você)</span>}
-                        </span>
-                        {podeGerenciar && membro.uid !== meuUid && (
-                          <button
-                            onClick={() => setRemover(membro)}
-                            aria-label={`Remover ${membro.nome} da conversa`}
-                            className="rounded-full p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )
-            })}
+            {agruparPorPapel(membros).map(secao => (
+              <div key={secao.titulo}>
+                <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-slate-500">{secao.titulo}</p>
+                <ul className="space-y-1">
+                  {secao.pessoas.map(membro => (
+                    <li key={membro.uid} className="flex items-center gap-3 rounded-md px-1 py-1.5">
+                      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${infoDoPapel(membro.papel).cor}`}>
+                        {getIniciais(membro.nome)}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[15px] text-slate-900">
+                        {membro.nome}{membro.uid === meuUid && <span className="text-slate-500"> (você)</span>}
+                      </span>
+                      {podeGerenciar && membro.uid !== meuUid && (
+                        <button
+                          onClick={() => setRemover(membro)}
+                          aria-label={`Remover ${membro.nome} da conversa`}
+                          className="rounded-full p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
 
           {podeGerenciar && <AddParticipantsModal groupId={grupo.id} memberIds={grupo.memberIds} onAdded={onMudou} />}

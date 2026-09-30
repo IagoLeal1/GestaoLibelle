@@ -10,7 +10,7 @@ import { useAuth } from "@/context/AuthContext"
 import { Patient } from "@/services/patientService"
 import { ChatMember, createPatientChatGroup, getApprovedPeople, getPatientTeamSuggestion } from "@/services/chatService"
 import { EscolherPaciente } from "@/components/mensagens/escolher-paciente"
-import { SeletorDePessoas } from "@/components/mensagens/seletor-de-pessoas"
+import { alternarPessoa, SeletorDePessoas } from "@/components/mensagens/seletor-de-pessoas"
 
 // Novo grupo de conversa de um paciente: a família vinculada e os terapeutas que atendem a criança já vêm marcados
 export function CreateChatGroupModal() {
@@ -21,7 +21,7 @@ export function CreateChatGroupModal() {
     const [pessoas, setPessoas] = useState<ChatMember[]>([])
     const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
     const [sugeridos, setSugeridos] = useState<Set<string>>(new Set())
-    const [semFamilia, setSemFamilia] = useState(false)
+    const [familiaSugerida, setFamiliaSugerida] = useState<string[]>([])
     const [carregando, setCarregando] = useState(false)
     const [salvando, setSalvando] = useState(false)
 
@@ -30,11 +30,17 @@ export function CreateChatGroupModal() {
         getApprovedPeople().then(setPessoas)
     }, [open])
 
+    // Só entra no grupo quem tem cadastro aprovado. Quem cria entra sempre, por isso fica fora da lista.
+    const outrasPessoas = pessoas.filter(p => p.uid !== firestoreUser?.uid)
+    const escolhidos = outrasPessoas.filter(p => selecionados.has(p.uid))
+    // A conta ligada à criança pode não existir ainda ou estar esperando aprovação
+    const semFamilia = pessoas.length > 0 && !pessoas.some(p => familiaSugerida.includes(p.uid))
+
     const reiniciar = () => {
         setPaciente(null)
         setSelecionados(new Set())
         setSugeridos(new Set())
-        setSemFamilia(false)
+        setFamiliaSugerida([])
     }
 
     const escolherPaciente = async (escolhido: Patient, grupoExistente?: string) => {
@@ -51,7 +57,7 @@ export function CreateChatGroupModal() {
             const marcados = new Set([...sugestao.familia, ...sugestao.terapeutas])
             setSugeridos(marcados)
             setSelecionados(marcados)
-            setSemFamilia(sugestao.familia.length === 0)
+            setFamiliaSugerida(sugestao.familia)
         } catch (error) {
             console.error("Erro ao sugerir participantes:", error)
         } finally {
@@ -59,21 +65,12 @@ export function CreateChatGroupModal() {
         }
     }
 
-    const alternar = (uid: string) => {
-        setSelecionados(atual => {
-            const novo = new Set(atual)
-            if (novo.has(uid)) novo.delete(uid)
-            else novo.add(uid)
-            return novo
-        })
-    }
-
     const criar = async () => {
         if (!paciente || !firestoreUser) return
         setSalvando(true)
         const resultado = await createPatientChatGroup({
             paciente: { id: paciente.id, nome: paciente.fullName },
-            membros: pessoas.filter(p => selecionados.has(p.uid)),
+            membros: escolhidos,
             criadoPor: firestoreUser.uid,
         })
         setSalvando(false)
@@ -115,17 +112,16 @@ export function CreateChatGroupModal() {
                         {semFamilia && (
                             <p className="flex gap-2 rounded-md bg-amber-50 p-3 text-sm text-amber-900">
                                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                                A família de {paciente.fullName.split(" ")[0]} ainda não criou acesso ao sistema. Você pode criar o grupo agora e adicioná-la depois.
+                                A família de {paciente.fullName.split(" ")[0]} ainda não tem acesso ao sistema (ou aguarda aprovação). Você pode criar o grupo agora e adicioná-la depois.
                             </p>
                         )}
-                        {/* Quem cria o grupo entra nele sempre, por isso não aparece na lista */}
-                        <SeletorDePessoas pessoas={pessoas.filter(p => p.uid !== firestoreUser?.uid)} selecionados={selecionados} onAlternar={alternar} sugeridos={sugeridos} />
+                        <SeletorDePessoas pessoas={outrasPessoas} selecionados={selecionados} onAlternar={(uid) => setSelecionados(atual => alternarPessoa(atual, uid))} sugeridos={sugeridos} />
                         <p className="text-xs text-slate-500">Você também entra no grupo.</p>
                         <div className="flex gap-2">
                             <Button variant="outline" onClick={reiniciar} className="flex-1">Trocar criança</Button>
                             <Button onClick={criar} disabled={salvando} className="flex-1 bg-[#1da7ac] hover:bg-[#1da7ac]/90">
                                 {salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Criar grupo ({new Set([...selecionados, firestoreUser?.uid]).size} pessoas)
+                                Criar grupo ({escolhidos.length + 1} pessoas)
                             </Button>
                         </div>
                     </div>

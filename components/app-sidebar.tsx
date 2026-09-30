@@ -38,7 +38,8 @@ export function AppSidebar() {
   const pathname = usePathname()
   const { firestoreUser, unreadCount } = useAuth()
   const { setOpenMobile } = useSidebar(); // <-- USE O HOOK AQUI
-  const { naoLidas: conversasNaoLidas } = useConversas()
+  // Só as conversas de que a pessoa participa: é o que o número do menu conta
+  const { naoLidas: conversasNaoLidas } = useConversas({ incluirSupervisao: false })
 
   const accessibleItems = menuItems.filter(item => {
     if (!firestoreUser?.profile) return false;

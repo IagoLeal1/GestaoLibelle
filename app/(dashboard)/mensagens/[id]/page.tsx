@@ -16,15 +16,16 @@ import {
     mergeMessages,
     markChatAsRead,
     buildTimeline,
+    isChatSupervisor,
+    readUntil,
     LIVE_WINDOW_SIZE,
-    UNREAD_TRACKING_START,
     ChatMessage,
     ChatGroup,
     ChatMember,
 } from "@/services/chatService"
 import { getIniciais, horaCurta, rotuloDoDia } from "@/lib/formatters"
 import { EquipeDaConversa } from "@/components/mensagens/equipe-da-conversa"
-import { isCoordenacao, papel } from "@/components/mensagens/papeis"
+import { infoDoPapel } from "@/components/mensagens/papeis"
 
 // Até essa distância do fim (em px), a conversa acompanha as mensagens que chegam
 const MARGEM_DO_FIM = 80;
@@ -56,7 +57,7 @@ export default function ChatDetalhePage({ params }: { params: Promise<{ id: stri
     const posicaoAntesDasAnteriores = useRef<{ altura: number; topo: number } | null>(null);
     const marcarLidaTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const podeGerenciar = isCoordenacao(firestoreUser?.profile.role);
+    const podeGerenciar = isChatSupervisor(firestoreUser?.profile.role);
 
     // "Li até aqui": só com a conversa visível; espera um instante para juntar várias mensagens seguidas
     const marcarComoLida = () => {
@@ -106,19 +107,21 @@ export default function ChatDetalhePage({ params }: { params: Promise<{ id: stri
             setGrupo(g);
             carregarEquipe(g);
             // Fixa onde começam as novas para esta visita (não muda ao marcar como lida)
-            setLidoAteAoAbrir(g.lastReadAt?.[uid] ?? Timestamp.fromDate(UNREAD_TRACKING_START));
+            setLidoAteAoAbrir(readUntil(g, uid));
 
             cancelarAssinatura = subscribeToChatMessages(
                 id,
                 (janela) => {
+                    const ultima = janela.at(-1);
                     if (primeiraLeitura) {
                         primeiraLeitura = false;
                         // Janela cheia: pode haver mensagens anteriores a ela
                         setTemAnteriores(janela.length === LIVE_WINDOW_SIZE);
+                        marcarComoLidaRef.current();
+                    } else if (ultima && ultima.senderId !== uid) {
+                        // A própria mensagem já marca a leitura ao ser enviada (sendMessage)
+                        marcarComoLidaRef.current();
                     }
-                    // Inclusive a própria mensagem: quem responde já leu tudo até ali, e ela
-                    // não pode contar como nova quando outra pessoa responder depois
-                    marcarComoLidaRef.current();
                     setMensagens(atuais => mergeMessages(atuais, janela));
                     setLoading(false);
                 },
@@ -142,7 +145,7 @@ export default function ChatDetalhePage({ params }: { params: Promise<{ id: stri
             document.removeEventListener("visibilitychange", aoVoltarParaAba);
             if (marcarLidaTimer.current) clearTimeout(marcarLidaTimer.current);
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // Só refaz ao trocar de conversa ou de pessoa (a marcação de leitura vem por ref)
     }, [id, uid]);
 
     // Scroll: ao abrir vai direto para o fim; depois só acompanha quem está no fim ou acabou de enviar
@@ -331,7 +334,7 @@ export default function ChatDetalhePage({ params }: { params: Promise<{ id: stri
                                     </div>
                                 );
                             }
-                            const comoAparece = papel(item.senderRole);
+                            const comoAparece = infoDoPapel(item.senderRole);
                             return (
                                 <div key={item.key} className={`flex items-end gap-2 ${item.mine ? "justify-end" : ""}`}>
                                     {!item.mine && (

@@ -1,23 +1,26 @@
 "use client"
 // hooks/use-conversas.ts
-// Conversas do usuário em tempo real. A coordenação recebe todas (supervisão); os demais, as suas.
-// Usado pela lista de mensagens e pelo número de não lidas do menu. Duas telas com a mesma consulta
-// compartilham a mesma escuta no Firestore, então não há leitura em dobro.
+// Conversas do usuário em tempo real. A coordenação recebe também as que só acompanha (supervisão);
+// os demais, as suas. Duas telas com a mesma consulta compartilham a mesma escuta no Firestore,
+// então não há leitura em dobro.
 import { useEffect, useState } from "react"
 import { useAuth } from "@/context/AuthContext"
-import { isCoordenacao } from "@/components/mensagens/papeis"
 import {
   ChatGroup,
   countUnreadMessages,
   hasUnread,
+  isChatSupervisor,
   subscribeToAllGroups,
   subscribeToUserGroups,
 } from "@/services/chatService"
 
-export function useConversas() {
+// incluirSupervisao: false para quem só precisa das conversas de que participa (o número do menu).
+// Assim o menu, que aparece em todas as telas, não escuta todas as conversas da clínica.
+export function useConversas({ incluirSupervisao = true }: { incluirSupervisao?: boolean } = {}) {
   const { firestoreUser } = useAuth()
   const uid = firestoreUser?.uid
-  const coordenacao = isCoordenacao(firestoreUser?.profile.role)
+  const coordenacao = isChatSupervisor(firestoreUser?.profile.role)
+  const todas = coordenacao && incluirSupervisao
   const [grupos, setGrupos] = useState<ChatGroup[]>([])
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState(false)
@@ -34,9 +37,9 @@ export function useConversas() {
       setErro(true)
       setCarregando(false)
     }
-    const cancelar = coordenacao ? subscribeToAllGroups(aoReceber, aoFalhar) : subscribeToUserGroups(uid, aoReceber, aoFalhar)
+    const cancelar = todas ? subscribeToAllGroups(aoReceber, aoFalhar) : subscribeToUserGroups(uid, aoReceber, aoFalhar)
     return () => cancelar()
-  }, [uid, coordenacao])
+  }, [uid, todas])
 
   // O número do menu conta só as conversas de que a pessoa participa (a supervisão não soma)
   const naoLidas = uid ? grupos.filter(g => g.memberIds.includes(uid) && hasUnread(g, uid)).length : 0
@@ -49,7 +52,7 @@ export function useContagemDeNaoLidas(grupos: ChatGroup[], uid?: string) {
   const [contagens, setContagens] = useState<Record<string, number>>({})
   const comNaoLidas = uid ? grupos.filter(g => hasUnread(g, uid)) : []
   // Só refaz a contagem quando muda a última mensagem ou a leitura de alguma conversa
-  const assinatura = comNaoLidas
+  const quandoRecontar = comNaoLidas
     .map(g => `${g.id}:${g.lastMessage?.createdAt?.toMillis()}:${uid ? g.lastReadAt?.[uid]?.toMillis() : ""}`)
     .join("|")
 
@@ -64,8 +67,7 @@ export function useContagemDeNaoLidas(grupos: ChatGroup[], uid?: string) {
     return () => {
       ativo = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assinatura, uid])
+  }, [quandoRecontar, uid])
 
   return contagens
 }

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Loader2, UserPlus } from "lucide-react"
 import { toast } from "sonner"
 import { addGroupMembers, ChatMember, getApprovedPeople } from "@/services/chatService"
-import { SeletorDePessoas } from "@/components/mensagens/seletor-de-pessoas"
+import { alternarPessoa, SeletorDePessoas } from "@/components/mensagens/seletor-de-pessoas"
 
 interface AddParticipantsModalProps {
     groupId: string
@@ -29,15 +29,6 @@ export function AddParticipantsModal({ groupId, memberIds, onAdded }: AddPartici
         const atuais = chaveDosMembros.split(",")
         getApprovedPeople().then(todas => setPessoas(todas.filter(p => !atuais.includes(p.uid))))
     }, [open, chaveDosMembros])
-
-    const alternar = (uid: string) => {
-        setSelecionados(atual => {
-            const novo = new Set(atual)
-            if (novo.has(uid)) novo.delete(uid)
-            else novo.add(uid)
-            return novo
-        })
-    }
 
     const adicionar = async () => {
         if (!pessoas || selecionados.size === 0) return
@@ -73,7 +64,7 @@ export function AddParticipantsModal({ groupId, memberIds, onAdded }: AddPartici
                     <p className="py-4 text-center text-sm text-slate-500">Todas as pessoas aprovadas já estão nesta conversa.</p>
                 ) : (
                     <div className="space-y-3">
-                        <SeletorDePessoas pessoas={pessoas} selecionados={selecionados} onAlternar={alternar} />
+                        <SeletorDePessoas pessoas={pessoas} selecionados={selecionados} onAlternar={(uid) => setSelecionados(atual => alternarPessoa(atual, uid))} />
                         <Button onClick={adicionar} disabled={salvando || selecionados.size === 0} className="w-full bg-[#1da7ac] hover:bg-[#1da7ac]/90">
                             {salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Adicionar {selecionados.size > 0 ? `(${selecionados.size})` : ""}
