@@ -71,7 +71,7 @@ export function CreateChatGroupModal() {
         const resultado = await createPatientChatGroup({
             paciente: { id: paciente.id, nome: paciente.fullName },
             membros: escolhidos,
-            criadoPor: firestoreUser.uid,
+            criadoPor: { uid: firestoreUser.uid, nome: firestoreUser.displayName, papel: firestoreUser.profile.role },
         })
         setSalvando(false)
 

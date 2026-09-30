@@ -12,6 +12,7 @@ import {
     sendMessage,
     getGroupDetails,
     getGroupMembers,
+    completarMembros,
     loadOlderMessages,
     mergeMessages,
     markChatAsRead,
@@ -73,7 +74,10 @@ export default function ChatDetalhePage({ params }: { params: Promise<{ id: stri
 
     const carregarEquipe = async (g: ChatGroup) => {
         try {
-            setMembros(await getGroupMembers(g.memberIds));
+            const lista = await getGroupMembers(g);
+            setMembros(lista);
+            // Grupo de antes de guardar os nomes: a coordenação completa, para a família também ver a equipe
+            if (podeGerenciar) await completarMembros(g, lista);
         } catch (erro) {
             console.error("Erro ao carregar a equipe da conversa:", erro);
         }

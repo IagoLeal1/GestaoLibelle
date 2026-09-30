@@ -4,6 +4,7 @@
 import {
   addGroupMembers,
   ChatGroup,
+  completarMembros,
   createPatientChatGroup,
   getApprovedPeople,
   getGroupDetails,
@@ -34,6 +35,8 @@ import {
 beforeAll(iniciarAmbiente);
 afterAll(encerrarAmbiente);
 
+const membro = (u: UsuarioDeTeste) => ({ uid: u.uid, nome: u.displayName, papel: u.role });
+
 describe('grupo do paciente', () => {
   let maria: UsuarioDeTeste;
   let joao: UsuarioDeTeste;
@@ -48,13 +51,11 @@ describe('grupo do paciente', () => {
     carla = await criarUsuario('Carla Coordenadora', { role: 'coordenador' });
   });
 
-  const membro = (u: UsuarioDeTeste) => ({ uid: u.uid, nome: u.displayName, papel: u.role });
-
   it('a coordenação cria o grupo com o nome da criança, e a família passa a vê-lo', async () => {
     const lucas = await criarPaciente('paciente-lucas', 'Lucas Souza', maria);
     await entrarComo(carla);
 
-    const resultado = await createPatientChatGroup({ paciente: lucas, membros: [membro(maria), membro(paula)], criadoPor: carla.uid });
+    const resultado = await createPatientChatGroup({ paciente: lucas, membros: [membro(maria), membro(paula)], criadoPor: membro(carla) });
 
     expect(resultado).toMatchObject({ success: true });
     await entrarComo(maria);
@@ -65,9 +66,9 @@ describe('grupo do paciente', () => {
   it('não cria um segundo grupo para a mesma criança nem mexe no que já existe', async () => {
     const lucas = await criarPaciente('paciente-lucas', 'Lucas Souza', maria);
     await entrarComo(carla);
-    await createPatientChatGroup({ paciente: lucas, membros: [membro(maria)], criadoPor: carla.uid });
+    await createPatientChatGroup({ paciente: lucas, membros: [membro(maria)], criadoPor: membro(carla) });
 
-    const segunda = await createPatientChatGroup({ paciente: lucas, membros: [membro(maria), membro(joao)], criadoPor: carla.uid });
+    const segunda = await createPatientChatGroup({ paciente: lucas, membros: [membro(maria), membro(joao)], criadoPor: membro(carla) });
 
     expect(segunda).toMatchObject({ success: false, error: 'ja-existe' });
     const grupo = await getGroupDetails(patientGroupId('paciente-lucas'));
@@ -80,7 +81,7 @@ describe('grupo do paciente', () => {
     await entrarComo(carla);
     await linkGroupToPatient(antigo, lucas);
 
-    const resultado = await createPatientChatGroup({ paciente: lucas, membros: [membro(maria)], criadoPor: carla.uid });
+    const resultado = await createPatientChatGroup({ paciente: lucas, membros: [membro(maria)], criadoPor: membro(carla) });
 
     expect(resultado).toEqual({ success: false, id: antigo, error: 'ja-existe' });
     expect(await getGroupDetails(patientGroupId('paciente-lucas'))).toBeNull();
@@ -127,7 +128,7 @@ describe('grupo do paciente', () => {
     const lucas = await criarPaciente('paciente-lucas', 'Lucas Souza', maria);
     const antigo = await criarGrupo([maria, paula, carla], carla);
     await entrarComo(carla);
-    await createPatientChatGroup({ paciente: lucas, membros: [membro(maria)], criadoPor: carla.uid });
+    await createPatientChatGroup({ paciente: lucas, membros: [membro(maria)], criadoPor: membro(carla) });
 
     const resultado = await linkGroupToPatient(antigo, lucas);
 
@@ -153,14 +154,14 @@ describe('participantes', () => {
     await entrarComo(carla);
     const criado = await createPatientChatGroup({
       paciente: lucas,
-      membros: [maria, paula].map((u) => ({ uid: u.uid, nome: u.displayName, papel: u.role })),
-      criadoPor: carla.uid,
+      membros: [membro(maria), membro(paula)],
+      criadoPor: membro(carla),
     });
     grupoId = criado.id;
   });
 
   it('um segundo responsável adicionado pela coordenação passa a ver o grupo', async () => {
-    await addGroupMembers(grupoId, [{ uid: joao.uid, nome: joao.displayName, papel: joao.role }]);
+    await addGroupMembers(grupoId, [membro(joao)]);
 
     await entrarComo(joao);
     await expect(aguardarGrupos(joao.uid, (gs) => gs.length === 1)).resolves.toHaveLength(1);
@@ -200,16 +201,40 @@ describe('participantes', () => {
     expect(erro).toMatchObject({ code: 'permission-denied' });
   });
 
-  it('mostra o nome e o papel de quem está no grupo, na ordem pedida', async () => {
+  it('a família vê o nome e o papel de quem está no grupo, sem acesso aos cadastros', async () => {
     await entrarComo(maria);
 
-    const equipe = await getGroupMembers([maria.uid, paula.uid, carla.uid]);
+    const equipe = await getGroupMembers((await getGroupDetails(grupoId))!);
 
-    expect(equipe).toEqual([
-      { uid: maria.uid, nome: 'Maria Souza', papel: 'familiar' },
-      { uid: paula.uid, nome: 'Paula Fonoaudióloga', papel: 'profissional' },
-      { uid: carla.uid, nome: 'Carla Coordenadora', papel: 'coordenador' },
-    ]);
+    expect(equipe).toEqual([membro(carla), membro(maria), membro(paula)]);
+  });
+
+  it('quem a coordenação adiciona aparece na equipe para a família', async () => {
+    await addGroupMembers(grupoId, [membro(joao)]);
+
+    await entrarComo(maria);
+    const equipe = await getGroupMembers((await getGroupDetails(grupoId))!);
+    expect(equipe).toContainEqual(membro(joao));
+  });
+
+  it('quem sai da conversa some da equipe', async () => {
+    await removeGroupMember(grupoId, paula.uid);
+
+    const grupo = await getGroupDetails(grupoId);
+    expect(grupo?.membros).not.toHaveProperty(paula.uid);
+    expect(await getGroupMembers(grupo!)).toEqual([membro(carla), membro(maria)]);
+  });
+
+  it('num grupo antigo, a coordenação completa os nomes e a família passa a vê-los', async () => {
+    const antigo = await criarGrupo([maria, paula, carla], carla);
+    await entrarComo(carla);
+    const vistosPelaCoordenacao = await getGroupMembers((await getGroupDetails(antigo))!);
+
+    await completarMembros((await getGroupDetails(antigo))!, vistosPelaCoordenacao);
+
+    await entrarComo(maria);
+    const vistosPelaFamilia = await getGroupMembers((await getGroupDetails(antigo))!);
+    expect(vistosPelaFamilia.map((m) => m.nome).sort()).toEqual(['Carla Coordenadora', 'Maria Souza', 'Paula Fonoaudióloga']);
   });
 
   it('a terapeuta removida pela coordenação perde o acesso à conversa', async () => {

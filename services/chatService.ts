@@ -25,6 +25,7 @@ import {
   runTransaction,
   arrayUnion,
   arrayRemove,
+  deleteField,
   QuerySnapshot,
   documentId,
   limit
@@ -54,6 +55,9 @@ export interface ChatGroup {
   };
   unreadCounts: Record<string, number>; // compatibilidade, como os campos acima
   lastReadAt?: Record<string, Timestamp>; // até quando cada participante leu a conversa
+  // Nome e papel de cada participante, guardados no grupo: famílias e terapeutas não leem os
+  // cadastros dos outros (users). Ausente nos grupos criados antes dessa mudança.
+  membros?: Record<string, { nome: string; papel: Papel }>;
 }
 
 // Conversa sem registro de leitura conta como lida até esta data: assim, ao publicar,
@@ -102,10 +106,15 @@ export const isLegacyGroup = (group: ChatGroup) => group.pacienteId === group.re
 // Admin e coordenação acompanham todas as conversas e cuidam dos participantes (como nas regras)
 export const isChatSupervisor = (role?: string) => role === "admin" || role === "coordenador";
 
+// Nome e papel de cada pessoa, no formato gravado no grupo (campos "membros.{uid}")
+const registrosDeMembros = (membros: ChatMember[]) =>
+  Object.fromEntries(membros.map(m => [`membros.${m.uid}`, { nome: m.nome, papel: m.papel }]));
+
 // Coloca pessoas no grupo (só a coordenação pode). arrayUnion evita perder quem outra pessoa adicionou ao mesmo tempo.
 export const addGroupMembers = async (groupId: string, membros: ChatMember[]) => {
   await updateDoc(doc(db, "chat_groups", groupId), {
     memberIds: arrayUnion(...membros.map(m => m.uid)),
+    ...registrosDeMembros(membros),
   });
 };
 
@@ -113,7 +122,15 @@ export const addGroupMembers = async (groupId: string, membros: ChatMember[]) =>
 export const removeGroupMember = async (groupId: string, uid: string) => {
   await updateDoc(doc(db, "chat_groups", groupId), {
     memberIds: arrayRemove(uid),
+    [`membros.${uid}`]: deleteField(),
   });
+};
+
+// A coordenação grava no grupo os nomes que faltam (grupos criados antes de "membros" existir)
+export const completarMembros = async (group: ChatGroup, membros: ChatMember[]) => {
+  const faltando = membros.filter(m => !group.membros?.[m.uid]);
+  if (faltando.length === 0) return;
+  await updateDoc(doc(db, "chat_groups", group.id), registrosDeMembros(faltando));
 };
 
 // Pessoas que podem entrar numa conversa: todo cadastro aprovado, em ordem alfabética
@@ -122,19 +139,33 @@ export const getApprovedPeople = async (): Promise<ChatMember[]> =>
     .map(usuario => ({ uid: usuario.id, nome: usuario.displayName ?? "", papel: usuario.profile?.role }))
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
-// Nome e papel de cada participante, lidos do cadastro (users), na ordem de `memberIds`.
-// Quem foi excluído do sistema não aparece.
-export const getGroupMembers = async (memberIds: string[]): Promise<ChatMember[]> => {
+// Nome e papel lidos do cadastro (users). Só a gestão consegue: para os outros, volta vazio.
+const lerCadastros = async (uids: string[]): Promise<Map<string, ChatMember>> => {
   const encontrados = new Map<string, ChatMember>();
-  // O Firestore aceita no máximo 30 ids por consulta "in"
-  for (let i = 0; i < memberIds.length; i += 30) {
-    const lote = query(collection(db, "users"), where(documentId(), "in", memberIds.slice(i, i + 30)));
-    (await getDocs(lote)).forEach(usuario => {
-      const dados = usuario.data();
-      encontrados.set(usuario.id, { uid: usuario.id, nome: dados.displayName ?? "", papel: dados.profile?.role });
-    });
+  try {
+    // O Firestore aceita no máximo 30 ids por consulta "in"
+    for (let i = 0; i < uids.length; i += 30) {
+      const lote = query(collection(db, "users"), where(documentId(), "in", uids.slice(i, i + 30)));
+      (await getDocs(lote)).forEach(usuario => {
+        const dados = usuario.data();
+        encontrados.set(usuario.id, { uid: usuario.id, nome: dados.displayName ?? "", papel: dados.profile?.role });
+      });
+    }
+  } catch {
+    // Sem permissão (família ou terapeuta): fica só o que está guardado no grupo
   }
-  return memberIds.flatMap(id => encontrados.get(id) ?? []);
+  return encontrados;
+};
+
+// Nome e papel de cada participante, na ordem de `memberIds`, guardados no grupo.
+// Nos grupos antigos, sem esse registro, lê do cadastro (só a gestão consegue).
+export const getGroupMembers = async (group: ChatGroup): Promise<ChatMember[]> => {
+  const guardados = group.membros ?? {};
+  const faltando = group.memberIds.filter(uid => !guardados[uid]);
+  const lidos = faltando.length > 0 ? await lerCadastros(faltando) : new Map<string, ChatMember>();
+  return group.memberIds.flatMap(uid =>
+    guardados[uid] ? [{ uid, ...guardados[uid] }] : lidos.get(uid) ?? []
+  );
 };
 
 // Quem sugerir para o grupo novo de um paciente: a conta da família vinculada e os terapeutas
@@ -180,7 +211,7 @@ export const linkGroupToPatient = async (
 export const createPatientChatGroup = async ({ paciente, membros, criadoPor }: {
   paciente: { id: string; nome: string };
   membros: ChatMember[];
-  criadoPor: string;
+  criadoPor: ChatMember;
 }): Promise<{ success: true; id: string } | { success: false; id: string; error: "ja-existe" | "falha" }> => {
   const id = patientGroupId(paciente.id);
   const ref = doc(db, "chat_groups", id);
@@ -202,8 +233,9 @@ export const createPatientChatGroup = async ({ paciente, membros, criadoPor }: {
         responsavelNome: familia.map(f => f.nome).join(", "),
         terapeutaIds: terapeutas.map(t => t.uid),
         terapeutaNomes: terapeutas.map(t => t.nome),
-        memberIds: [...new Set([criadoPor, ...membros.map(m => m.uid)])],
-        createdBy: criadoPor,
+        memberIds: [...new Set([criadoPor.uid, ...membros.map(m => m.uid)])],
+        membros: Object.fromEntries([criadoPor, ...membros].map(m => [m.uid, { nome: m.nome, papel: m.papel }])),
+        createdBy: criadoPor.uid,
         createdAt: agora,
         updatedAt: agora,
         unreadCounts: {},
