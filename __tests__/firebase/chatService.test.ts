@@ -129,6 +129,17 @@ describe('chatService', () => {
           'Mensagem 1', 'Mensagem 2', 'Mensagem 3', 'Mensagem 4', 'Mensagem 5',
         ]);
       });
+
+      it('não repete a primeira mensagem da conversa quando o servidor confirma o horário dela', () => {
+        // Enviada numa conversa vazia: aparece na hora com o relógio do aparelho...
+        const naTela = [mensagem(1)];
+        // ...e volta do servidor com o horário dele, um pouco depois
+        const confirmada = { ...mensagem(1), createdAt: Timestamp.fromMillis(60_000 + 350) } as ChatMessage;
+
+        const resultado = mergeMessages(naTela, [confirmada]);
+
+        expect(resultado).toEqual([confirmada]);
+      });
     });
   });
 

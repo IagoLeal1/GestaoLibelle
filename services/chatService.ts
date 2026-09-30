@@ -366,7 +366,12 @@ export const buildTimeline = (messages: ChatMessage[], uid: string, readUntil: T
 export const mergeMessages = (earlier: ChatMessage[], latest: ChatMessage[]): ChatMessage[] => {
   if (latest.length === 0) return [];
   const latestStart = latest[0].createdAt.toMillis();
-  return [...earlier.filter(message => message.createdAt.toMillis() < latestStart), ...latest];
+  // A mensagem recém-enviada volta do servidor com outro horário: o id evita mostrá-la duas vezes
+  const latestIds = new Set(latest.map(message => message.id));
+  return [
+    ...earlier.filter(message => message.createdAt.toMillis() < latestStart && !latestIds.has(message.id)),
+    ...latest,
+  ];
 };
 
 // Página de mensagens imediatamente anteriores a `before` (a mais antiga já exibida), em ordem crescente.
