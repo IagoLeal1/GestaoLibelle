@@ -14,7 +14,6 @@
     "test:firebase": "firebase emulators:exec --config firebase.test.json --only auth,firestore \"node --env-file=.env.emulator node_modules/jest/bin/jest.js --ci --config jest.firebase.config.mjs\""
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.4",
