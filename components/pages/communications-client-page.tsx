@@ -127,7 +127,7 @@ export function CommunicationsClientPage() {
     const comunicadosFamiliares = allComms.filter(c => c.targetRole === 'familiar');
     
     // CORREÇÃO 2: Verificações seguras com ?.
-    const canManage = firestoreUser?.profile?.role === 'admin' || firestoreUser?.profile?.role === 'funcionario' || firestoreUser?.profile?.role === 'coordenador';
+    const canManage = ehGestao(firestoreUser?.profile?.role);
     const hasDeletePermission = firestoreUser?.profile?.role === 'admin' || firestoreUser?.profile?.role === 'coordenador';
     const isFamiliar = firestoreUser?.profile?.role === 'familiar';
 

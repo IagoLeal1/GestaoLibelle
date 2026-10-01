@@ -14,7 +14,7 @@ import { ptBR } from 'date-fns/locale';
 
 // Função de ajuda para o badge de tipo
 const getTypeBadge = (role: string) => {
-    const isInternal = role === 'profissional' || role === 'funcionario';
+    const isInternal = role !== 'familiar';
     return (
         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
             isInternal

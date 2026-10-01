@@ -4,12 +4,13 @@ import { CommunicationsClientPage } from "@/components/pages/communications-clie
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { ehGestao } from "@/lib/permissoes";
 
 export default function ComunicacaoPage() {
   const { firestoreUser } = useAuth();
 
   // Verifica se o usuário tem permissão para criar comunicados
-  const canCreate = firestoreUser?.profile.role === 'admin' || firestoreUser?.profile.role === 'funcionario';
+  const canCreate = ehGestao(firestoreUser?.profile.role);
 
   return (
     <div className="space-y-6">

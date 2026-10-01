@@ -1,5 +1,6 @@
 // services/communicationService.ts
 import { db } from "@/lib/firebaseConfig";
+import { ehGestao } from "@/lib/permissoes";
 import { 
   collection, 
   addDoc, 
@@ -44,7 +45,8 @@ export interface UserDetails {
 export const getCommunications = async (userRole: string): Promise<Communication[]> => {
     try {
         let q;
-        if (userRole === 'admin' || userRole === 'funcionario') {
+        // Quem envia avisos (a gestão) vê todos; os demais, só os do seu papel
+        if (ehGestao(userRole)) {
             q = query(collection(db, 'communications'), orderBy('createdAt', 'desc'));
         } else {
             q = query(collection(db, 'communications'), where('targetRole', '==', userRole), orderBy('createdAt', 'desc'));

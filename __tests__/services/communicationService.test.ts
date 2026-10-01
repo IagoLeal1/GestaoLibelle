@@ -42,6 +42,13 @@ describe('Communication Service', () => {
       expect(mockedOrderBy).toHaveBeenCalledWith('createdAt', 'desc');
     });
 
+    it('a coordenação e a recepção, que enviam avisos, veem todos eles', async () => {
+      mockedGetDocs.mockResolvedValue({ docs: [] });
+      await getCommunications('coordenador');
+      await getCommunications('funcionario');
+      expect(mockedWhere).not.toHaveBeenCalled();
+    });
+
     it('should filter communications by targetRole for non-admin users', async () => {
       mockedGetDocs.mockResolvedValue({ docs: [] });
       await getCommunications('familiar');
