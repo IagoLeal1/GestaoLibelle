@@ -10,15 +10,61 @@ import { Label } from "@/components/ui/label";
 import { Patient, getPatients } from "@/services/patientService";
 import { Professional, getProfessionals } from "@/services/professionalService";
 import { getSpecialties, Specialty } from "@/services/specialtyService";
-import { ArrowLeft, BrainCircuit, Sparkles, User, HeartPulse, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, CalendarCheck, CalendarSearch, User, HeartPulse, SlidersHorizontal, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { auth } from "@/lib/firebaseConfig";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
+import { PadraoDeHorario, SEMANAS_ANALISADAS, SugestaoDaTerapia } from "@/lib/horariosRecorrentes";
 
 interface TherapyNeed {
   terapia: string;
   frequencia: number;
+}
+
+/** Um horário e em quantas das 12 semanas ele está livre (verde quando passa de 70%, como antes). */
+function LinhaDeHorario({ opcao, comProfissional = false }: { opcao: PadraoDeHorario; comProfissional?: boolean }) {
+    const livres = opcao.semanasLivres;
+    return (
+        <li className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <span>{comProfissional && `${opcao.profissional.fullName}, `}{opcao.diaSemana}, {opcao.horario}</span>
+            <Badge variant="outline" className={livres > SEMANAS_ANALISADAS * 0.7 ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}>
+                {livres === SEMANAS_ANALISADAS ? `livre nas ${SEMANAS_ANALISADAS} semanas` : `livre em ${livres} de ${SEMANAS_ANALISADAS} semanas`}
+            </Badge>
+        </li>
+    );
+}
+
+function HorariosDaTerapia({ resultado }: { resultado: SugestaoDaTerapia }) {
+    const { terapia, frequencia, sugestao, outrasOpcoes } = resultado;
+    const chave = (o: PadraoDeHorario) => `${o.profissional.id}-${o.dia}-${o.horario}`;
+    return (
+        <div className="space-y-3">
+            <h3 className="font-semibold">{terapia} <span className="font-normal text-muted-foreground">· {frequencia}x por semana</span></h3>
+            {sugestao ? (
+                <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                    <p className="text-sm font-medium text-blue-900">Sugestão: {sugestao.profissional.fullName}</p>
+                    <ul className="space-y-1">{sugestao.horarios.map((h) => <LinhaDeHorario key={chave(h)} opcao={h} />)}</ul>
+                    {sugestao.horarios.length < frequencia && (
+                        <p className="text-xs text-amber-800">
+                            Só {sugestao.horarios.length === 1 ? "um dia livre" : `${sugestao.horarios.length} dias livres`} com o mesmo profissional. Veja as outras opções.
+                        </p>
+                    )}
+                </div>
+            ) : (
+                <p className="text-sm text-muted-foreground">
+                    Nenhum horário livre. Confira se há profissionais ativos dessa especialidade com dias e horários de atendimento cadastrados.
+                </p>
+            )}
+            {outrasOpcoes.length > 0 && (
+                <div className="space-y-1">
+                    <p className="text-sm font-medium text-muted-foreground">Outras opções</p>
+                    <ul className="space-y-1">{outrasOpcoes.map((o) => <LinhaDeHorario key={chave(o)} opcao={o} comProfissional />)}</ul>
+                </div>
+            )}
+        </div>
+    );
 }
 
 export default function AssistenteAgendamentoPage() {
@@ -29,7 +75,7 @@ export default function AssistenteAgendamentoPage() {
     const [selectedPatientId, setSelectedPatientId] = useState<string>('');
     const [therapyNeeds, setTherapyNeeds] = useState<TherapyNeed[]>([{ terapia: '', frequencia: 1 }]);
     const [loading, setLoading] = useState(true);
-    const [aiSuggestion, setAiSuggestion] = useState<string>('');
+    const [sugestoes, setSugestoes] = useState<SugestaoDaTerapia[] | null>(null);
 
     const [turnoPreferencial, setTurnoPreferencial] = useState<'manha' | 'tarde' | 'noite' | undefined>(undefined);
     const [profissionaisPreferidos, setProfissionaisPreferidos] = useState<string[]>([]);
@@ -83,7 +129,7 @@ export default function AssistenteAgendamentoPage() {
             return;
         }
         setLoading(true);
-        setAiSuggestion('');
+        setSugestoes(null);
 
         try {
             // O servidor só atende quem manda o login (e confere o papel no cadastro)
@@ -91,7 +137,8 @@ export default function AssistenteAgendamentoPage() {
             const response = await fetch('/api/schedule-assistant', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${login ?? ''}` },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
+                    patientId: selectedPatientId,
                     patientNeeds: therapyNeeds,
                     preferences: {
                         turno: turnoPreferencial,
@@ -102,11 +149,11 @@ export default function AssistenteAgendamentoPage() {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error || "A IA não conseguiu gerar uma resposta.");
+                throw new Error(errorData.error || "Não foi possível buscar os horários.");
             }
 
             const data = await response.json();
-            setAiSuggestion(data.suggestion);
+            setSugestoes(data.sugestoes);
 
         } catch (error: any) {
             toast.error(error.message);
@@ -131,7 +178,7 @@ export default function AssistenteAgendamentoPage() {
                 <Link href="/agendamentos"><Button variant="ghost" size="icon"><ArrowLeft/></Button></Link>
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight">Assistente de Agendamento Contínuo</h2>
-                    <p className="text-muted-foreground">Deixe a IA encontrar a melhor grade de horários a longo prazo para o paciente.</p>
+                    <p className="text-muted-foreground">Encontra os horários semanais mais livres para o paciente nas próximas {SEMANAS_ANALISADAS} semanas.</p>
                 </div>
             </div>
 
@@ -156,7 +203,7 @@ export default function AssistenteAgendamentoPage() {
                             {therapyNeeds.map((need, index) => (
                                 <div key={index} className="flex items-end gap-2 p-3 border rounded-lg bg-muted/50">
                                     <div className="flex-1 space-y-2"><Label>Terapia *</Label><Select value={need.terapia} onValueChange={val => handleNeedChange(index, 'terapia', val)} disabled={!selectedPatientId}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent>{availableSpecialties.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select></div>
-                                    <div className="space-y-2"><Label>Sessões/Sem.</Label><Input type="number" min="1" value={need.frequencia} onChange={e => handleNeedChange(index, 'frequencia', parseInt(e.target.value, 10) || 1)} className="w-24 text-center"/></div>
+                                    <div className="space-y-2"><Label>Sessões/Sem.</Label><Input type="number" min="1" max="5" value={need.frequencia} onChange={e => handleNeedChange(index, 'frequencia', parseInt(e.target.value, 10) || 1)} className="w-24 text-center"/></div>
                                     <Button type="button" variant="ghost" size="icon" onClick={() => removeNeed(index)} disabled={therapyNeeds.length === 1}><Trash2 className="h-4 w-4 text-red-500"/></Button>
                                 </div>
                             ))}
@@ -192,22 +239,22 @@ export default function AssistenteAgendamentoPage() {
 
                     <div className="text-center">
                         <Button onClick={handleFindSchedules} disabled={loading} size="lg" className="w-full">
-                            <BrainCircuit className="mr-2 h-5 w-5"/>
-                            {loading ? 'Analisando padrões...' : 'Encontrar Plano de Terapia Ideal'}
+                            <CalendarSearch className="mr-2 h-5 w-5"/>
+                            {loading ? 'Procurando horários...' : 'Encontrar horários'}
                         </Button>
                     </div>
                 </div>
 
-                {/* Coluna de Saída da IA */}
+                {/* Coluna do resultado */}
                 <div className="sticky top-20">
-                     {aiSuggestion && (
-                        <Card className="bg-blue-50 border-blue-200">
-                            <CardHeader><CardTitle className="flex items-center gap-2 text-blue-800"><Sparkles className="h-5 w-5"/> Plano de Terapia Sugerido</CardTitle></CardHeader>
-                            <CardContent>
-                                {/* Mostrado como texto: a resposta da IA nunca entra na página como HTML */}
-                                <div className="whitespace-pre-line text-sm leading-relaxed text-slate-800">
-                                    {aiSuggestion.replace(/\*\*/g, '').replace(/^\s*\* /gm, '• ')}
-                                </div>
+                     {sugestoes && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2"><CalendarCheck className="h-5 w-5 text-primary-teal"/> Horários sugeridos</CardTitle>
+                                <CardDescription>Conta as próximas {SEMANAS_ANALISADAS} semanas da agenda do profissional e do paciente.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                                {sugestoes.map((resultado) => <HorariosDaTerapia key={resultado.terapia} resultado={resultado} />)}
                             </CardContent>
                         </Card>
                     )}

@@ -1,201 +1,98 @@
 // app/api/schedule-assistant/route.ts
+// O assistente de agendamento: lê os profissionais ativos e a agenda das próximas 12 semanas e
+// devolve, para cada terapia pedida, a sugestão de horários e as outras opções. O cálculo fica em
+// lib/horariosRecorrentes.ts; nenhum dado sai da clínica.
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
+import { Timestamp } from "firebase-admin/firestore";
 import { initAdmin } from "@/lib/firebaseAdmin";
 import { verificarAcesso } from "@/lib/acessoServidor";
 import { PAPEIS_DA_GESTAO } from "@/lib/permissoes";
-import { Timestamp } from "firebase-admin/firestore";
-import { startOfDay, endOfDay, addMonths, format, setHours, setMinutes, addMinutes, parse } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import {
+  AtendimentoDaGrade,
+  encontrarPadroesRecorrentes,
+  montarSugestoes,
+  NecessidadeDeTerapia,
+  Preferencias,
+  ProfissionalDaGrade,
+  SEMANAS_ANALISADAS,
+} from "@/lib/horariosRecorrentes";
 
-// --- INTERFACES E TIPOS ---
-interface TherapyNeed { terapia: string; frequencia: number; }
-interface Preferences { turno?: 'manha' | 'tarde' | 'noite'; profissionaisIds?: string[]; }
-interface ProfessionalAdmin {
-    id: string;
-    fullName: string;
-    especialidade: string;
-    diasAtendimento: string[];
-    horarioInicio: string;
-    horarioFim: string;
-    status: string;
-    [key: string]: any;
-}
-interface SchedulePattern {
-    terapia: string;
-    professional: { id: string, fullName: string };
-    diaSemana: string;
-    horario: string;
-    consistencia: number;
-}
+const UM_DIA = 24 * 60 * 60 * 1000;
+const TURNOS = ["manha", "tarde", "noite"];
 
-// --- LÓGICA DE BUSCA NO SERVIDOR (ADMIN) ---
-const db = initAdmin();
+/** As terapias pedidas, ou nada se o pedido vier malformado. No máximo 5 sessões por semana (dias úteis). */
+const lerNecessidades = (pedido: unknown): NecessidadeDeTerapia[] | null => {
+  if (!Array.isArray(pedido) || pedido.length === 0) return null;
+  const necessidades = pedido.map((n) => ({
+    terapia: typeof n?.terapia === "string" ? n.terapia.trim() : "",
+    frequencia: Math.min(5, Math.max(1, Math.floor(Number(n?.frequencia) || 1))),
+  }));
+  return necessidades.every((n) => n.terapia) ? necessidades : null;
+};
 
-async function getProfessionalsAdmin(status?: string): Promise<ProfessionalAdmin[]> {
-    let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = db.collection('professionals');
-    if (status) {
-        query = query.where('status', '==', status);
-    }
-    const snapshot = await query.orderBy('fullName').get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ProfessionalAdmin));
-}
+const lerPreferencias = (pedido: any): Preferencias => ({
+  turno: TURNOS.includes(pedido?.turno) ? pedido.turno : undefined,
+  profissionaisIds: Array.isArray(pedido?.profissionaisIds)
+    ? pedido.profissionaisIds.filter((id: unknown) => typeof id === "string")
+    : [],
+});
 
-async function getAppointmentsForReportAdmin(startDate: Date, endDate: Date) {
-    const snapshot = await db.collection('appointments')
-        .where('start', '>=', Timestamp.fromDate(startDate))
-        .where('start', '<=', Timestamp.fromDate(endDate))
-        .get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-}
+/** Os profissionais ativos e os atendimentos das próximas 12 semanas. */
+async function lerAgenda() {
+  const db = initAdmin();
+  const agora = Date.now();
+  // Um dia de folga em cada ponta: o recorte exato, nas datas da clínica, é feito no cálculo
+  const [profissionais, atendimentos] = await Promise.all([
+    db.collection("professionals").where("status", "==", "ativo").get(),
+    db.collection("appointments")
+      .where("start", ">=", Timestamp.fromMillis(agora - UM_DIA))
+      .where("start", "<=", Timestamp.fromMillis(agora + (SEMANAS_ANALISADAS * 7 + 1) * UM_DIA))
+      .get(),
+  ]);
 
-// FUNÇÃO COM A LÓGICA DE CONFLITO TOTALMENTE CORRIGIDA
-async function findRecurringSchedulePatternsAdmin(terapiasNecessarias: TherapyNeed[], preferences: Preferences): Promise<SchedulePattern[]> {
-    const { turno, profissionaisIds = [] } = preferences;
-    const inicioPeriodo = startOfDay(new Date());
-    const fimPeriodo = endOfDay(addMonths(new Date(), 3));
-
-    const [todosProfissionais, agendamentosFuturos] = await Promise.all([
-        getProfessionalsAdmin('ativo'),
-        getAppointmentsForReportAdmin(inicioPeriodo, fimPeriodo)
-    ]);
-
-    const patterns: SchedulePattern[] = [];
-    const horariosBase = {
-        manha: ['07:20', '08:10', '09:00', '09:50', '10:40', '11:30'],
-        tarde: ['12:20', '13:20', '14:10', '15:00', '15:50', '16:40', '17:30'],
-        noite: []
-    };
-    const horariosPadrao = turno ? horariosBase[turno] : [...horariosBase.manha, ...horariosBase.tarde, ...horariosBase.noite];
-    const diasDaSemana = ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
-    const duracaoSessao = 50; // Duração em minutos
-
-    for (const necessidade of terapiasNecessarias) {
-        let profissionaisQualificados = todosProfissionais.filter(
-          (p) => necessidade.terapia.toLowerCase().includes(p.especialidade.toLowerCase()) && p.status === 'ativo'
-        );
-
-        if (profissionaisIds.length > 0) {
-            const preferidosQualificados = profissionaisQualificados.filter((p) => profissionaisIds.includes(p.id));
-            if (preferidosQualificados.length > 0) {
-                profissionaisQualificados = preferidosQualificados;
-            }
-        }
-
-        for (const prof of profissionaisQualificados) {
-          if (!prof.horarioInicio || prof.horarioInicio.trim() === '' || !prof.horarioFim || prof.horarioFim.trim() === '') {
-              continue;
-          }
-
-          for (const dia of diasDaSemana) {
-            if (!prof.diasAtendimento || !prof.diasAtendimento.includes(dia)) {
-                continue;
-            }
-
-            for (const horario of horariosPadrao) {
-              const [horaSlot, minutoSlot] = horario.split(':').map(Number);
-              const [horaInicioProf, minutoInicioProf] = prof.horarioInicio.split(':').map(Number);
-              const [horaFimProf, minutoFimProf] = prof.horarioFim.split(':').map(Number);
-
-              const slotEmMinutos = horaSlot * 60 + minutoSlot;
-              const inicioProfEmMinutos = horaInicioProf * 60 + minutoInicioProf;
-              const fimProfEmMinutos = horaFimProf * 60 + minutoFimProf;
-
-              if (slotEmMinutos < inicioProfEmMinutos || (slotEmMinutos + duracaoSessao) > fimProfEmMinutos) {
-                  continue;
-              }
-
-              // --- NOVA LÓGICA DE VERIFICAÇÃO DE CONFLITO ---
-              // Verifica se existe algum agendamento que sobreponha o slot de 50 minutos
-              const conflitos = agendamentosFuturos.filter((ag: any) => {
-                  if (ag.professionalId !== prof.id) return false;
-
-                  const diaAgendamento = format(ag.start.toDate(), 'EEEE', { locale: ptBR }).toLowerCase().replace('-feira', '');
-                  if (diaAgendamento !== dia) return false;
-
-                  const inicioAgendamento = ag.start.toDate();
-                  const fimAgendamento = ag.end.toDate();
-
-                  const inicioSlot = setMinutes(setHours(inicioPeriodo, horaSlot), minutoSlot);
-                  const fimSlot = addMinutes(inicioSlot, duracaoSessao);
-
-                  // Verifica sobreposição de intervalos
-                  return (inicioAgendamento < fimSlot && fimAgendamento > inicioSlot);
-              }).length;
-              // --- FIM DA NOVA LÓGICA ---
-
-              const totalSemanasAnalise = 12;
-              const consistencia = 1 - (conflitos / totalSemanasAnalise);
-
-              patterns.push({
-                terapia: necessidade.terapia,
-                professional: { id: prof.id, fullName: prof.fullName },
-                diaSemana: dia.charAt(0).toUpperCase() + dia.slice(1) + "-feira",
-                horario: horario,
-                consistencia: consistencia,
-              });
-            }
-          }
-        }
-    }
-    return patterns;
+  return {
+    profissionais: profissionais.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }) as ProfissionalDaGrade)
+      .sort((a, b) => (a.fullName ?? "").localeCompare(b.fullName ?? "", "pt-BR")),
+    atendimentos: atendimentos.docs.map((doc): AtendimentoDaGrade => {
+      const atendimento = doc.data();
+      return {
+        professionalId: atendimento.professionalId,
+        patientId: atendimento.patientId,
+        status: atendimento.status,
+        start: atendimento.start.toDate(),
+        end: atendimento.end.toDate(),
+      };
+    }),
+  };
 }
 
-// --- CÉREBRO DA IA (PROMPT) ---
-const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || "");
-const systemInstruction = `
-    Você é a "LibelleAI", uma coordenadora de terapias virtual especialista em otimizar agendas na Clínica Casa Libelle.
-    Sua missão é apresentar as melhores soluções de agendamento recorrente.
-    Você receberá uma lista de "Padrões de Horário Encontrados". Cada padrão tem um score de "consistência" de 0 a 1 (1 = 100% livre nas próximas 12 semanas).
-    Sua tarefa é seguir esta lógica:
-    1.  **Filtre por Padrões IDEAIS:** Considere como "ideal" qualquer padrão com consistência > 0.7 (70%).
-    2.  **Se encontrar padrões IDEAIS:** Monte o "Plano de Terapia Otimizado" usando apenas eles. Justifique a escolha com base na alta consistência, garantindo a continuidade do tratamento.
-    3.  **Se NÃO encontrar padrões IDEAIS:**
-        a. Filtre por padrões ALTERNATIVOS (consistência <= 0.7 mas > 0).
-        b. Se existirem alternativas, apresente-as como "Opções de Encaixe", explicando que são horários com alguma ocupação futura, mas que podem funcionar. Ex: "Encontrei uma opção na Terça-feira às 16:40, porém este horário tem uma consistência de 40%. Isso significa que pode haver necessidade de reagendamentos futuros."
-        c. Se não houver NENHUM padrão (nem ideal, nem alternativo), informe que a agenda está cheia e que não foi possível encontrar uma solução.
-    Seja sempre clara, objetiva e apresente os horários em formato de lista (markdown).
-`;
-
-// --- ROTA DA API ---
 export async function POST(req: NextRequest) {
   try {
     // Só a gestão aprovada: a rota lê a agenda da clínica inteira com acesso de administrador
     const acesso = await verificarAcesso(req.headers.get("authorization"), PAPEIS_DA_GESTAO);
     if (!acesso.ok) return NextResponse.json({ error: acesso.erro }, { status: acesso.status });
 
-    const { patientNeeds, preferences = {} } = await req.json();
-
-    if (!patientNeeds || !Array.isArray(patientNeeds) || patientNeeds.length === 0) {
+    const { patientId, patientNeeds, preferences } = await req.json();
+    const necessidades = lerNecessidades(patientNeeds);
+    if (!necessidades) {
       return NextResponse.json({ error: "Necessidades de terapia inválidas." }, { status: 400 });
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash", systemInstruction });
+    const { profissionais, atendimentos } = await lerAgenda();
+    const padroes = encontrarPadroesRecorrentes({
+      necessidades,
+      preferencias: lerPreferencias(preferences),
+      profissionais,
+      atendimentos,
+      pacienteId: typeof patientId === "string" ? patientId : undefined,
+    });
 
-    let schedulePatterns = await findRecurringSchedulePatternsAdmin(patientNeeds, preferences);
-
-    const prompt = `
-        **Necessidades do Paciente:**
-        ${JSON.stringify(patientNeeds, null, 2)}
-
-        **Preferências do Usuário (se houver):**
-        ${JSON.stringify(preferences, null, 2)}
-
-        **Padrões de Horário Encontrados (Dados brutos para sua análise):**
-        ${JSON.stringify(schedulePatterns, null, 2)}
-
-        Siga as suas instruções para analisar os dados e fornecer a melhor resposta possível, seja um plano ideal, opções alternativas ou a informação de que não há vagas.
-    `;
-
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-
-    return NextResponse.json({ suggestion: text });
-
-  } catch (error: any) {
+    return NextResponse.json({ sugestoes: montarSugestoes(necessidades, padroes) });
+  } catch (error) {
     console.error("Erro na API do Assistente de Agendamento:", error);
     // O detalhe do erro fica só no registro do servidor
-    return NextResponse.json({ error: "Não foi possível gerar a sugestão agora. Tente de novo em alguns minutos." }, { status: 500 });
+    return NextResponse.json({ error: "Não foi possível buscar os horários agora. Tente de novo em alguns minutos." }, { status: 500 });
   }
 }

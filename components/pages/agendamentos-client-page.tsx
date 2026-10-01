@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Filter, MoreHorizontal, Sun, Sunset, Moon, Download, Plus, AlertCircle, ChevronDown, BrainCircuit, Clock, User, Mic, Home, DollarSign } from "lucide-react"
+import { Search, Filter, MoreHorizontal, Sun, Sunset, Moon, Download, Plus, AlertCircle, ChevronDown, CalendarSearch, Clock, User, Mic, Home, DollarSign } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { 
     getAppointmentsByDate, 
@@ -455,8 +455,8 @@ export function AgendamentosClientPage() {
                   <DropdownMenuSeparator />
                   <Link href="/agendamentos/assistente" passHref>
                     <DropdownMenuItem>
-                        <BrainCircuit className="mr-2 h-4 w-4" />
-                        Assistente de Agendamento (IA)
+                        <CalendarSearch className="mr-2 h-4 w-4" />
+                        Assistente de Agendamento
                     </DropdownMenuItem>
                   </Link>
               </DropdownMenuContent>
