@@ -1,156 +1,59 @@
-# Sistema de Gestão Clínica - Casa Libelle
+# Casa Libelle — Gestão Clínica
 
-Uma solução moderna e completa para a gestão de clínicas de terapia, construída com as tecnologias mais recentes para garantir performance, escalabilidade e uma excelente experiência de usuário.
+Sistema da clínica de terapias Casa Libelle: agenda, pacientes, profissionais, financeiro, comunicados e mensagens com as famílias.
 
-## 📸 Visão Geral do Projeto
+Next.js 16, TypeScript, Firebase (Authentication e Firestore), Tailwind e shadcn/ui.
 
-![Tela do sistema Casa Libelle](image.png)
+## Quem vê o quê
 
-O Sistema de Gestão Clínica - Casa Libelle é uma aplicação web robusta projetada para centralizar e otimizar todas as operações de uma clínica de terapias. Desde o gerenciamento de pacientes e profissionais até o agendamento complexo e a comunicação interna, o sistema visa reduzir a carga administrativa e permitir que os profissionais foquem no que realmente importa: o cuidado com o paciente.
+| Papel | Acesso |
+| --- | --- |
+| Admin | Tudo, inclusive Financeiro e aprovação de contas |
+| Coordenação e recepção | Agenda, pacientes, profissionais e comunicados |
+| Profissional | Consulta a agenda e os pacientes |
+| Família | Atendimentos, avisos e mensagens das suas crianças |
 
-## ✨ Funcionalidades Principais
+Quem garante isso é o `firestore.rules`, não as telas.
 
-- 🔐 **Autenticação Segura:** login e cadastro com papéis de usuário (Admin, Coordenação, Funcionário, Profissional e Familiar) e fluxo de aprovação de contas. Cada papel vê e altera só o que é seu.
-- 📊 **Painel da Clínica:** visão geral com estatísticas sobre pacientes, profissionais e agendamentos, para admin, coordenação e recepção.
-- 🧑‍⚕️ **Painel do Profissional:** área de cada profissional com a agenda do dia e os comunicados importantes.
-- 👨‍👩‍👧 **Painel da Família:** os atendimentos e comunicados das crianças de cada família.
-- 👥 **Gestão de Pacientes:** cadastro, visualização, edição e arquivamento de perfis de pacientes.
-- 👨‍💼 **Gestão de Profissionais:** dados pessoais, financeiros e de atendimento de cada profissional.
-- 🗓️ **Agenda Inteligente:**
-  - agendamentos únicos e em lote (recorrentes);
-  - visualização diária por profissional e período (manhã, tarde, noite);
-  - status dos atendimentos (Agendado, Finalizado, Em Atendimento etc.);
-  - assistente que encontra os horários semanais mais livres para cada terapia.
-- ♻️ **Avisos de Renovação:** notifica sobre blocos de agendamento perto do fim, com opção de renovação.
-- 💰 **Financeiro:** lançamentos, repasses dos profissionais e saldos bancários (só para o admin).
-- 💬 **Mensagens:** conversas da equipe com as famílias, organizadas por criança.
-- 📢 **Comunicação Interna:** mural de avisos direcionado por papel de usuário.
+## Rodar no computador
 
-## 🚀 Stack de Tecnologia
-
-Este projeto foi construído utilizando um stack moderno e performático, focado em boas práticas de desenvolvimento e escalabilidade.
-
-- **Framework:** Next.js (com App Router)
-- **Linguagem:** TypeScript
-- **Backend e Banco de Dados:** Firebase (Authentication e Cloud Firestore)
-- **UI e Estilização:** Tailwind CSS com shadcn/ui para componentes
-- **Estado Global:** React Context API (focado em autenticação)
-- **Validação de Formulários:** react-hook-form com zod
-- **Manipulação de Datas:** date-fns
-
-## 🏛️ Arquitetura e Padrões
-
-A qualidade do código e a manutenibilidade são prioridades. Por isso, seguimos padrões de arquitetura bem definidos:
-
-- **Client-Side Data Fetching:** as páginas renderizam um componente de cliente que busca os dados via `useEffect`, com o login de quem está usando.
-- **Regras do Firestore:** o arquivo `firestore.rules` é a barreira de segurança. Ele decide o que cada papel pode ler e alterar no banco, qualquer que seja a tela.
-- **Service Layer (Camada de Serviço):** toda a comunicação com o Firestore fica nos services (ex: `appointmentService.ts`). Os componentes da UI não falam direto com o banco.
-- **Proteção de Rotas:** um AuthGuard envolve os layouts protegidos, e cada tela confere o papel de quem a abre, também pelo endereço digitado.
-- **Otimização de Custos (Firestore):** desnormalização de dados para reduzir o número de leituras e manter a aplicação no plano gratuito do Firebase pelo maior tempo possível.
-
-## 🔥 Como Rodar o Projeto Localmente
-
-### Pré-requisitos
-
-- Node.js 20.9 ou superior
-- npm
-- Java 21, só para o emulador do Firebase. No Mac: `brew install openjdk@21` e, no terminal, `export PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"`
-
-### 1. Clone o repositório
-
-```bash
-git clone https://github.com/IagoLeal1/GestaoLibelle.git
-cd GestaoLibelle
-```
-
-### 2. Instale as dependências
+Precisa do Node 20.9 ou mais novo.
 
 ```bash
 npm install
-```
-
-O arquivo `.npmrc` já resolve o conflito conhecido entre o calendário (`react-day-picker` 8) e o `date-fns` 4.
-
-### 3. Configure as variáveis de ambiente
-
-Crie um arquivo chamado `.env.local` na raiz do projeto. Ele guarda as chaves do Firebase.
-
-**Importante:** este arquivo nunca deve ser enviado para o repositório Git.
-
-```bash
-# .env.local
-
-# Credenciais do app (console do Firebase > Configurações do projeto)
-NEXT_PUBLIC_FIREBASE_API_KEY="AIza..."
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="seu-projeto.firebaseapp.com"
-NEXT_PUBLIC_FIREBASE_PROJECT_ID="seu-projeto"
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="seu-projeto.appspot.com"
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="..."
-NEXT_PUBLIC_FIREBASE_APP_ID="1:..."
-
-# Conta de serviço, usada pelas rotas do servidor (ex: o assistente de agendamento)
-FIREBASE_PROJECT_ID="seu-projeto"
-FIREBASE_CLIENT_EMAIL="...@seu-projeto.iam.gserviceaccount.com"
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n..."
-```
-
-### 4. Rode o servidor de desenvolvimento
-
-```bash
 npm run dev
 ```
 
-Abra http://localhost:3000 no navegador. Atenção: com o `.env.local` acima, este modo usa o banco **de produção**.
+O `npm run dev` usa o banco **de produção**, com as chaves do `.env.local`, que nunca vai para o Git:
 
-## 🧪 Testando sem tocar na produção
+- `NEXT_PUBLIC_FIREBASE_*`: as chaves do app, no console do Firebase;
+- `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL` e `FIREBASE_PRIVATE_KEY`: a conta de serviço, usada pelo servidor.
 
-O emulador do Firebase cria um banco de testes no seu computador, com usuários e dados de exemplo.
+## Testar sem tocar na produção
 
-```bash
-npm run emulators        # sobe o emulador (deixe rodando)
-npm run seed:emulator    # em outro terminal: cria os dados de teste
-npm run dev:emulator     # o site ligado ao emulador, em http://localhost:3001
-```
-
-Os logins de teste de cada papel estão em `scripts/seed-emulator.mjs`.
-
-Verificações automáticas:
+Precisa do Java 21. No Mac: `brew install openjdk@21` e `export PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"`.
 
 ```bash
-npm run typecheck        # erros de tipo no código
-npx jest                 # testes que não precisam do emulador
-npm run test:firebase    # regras do banco e serviços, num emulador próprio
+npm run emulators        # deixe rodando
+npm run seed:emulator    # cria usuários e dados de teste
+npm run dev:emulator     # abre em http://localhost:3001
 ```
 
-## 📁 Estrutura de Pastas (Simplificada)
+Os logins de teste estão em `scripts/seed-emulator.mjs`.
 
-```
-/
-├── app/                  # Rotas principais (App Router)
-│   ├── (auth)/           # Login, cadastro e recuperação de senha
-│   ├── (dashboard)/      # Telas protegidas, após o login
-│   └── api/              # Rotas do servidor
-├── components/           # Componentes React reutilizáveis
-│   ├── auth/
-│   ├── dashboards/
-│   ├── forms/
-│   ├── modals/
-│   ├── pages/            # Componentes de cliente para cada página
-│   └── ui/               # Componentes do shadcn/ui
-├── context/              # Contextos React (ex: AuthContext)
-├── services/             # Comunicação com o Firebase
-├── lib/                  # Configuração do Firebase, permissões e cálculos
-├── scripts/              # Emulador: dados de teste
-├── __tests__/            # Testes automáticos
-└── firestore.rules       # Regras de segurança do banco
+## Verificações
+
+```bash
+npm run typecheck        # erros de tipo
+npx jest                 # testes rápidos
+npm run test:firebase    # regras do banco e serviços, no emulador
 ```
 
-## 📄 Licença
+## Publicar
 
-Este projeto está sob a licença MIT. Veja o arquivo LICENSE para mais detalhes.
+1. **Código:** o push no `main` publica o site.
+2. **Regras:** se o `firestore.rules` mudou, publique no console do Firebase **depois** do código. Antes, guarde uma cópia das regras atuais.
 
-## 👨‍💻 Autor
+---
 
-Feito com ❤️ por Iago Leal de Mattos
-
-GitHub: [@IagoLeal1](https://github.com/IagoLeal1)
+Feito por Iago Leal de Mattos ([@IagoLeal1](https://github.com/IagoLeal1)).
