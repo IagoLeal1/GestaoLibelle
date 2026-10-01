@@ -10,6 +10,7 @@ import { AdminDashboardStats, getAdminDashboardStats } from "@/services/dashboar
 import { CommunicationsWidget } from "@/components/dashboard/communications-widget";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { format } from "date-fns";
 
 // Função de ajuda para os badges de status
 const getStatusBadge = (status: string) => {
@@ -46,7 +47,8 @@ export function AdminDashboard() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const todayString = new Date().toISOString().split('T')[0];
+    // O dia no relógio do aparelho: em UTC, depois das 21h de Brasília já seria amanhã
+    const todayString = format(new Date(), 'yyyy-MM-dd');
     const [appointmentsData, roomsData, statsData] = await Promise.all([
         getAppointmentsByDate(todayString),
         getRooms(), // <-- 3. BUSCAR AS SALAS
