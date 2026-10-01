@@ -23,7 +23,9 @@ export default function DashboardPage() {
       return <ProfessionalDashboard />; 
     case 'familiar':
       return <FamilyDashboard />; 
+    // Recepção e coordenação veem o painel da clínica, que não tem números do Financeiro
     case 'funcionario':
+    case 'coordenador':
       return <AdminDashboard />;
     default:
       return <div>Seu perfil não tem um dashboard associado.</div>;
