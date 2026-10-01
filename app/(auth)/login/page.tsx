@@ -161,10 +161,8 @@ function LoginForm() {
 // 2. O componente principal da página agora "envelopa" o formulário com o Suspense
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-teal/10 to-primary-dark-blue/10 p-4">
-      <Suspense fallback={<div>Carregando...</div>}>
-        <LoginForm />
-      </Suspense>
-    </div>
+    <Suspense fallback={<div>Carregando...</div>}>
+      <LoginForm />
+    </Suspense>
   )
 }

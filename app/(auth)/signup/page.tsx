@@ -94,7 +94,6 @@ export default function SignUpPage() {
 
   if (isSuccess) {
     return (
-        <div className="min-h-screen flex items-center justify-center p-4">
             <Card className="w-full max-w-md text-center">
                 <CardHeader className="space-y-4">
                     <div className="mx-auto h-16 w-16 bg-green-100 rounded-full flex items-center justify-center">
@@ -108,12 +107,10 @@ export default function SignUpPage() {
                     <Button asChild className="w-full"><Link href="/login"><ArrowLeft className="mr-2 h-4 w-4" />Voltar ao Login</Link></Button>
                 </CardContent>
             </Card>
-        </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <Card className="w-full max-w-3xl">
         <CardHeader className="text-center">
             <Image src="/images/logotipo-azul.png" alt="Casa Libelle" width={128} height={64} className="mx-auto object-contain" />
@@ -163,6 +160,5 @@ export default function SignUpPage() {
           </form>
         </CardContent>
       </Card>
-    </div>
   );
 }

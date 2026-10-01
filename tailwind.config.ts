@@ -11,6 +11,22 @@ const config: Config = {
   theme: {
   	extend: {
   		colors: {
+  			// Cores da marca Casa Libelle. Registradas aqui, o Tailwind gera todas as variações:
+  			// transparência (bg-primary-teal/20), degradês (from-primary-teal/10), bordas e hover.
+  			'primary-dark-blue': '#16375b',
+  			'primary-teal': '#1da7ac',
+  			'primary-light-green': '#8cc9cb',
+  			'primary-medium-green': '#1dac8c',
+  			'primary-soft-green': '#87d1af',
+  			'secondary-red': '#b54c2b',
+  			'secondary-coral': '#ff8d69',
+  			'secondary-orange': '#e68b00',
+  			'secondary-beige': '#e7be81',
+  			'support-white': '#ffffff',
+  			'support-off-white': '#fff6da',
+  			'support-light-gray': '#eef3f6',
+  			'support-dark-purple': '#291b25',
+  			'support-dark-pink': '#b7133f',
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			card: {

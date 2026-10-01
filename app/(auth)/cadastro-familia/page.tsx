@@ -78,7 +78,6 @@ export default function FamilySignUpPage() {
 
   if (isSuccess) {
     return (
-        <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
             <Card className="w-full max-w-md text-center">
                 <CardHeader className="space-y-4">
                     <div className="mx-auto h-16 w-16 bg-green-100 rounded-full flex items-center justify-center">
@@ -98,12 +97,10 @@ export default function FamilySignUpPage() {
                     </Button>
                 </CardContent>
             </Card>
-        </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
             {/* Se tiver a logo, fica legal manter */}
@@ -157,6 +154,5 @@ export default function FamilySignUpPage() {
           </form>
         </CardContent>
       </Card>
-    </div>
   );
 }

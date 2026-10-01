@@ -38,7 +38,6 @@ export default function RecoverPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-teal/10 to-primary-dark-blue/10 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-4 text-center">
           <div className="flex justify-center">
@@ -123,6 +122,5 @@ export default function RecoverPasswordPage() {
           )}
         </CardContent>
       </Card>
-    </div>
   )
 }
