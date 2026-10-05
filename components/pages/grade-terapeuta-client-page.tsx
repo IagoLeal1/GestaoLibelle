@@ -67,6 +67,14 @@ export function GradeTerapeutaClientPage({ initialProfessionalId }: Props) {
     return () => { active = false; };
   }, []);
 
+  // O terapeuta abre a grade na própria agenda, a não ser que o endereço já traga um profissional.
+  // Contas antigas não têm o professionalId no perfil: aí vale o userId do cadastro dele.
+  useEffect(() => {
+    if (initialProfessionalId || firestoreUser?.profile.role !== 'profissional') return;
+    const proprio = professionals.find(p => p.id === firestoreUser.profile.professionalId || p.userId === firestoreUser.uid);
+    if (proprio) setSelectedProfessionalId(atual => atual || proprio.id);
+  }, [professionals, firestoreUser, initialProfessionalId]);
+
   const selectedProfessional = professionals.find(p => p.id === selectedProfessionalId);
   const canCreate = ['admin', 'coordenador', 'funcionario'].includes(firestoreUser?.profile.role ?? '') && selectedProfessional?.status === 'ativo';
   const selectedPatient = patients.find(patient => patient.id === selectedPatientId) ?? null;
