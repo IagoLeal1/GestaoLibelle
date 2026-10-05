@@ -324,6 +324,11 @@ mensagensB.forEach((mensagem, i) => {
   batch.set(db.doc(`chat_groups/grupo-joao-lima/messages/msg-${i + 1}`), mensagem);
 });
 
+// Salas usadas pelos atendimentos de teste (sem elas, a sala aparece como excluída)
+for (const [id, name, number] of [['sala-1', 'Sala Azul', '101'], ['sala-2', 'Sala Verde', '102']]) {
+  batch.set(db.doc(`rooms/${id}`), { name, number, floor: 1, type: 'Terapia', capacity: 2, equipment: [], status: 'ativa', createdAt: agora });
+}
+
 // Avisos: um de cada público. O do feriado é importante e a Maria ainda não confirmou; o da
 // reunião é da Carla (ela não entra na conta de quem leu); o último é um interno antigo
 // ("profissional", de antes da tela de Avisos), que vai para a equipe toda.
