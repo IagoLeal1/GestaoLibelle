@@ -39,7 +39,19 @@ describe('Communication Service', () => {
       mockedGetDocs.mockResolvedValue({ docs: [] });
       await getCommunications('admin');
       expect(mockedWhere).not.toHaveBeenCalled();
-      expect(mockedOrderBy).toHaveBeenCalledWith('createdAt', 'desc');
+    });
+
+    it('o terapeuta busca os avisos da equipe, dos terapeutas e os internos antigos', async () => {
+      mockedGetDocs.mockResolvedValue({ docs: [] });
+      await getCommunications('profissional');
+      expect(mockedWhere).toHaveBeenCalledWith('targetRole', 'in', ['equipe', 'terapeutas', 'profissional']);
+    });
+
+    it('a lista vem do aviso mais novo para o mais antigo', async () => {
+      const aviso = (id: string, millis: number) => ({ id, data: () => ({ title: id, createdAt: { toMillis: () => millis } }) });
+      mockedGetDocs.mockResolvedValue({ docs: [aviso('antigo', 1), aviso('novo', 3), aviso('meio', 2)] });
+      const avisos = await getCommunications('familiar');
+      expect(avisos.map((a) => a.id)).toEqual(['novo', 'meio', 'antigo']);
     });
 
     it('a coordenação e a recepção, que enviam avisos, veem todos eles', async () => {
@@ -58,9 +70,10 @@ describe('Communication Service', () => {
 
   describe('createCommunication', () => {
     it('should create a new communication with correct author details', async () => {
-      const formData = { title: 'Novo Aviso', message: 'Reunião geral amanhã.', isImportant: true, targetRole: 'profissional' as const };
+      mockedAddDoc.mockResolvedValue({ id: 'aviso-1' });
+      const formData = { title: 'Novo Aviso', message: 'Reunião geral amanhã.', isImportant: true, targetRole: 'equipe' as const };
       const result = await createCommunication(formData, mockAuthor);
-      expect(result.success).toBe(true);
+      expect(result).toEqual({ success: true, id: 'aviso-1' });
       expect(mockedAddDoc).toHaveBeenCalledWith(undefined, expect.objectContaining({ authorName: 'Admin Coordenador', readBy: {} }));
     });
   });

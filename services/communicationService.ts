@@ -1,18 +1,19 @@
 // services/communicationService.ts
+// Os avisos da clínica (coleção communications). Para quem vai cada aviso, o que é novo e quem
+// pode mexer estão em lib/avisos.ts; as regras do banco seguem o mesmo desenho.
 import { db } from "@/lib/firebaseConfig";
 import { ehGestao } from "@/lib/permissoes";
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  query, 
-  where, 
-  Timestamp, 
-  orderBy,
-  doc,
-  updateDoc,
+import { PapelDeUsuario, PublicoDoAviso, publicosQueRecebe } from "@/lib/avisos";
+import {
+  addDoc,
+  collection,
   deleteDoc,
-  getCountFromServer
+  doc,
+  getDocs,
+  query,
+  Timestamp,
+  updateDoc,
+  where,
 } from "firebase/firestore";
 import { FirestoreUser } from "@/context/AuthContext";
 
@@ -21,127 +22,114 @@ export interface Communication {
   id: string;
   title: string;
   message: string;
+  authorId: string;
   authorName: string;
   createdAt: Timestamp;
   isImportant: boolean;
-  targetRole: 'profissional' | 'funcionario' | 'familiar' | 'coordenador';
-  readBy: { [key: string]: Timestamp };
-}
-export interface CommunicationFormData {
-    title: string;
-    message: string;
-    isImportant: boolean;
-    targetRole: 'profissional' | 'funcionario' | 'familiar' | 'coordenador';
+  targetRole: PublicoDoAviso;
+  readBy: { [uid: string]: Timestamp };
 }
 
-// Interface para buscar detalhes básicos dos usuários
-export interface UserDetails {
-    uid: string;
-    displayName: string;
+export interface CommunicationFormData {
+  title: string;
+  message: string;
+  isImportant: boolean;
+  targetRole: PublicoDoAviso;
+}
+
+/** Uma pessoa com cadastro aprovado: é com elas que se conta quem recebeu e quem leu cada aviso. */
+export interface PessoaDaClinica {
+  uid: string;
+  displayName: string;
+  papel: PapelDeUsuario;
 }
 
 // --- Funções do Serviço ---
 
+/**
+ * Os avisos que a pessoa pode ver, do mais novo para o mais antigo. A gestão vê todos; os demais
+ * buscam só os do seu público, como as regras exigem. A ordem é feita aqui, sem índice no banco.
+ */
 export const getCommunications = async (userRole: string): Promise<Communication[]> => {
-    try {
-        let q;
-        // Quem envia avisos (a gestão) vê todos; os demais, só os do seu papel
-        if (ehGestao(userRole)) {
-            q = query(collection(db, 'communications'), orderBy('createdAt', 'desc'));
-        } else {
-            q = query(collection(db, 'communications'), where('targetRole', '==', userRole), orderBy('createdAt', 'desc'));
-        }
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Communication));
-    } catch (error) {
-        console.error("Erro ao buscar comunicados:", error);
-        return [];
+  try {
+    const avisos = collection(db, "communications");
+    let busca;
+    if (ehGestao(userRole)) {
+      busca = avisos;
+    } else {
+      const publicos = publicosQueRecebe(userRole as PapelDeUsuario);
+      if (publicos.length === 0) return [];
+      busca = query(avisos, publicos.length === 1 ? where("targetRole", "==", publicos[0]) : where("targetRole", "in", publicos));
     }
-}
-
-export const createCommunication = async (data: CommunicationFormData, author: FirestoreUser) => {
-    try {
-        await addDoc(collection(db, 'communications'), {
-            ...data,
-            authorId: author.uid,
-            authorName: author.displayName,
-            createdAt: Timestamp.now(),
-            readBy: {}
-        });
-        return { success: true };
-    } catch (error) {
-        console.error("Erro ao criar comunicado:", error);
-        return { success: false, error: "Falha ao criar comunicado." };
-    }
-}
-
-/**
- * Atualiza o título e a mensagem de um comunicado existente.
- */
-export const updateCommunication = async (id: string, data: { title: string, message: string }) => {
-    try {
-        const docRef = doc(db, 'communications', id);
-        await updateDoc(docRef, data);
-        return { success: true };
-    } catch (error) {
-        console.error("Erro ao atualizar comunicado:", error);
-        return { success: false, error: "Falha ao atualizar o comunicado." };
-    }
-}
-
-/**
- * Busca todos os usuários aprovados de um determinado perfil para a lista de leitura.
- */
-export const getUsersByRole = async (role: 'profissional' | 'familiar' | 'funcionario' | 'admin' | 'coordenador'): Promise<UserDetails[]> => {
-    try {
-        const q = query(
-            collection(db, 'users'), 
-            where('profile.role', '==', role), 
-            where('profile.status', '==', 'aprovado')
-        );
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({
-            uid: doc.id,
-            displayName: doc.data().displayName
-        }));
-    } catch (error) {
-        console.error(`Erro ao buscar usuários do perfil ${role}:`, error);
-        return [];
-    }
+    const snapshot = await getDocs(busca);
+    return snapshot.docs
+      .map((aviso) => ({ id: aviso.id, ...aviso.data() }) as Communication)
+      .sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+  } catch (error) {
+    console.error("Erro ao buscar avisos:", error);
+    return [];
+  }
 };
 
-export const markCommunicationAsRead = async (communicationId: string, userId: string) => {
-    try {
-        const docRef = doc(db, 'communications', communicationId);
-        const fieldToUpdate = `readBy.${userId}`;
-        await updateDoc(docRef, { [fieldToUpdate]: Timestamp.now() });
-        return { success: true };
-    } catch (error) {
-        console.error("Erro ao marcar como lido:", error);
-        return { success: false, error: "Falha ao marcar como lido." };
-    }
-}
+export const createCommunication = async (data: CommunicationFormData, author: FirestoreUser) => {
+  try {
+    const novo = await addDoc(collection(db, "communications"), {
+      ...data,
+      authorId: author.uid,
+      authorName: author.displayName,
+      createdAt: Timestamp.now(),
+      readBy: {},
+    });
+    return { success: true, id: novo.id };
+  } catch (error) {
+    console.error("Erro ao enviar aviso:", error);
+    return { success: false, error: "Não foi possível enviar o aviso." };
+  }
+};
 
-// --- FUNÇÃO CORRIGIDA ---
-// Adicionamos 'admin' aos tipos de perfis que a função aceita.
-export const countUsersByRole = async (role: 'profissional' | 'funcionario' | 'familiar' | 'admin' | 'coordenador'): Promise<number> => {
-    try {
-        const q = query(collection(db, 'users'), where('profile.role', '==', role), where('profile.status', '==', 'aprovado'));
-        const snapshot = await getCountFromServer(q);
-        return snapshot.data().count;
-    } catch (error) {
-        console.error("Erro ao contar usuários por perfil:", error);
-        return 0;
-    }
-}
+/** Edita o título e o texto de um aviso (quem recebe não muda depois de enviado). */
+export const updateCommunication = async (id: string, data: { title: string; message: string }) => {
+  try {
+    await updateDoc(doc(db, "communications", id), data);
+    return { success: true };
+  } catch (error) {
+    console.error("Erro ao editar aviso:", error);
+    return { success: false, error: "Não foi possível salvar o aviso." };
+  }
+};
+
+/** Confirma a leitura (ou o "Estou ciente" dos importantes) de quem está usando. */
+export const markCommunicationAsRead = async (communicationId: string, userId: string) => {
+  try {
+    await updateDoc(doc(db, "communications", communicationId), { [`readBy.${userId}`]: Timestamp.now() });
+    return { success: true };
+  } catch (error) {
+    console.error("Erro ao marcar aviso como lido:", error);
+    return { success: false, error: "Não foi possível confirmar a leitura." };
+  }
+};
 
 export const deleteCommunication = async (communicationId: string) => {
-    try {
-        const docRef = doc(db, 'communications', communicationId);
-        await deleteDoc(docRef);
-        return { success: true };
-    } catch (error) {
-        console.error("Erro ao deletar comunicado:", error);
-        return { success: false, error: "Falha ao deletar comunicado." };
-    }
-}
+  try {
+    await deleteDoc(doc(db, "communications", communicationId));
+    return { success: true };
+  } catch (error) {
+    console.error("Erro ao excluir aviso:", error);
+    return { success: false, error: "Não foi possível excluir o aviso." };
+  }
+};
+
+/** As pessoas com cadastro aprovado e o papel de cada uma (só a gestão consegue ler). */
+export const getPessoasDaClinica = async (): Promise<PessoaDaClinica[]> => {
+  try {
+    const snapshot = await getDocs(query(collection(db, "users"), where("profile.status", "==", "aprovado")));
+    return snapshot.docs.map((pessoa) => ({
+      uid: pessoa.id,
+      displayName: pessoa.data().displayName,
+      papel: pessoa.data().profile?.role,
+    }));
+  } catch (error) {
+    console.error("Erro ao buscar as pessoas da clínica:", error);
+    return [];
+  }
+};

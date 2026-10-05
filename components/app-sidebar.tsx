@@ -2,7 +2,7 @@
 
 import {
   Calendar, DollarSign, FileText, Home, MessageSquare, Users, UserCheck,
-  CheckCircle, UserPlus, MessageCircle, MapPin, BadgeDollarSign, TrendingUp,MessagesSquare
+  CheckCircle, UserPlus, Megaphone, MapPin, BadgeDollarSign, TrendingUp, MessagesSquare
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -26,12 +26,11 @@ const menuItems = [
   { title: "Especialidades", url: "/especialidades", icon: BadgeDollarSign, roles: PAPEIS_POR_TELA["/especialidades"] },
   { title: "Financeiro", url: "/financeiro", icon: DollarSign, roles: PAPEIS_POR_TELA["/financeiro"] },
   // { title: "Relatórios", url: "/relatorios", icon: FileText, roles: ['admin', 'funcionario'] },
-  // { title: "Avisos", url: "/avisos", icon: MessageSquare, roles: ['admin', 'profissional', 'funcionario', 'familiar'] },
   // { title: "Tarefas", url: "/tarefas", icon: CheckCircle, roles: ['admin', 'profissional', 'funcionario'] },
   { title: "Aprovação de Acesso", url: "/admin/usuarios", icon: UserPlus, roles: PAPEIS_POR_TELA["/admin/usuarios"] },
   { title: "Comercial", url: "/comercial", icon: TrendingUp, roles: PAPEIS_POR_TELA["/comercial"] },
   { title: "Gerenciar Usuários", url: "/admin/gerenciar-usuarios", icon: Users, roles: PAPEIS_POR_TELA["/admin/gerenciar-usuarios"] },
-  { title: "Comunicação", url: "/comunicacao", icon: MessageCircle, roles: PAPEIS_POR_TELA["/comunicacao"] },
+  { title: "Avisos", url: "/comunicacao", icon: Megaphone, roles: PAPEIS_POR_TELA["/comunicacao"] },
   { title: "Mensagens", url: "/mensagens", icon: MessagesSquare, roles: PAPEIS_POR_TELA["/mensagens"] },
   // { title: "Plano Evolutivo", url: "/plano-evolutivo", icon: FileText, roles: ['profissional'] },
 ]
@@ -70,7 +69,7 @@ export function AppSidebar() {
                         <span>{item.title}</span>
                       </div>
                       {/* --- LÓGICA DA NOTIFICAÇÃO --- */}
-                      {item.title === "Comunicação" && unreadCount > 0 && (
+                      {item.url === "/comunicacao" && unreadCount > 0 && (
                         <span className="h-2 w-2 rounded-full bg-red-500" />
                       )}
                       {item.title === "Mensagens" && conversasNaoLidas > 0 && (

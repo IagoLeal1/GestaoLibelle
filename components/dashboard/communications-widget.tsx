@@ -1,107 +1,61 @@
 "use client"
-
-import { useState, useEffect } from "react";
+// Os avisos mais recentes no painel inicial. Quem recebe vê primeiro os novos; a gestão vê os
+// últimos enviados, com o público de cada um. Quem leu fica na tela de Avisos.
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { getCommunications, Communication, countUsersByRole } from "@/services/communicationService";
 import { ehGestao } from "@/lib/permissoes";
+import { novoParaMim, PapelDeUsuario } from "@/lib/avisos";
+import { Communication, getCommunications } from "@/services/communicationService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MessageSquare } from "lucide-react";
-import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-
-// Função de ajuda para o badge de tipo
-const getTypeBadge = (role: string) => {
-    const isInternal = role !== 'familiar';
-    return (
-        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-            isInternal
-            ? "bg-blue-100 text-blue-800"
-            : "bg-green-100 text-green-800"
-        }`}>
-            {isInternal ? "Interno" : "Familiar"}
-        </span>
-    );
-};
+import { cn } from "@/lib/utils";
+import { quando, SeloImportante, SeloNovo, SeloPublico } from "@/components/avisos/comum";
 
 export function CommunicationsWidget() {
     const { firestoreUser } = useAuth();
-    const [comms, setComms] = useState<Communication[]>([]);
-    const [userCounts, setUserCounts] = useState({ profissional: 0, familiar: 0, funcionario: 0 });
+    const eu = useMemo(
+        () => (firestoreUser ? { uid: firestoreUser.uid, papel: firestoreUser.profile.role as PapelDeUsuario } : null),
+        [firestoreUser]
+    );
+    const [avisos, setAvisos] = useState<Communication[]>([]);
     const [loading, setLoading] = useState(true);
-    // "X de Y leram" é para quem envia avisos (gestão): os demais não contam os cadastros dos outros
-    const gestao = ehGestao(firestoreUser?.profile.role);
+    const gestao = ehGestao(eu?.papel);
 
     useEffect(() => {
-        if (firestoreUser?.profile.role) {
-            Promise.all([
-                getCommunications(firestoreUser.profile.role),
-                gestao ? countUsersByRole('profissional') : 0,
-                gestao ? countUsersByRole('familiar') : 0,
-                gestao ? countUsersByRole('funcionario') : 0,
-            ]).then(([commsData, profCount, famCount, funcCount]) => {
-                setComms(commsData);
-                setUserCounts({ profissional: profCount, familiar: famCount, funcionario: funcCount });
-            }).finally(() => setLoading(false));
-        }
-    }, [firestoreUser, gestao]);
-    
-    if (loading) {
-        return (
-            <Card>
-                <CardHeader>
-                    <CardTitle>Avisos Recentes</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-sm text-muted-foreground">Carregando avisos...</p>
-                </CardContent>
-            </Card>
-        );
-    }
+        if (!eu) return;
+        getCommunications(eu.papel).then(setAvisos).finally(() => setLoading(false));
+    }, [eu]);
+
+    // Quem recebe: os novos primeiro (a lista já vem do mais novo para o mais antigo)
+    const lista = !eu ? [] : gestao
+        ? avisos.slice(0, 3)
+        : [...avisos.filter((a) => novoParaMim(a, eu)), ...avisos.filter((a) => !novoParaMim(a, eu))].slice(0, 3);
 
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Avisos Recentes</CardTitle>
+                <CardTitle>Avisos recentes</CardTitle>
             </CardHeader>
             <CardContent>
                 <div className="space-y-4">
-                    {comms.length === 0 ? (
+                    {loading ? (
+                        <p className="text-sm text-muted-foreground">Carregando avisos...</p>
+                    ) : lista.length === 0 ? (
                         <p className="text-sm text-muted-foreground">Nenhum aviso recente.</p>
                     ) : (
-                        comms.slice(0, 3).map(aviso => {
-                            const hasRead = Object.keys(aviso.readBy).includes(firestoreUser?.uid || '');
-                            const readCount = Object.keys(aviso.readBy).length;
-                            const total = aviso.targetRole === 'familiar' 
-                                ? userCounts.familiar 
-                                : userCounts.profissional + userCounts.funcionario;
-                            
-                            // Define a cor da borda se o aviso for importante e não lido
-                            const borderColor = aviso.isImportant && !hasRead ? 'border-yellow-500' : 'border-transparent';
-
+                        lista.map((aviso) => {
+                            const novo = !!eu && novoParaMim(aviso, eu);
                             return (
-                                <div key={aviso.id} className={`p-3 rounded-lg bg-gray-50 border-l-4 ${borderColor}`}>
-                                    <div className="flex items-start justify-between">
-                                        <div className="flex-1">
-                                            <h4 className="text-sm font-medium text-gray-900 mb-1">{aviso.title}</h4>
-                                            <p className="text-xs text-gray-600 mb-2 line-clamp-2">{aviso.message}</p>
-                                            <div className="flex items-center gap-2 text-xs text-gray-500">
-                                                <span>{aviso.authorName}</span>
-                                                <span>•</span>
-                                                <span>{format(aviso.createdAt.toDate(), "dd/MM/yyyy", { locale: ptBR })}</span>
-                                            </div>
-                                        </div>
-                                        <div className="ml-3 flex flex-col items-end gap-1">
-                                            {getTypeBadge(aviso.targetRole)}
-                                            {gestao && (
-                                                <span className="text-xs text-gray-500">
-                                                    {readCount}/{total} leram
-                                                </span>
-                                            )}
-                                        </div>
+                                <div key={aviso.id} className={cn("rounded-lg border-l-4 bg-muted/40 p-3", novo ? "border-l-primary-teal" : "border-l-transparent")}>
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                        {novo && <SeloNovo />}
+                                        {aviso.isImportant && <SeloImportante />}
+                                        {gestao && <SeloPublico publico={aviso.targetRole} />}
                                     </div>
+                                    <h4 className={cn("mt-1 text-sm", novo ? "font-semibold" : "font-medium")}>{aviso.title}</h4>
+                                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{aviso.message}</p>
+                                    <p className="mt-2 text-xs text-muted-foreground">{aviso.authorName} · {quando(aviso.createdAt.toDate())}</p>
                                 </div>
                             );
                         })
