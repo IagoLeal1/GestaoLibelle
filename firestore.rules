@@ -57,6 +57,32 @@ service cloud.firestore {
       return dados.category == 'Repasse de Profissional';
     }
 
+    // O atendimento é desta criança, não foi cancelado e é de quem está escrevendo (pelo cadastro
+    // de profissional ligado à conta). É a prova de que o terapeuta atende a criança.
+    function ehSessaoMinhaCom(atendimentoId, patientId) {
+      let sessao = get(/databases/$(database)/documents/appointments/$(atendimentoId)).data;
+      return sessao.patientId == patientId && sessao.status != 'cancelado'
+        && get(/databases/$(database)/documents/professionals/$(sessao.professionalId)).data.userId == request.auth.uid;
+    }
+
+    // A marca da evolução na sessão da agenda tem que bater com a evolução gravada junto:
+    // "escrita" com evolução que aconteceu, "nao_aconteceu" com a que não, e sem marca sem evolução
+    function marcaBateComEvolucao(atendimentoId, patientId) {
+      let caminho = /databases/$(database)/documents/patients/$(patientId)/evolucoes/$(atendimentoId);
+      let marca = request.resource.data.get('evolucao', null);
+      return (marca == null && !existsAfter(caminho))
+        || (marca == 'escrita' && existsAfter(caminho) && getAfter(caminho).data.aconteceu == true)
+        || (marca == 'nao_aconteceu' && existsAfter(caminho) && getAfter(caminho).data.aconteceu == false);
+    }
+
+    function textoDaEvolucao(dados) {
+      return dados.trabalhado is string && dados.trabalhado.size() <= 4000
+        && dados.resposta is string && dados.resposta.size() <= 4000
+        && dados.orientacao is string && dados.orientacao.size() <= 4000
+        && dados.proximaSessao is string && dados.proximaSessao.size() <= 4000
+        && dados.aconteceu is bool;
+    }
+
     // --- 2. REGRAS DE USUÁRIOS ---
     match /users/{userId} {
       // O próprio cadastro sempre nasce pendente e com um dos papéis do formulário:
@@ -218,6 +244,49 @@ service cloud.firestore {
           resource.data.autorId == request.auth.uid
         );
       }
+
+      // Quem atende a criança: um documento por terapeuta, com uma sessão dele com ela como prova.
+      // O próprio terapeuta entra ao escrever a primeira evolução ou ao abrir a história da criança.
+      match /equipe/{uid} {
+        allow read: if isAdminOrCoordinator() || (isApproved() && request.auth.uid == uid);
+        allow create, update: if isApproved() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['atendimentoId', 'criadoEm'])
+          && ehSessaoMinhaCom(request.resource.data.atendimentoId, patientId);
+        allow delete: if isAdmin();
+      }
+
+      // Evoluções diárias (lib/evolucoes.ts): uma por sessão, com o id do atendimento. São dados de
+      // saúde: leem o admin, a coordenação e os terapeutas da equipe da criança. A recepção e a
+      // família não. Só o terapeuta da sessão escreve, e só quem escreveu corrige.
+      match /evolucoes/{atendimentoId} {
+        allow read: if isAdminOrCoordinator() || (
+          isApproved() && exists(/databases/$(database)/documents/patients/$(patientId)/equipe/$(request.auth.uid))
+        );
+
+        allow create: if isApproved()
+          && request.resource.data.keys().hasOnly([
+            'appointmentId', 'patientId', 'patientName', 'professionalId', 'professionalName', 'terapia',
+            'dataDaSessao', 'autorId', 'autorNome', 'aconteceu', 'trabalhado', 'resposta', 'orientacao',
+            'proximaSessao', 'criadoEm'
+          ])
+          && request.resource.data.appointmentId == atendimentoId
+          && request.resource.data.patientId == patientId
+          && request.resource.data.autorId == request.auth.uid
+          && request.resource.data.criadoEm == request.time
+          && ehSessaoMinhaCom(atendimentoId, patientId)
+          && request.resource.data.professionalId == get(/databases/$(database)/documents/appointments/$(atendimentoId)).data.professionalId
+          && request.resource.data.dataDaSessao == get(/databases/$(database)/documents/appointments/$(atendimentoId)).data.start
+          && textoDaEvolucao(request.resource.data);
+
+        // Corrigir: só o texto e se aconteceu, por quem escreveu; fica a marca de editada
+        allow update: if isApproved() && resource.data.autorId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['aconteceu', 'trabalhado', 'resposta', 'orientacao', 'proximaSessao', 'editadoEm'])
+          && request.resource.data.editadoEm == request.time
+          && textoDaEvolucao(request.resource.data);
+
+        allow delete: if isAdminOrCoordinator() || (isApproved() && resource.data.autorId == request.auth.uid);
+      }
     }
 
     match /professionals/{professionalId} {
@@ -243,7 +312,14 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/patients/$(resource.data.patientId)).data.userId == request.auth.uid
       );
       // Só a recepção e a gestão criam, alteram e apagam atendimentos (o terapeuta consulta)
-      allow create, update, delete: if canManage();
+      allow create, delete: if canManage();
+      // A única exceção: o terapeuta da sessão põe ou tira a marca da evolução dela (sem o texto)
+      allow update: if canManage() || (
+        isApproved()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['evolucao'])
+        && get(/databases/$(database)/documents/professionals/$(resource.data.professionalId)).data.userId == request.auth.uid
+        && marcaBateComEvolucao(appointmentId, resource.data.patientId)
+      );
     }
 
     match /comercial_eventos/{eventoId} {

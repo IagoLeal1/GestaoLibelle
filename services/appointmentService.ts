@@ -54,6 +54,8 @@ export interface Appointment {
   observacoes?: string;
   blockId?: string;
   isLastInBlock?: boolean;
+  /** Marca da evolução da sessão, posta pelo terapeuta (lib/evolucoes.ts); o texto fica na evolução. */
+  evolucao?: 'escrita' | 'nao_aconteceu';
 }
 
 export interface AppointmentFormData {
