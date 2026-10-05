@@ -288,12 +288,51 @@ service cloud.firestore {
     match /covenants/{docId} { allow read, write: if isAdmin(); }
     match /budgets/{docId} { allow read, write: if isAdmin(); }
 
+    // Avisos (lib/avisos.ts): a gestão vê todos; terapeutas, os da equipe e os dos terapeutas
+    // ("profissional" são os avisos internos antigos); famílias, os das famílias.
     match /communications/{communicationId} {
-      allow read: if isApproved();
-      allow create, delete: if isAdmin() || isFuncionario() || isCoordenador();
-      allow update: if isApproved()
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy'])
-                    && request.resource.data.readBy.diff(resource.data.readBy).affectedKeys().hasOnly([request.auth.uid]);
+      function podeLerAviso(aviso) {
+        return canManage()
+          || (isProfissional() && aviso.targetRole in ['equipe', 'terapeutas', 'profissional'])
+          || (isFamiliar() && aviso.targetRole == 'familiar');
+      }
+
+      // Editar e excluir: quem escreveu, a administração e a coordenação
+      function podeMexerNoAviso() {
+        return isAdmin() || isCoordenador() || (canManage() && resource.data.authorId == request.auth.uid);
+      }
+
+      function textoValido(dados) {
+        return dados.title is string && dados.title.size() > 0 && dados.title.size() <= 200
+          && dados.message is string && dados.message.size() > 0 && dados.message.size() <= 5000;
+      }
+
+      allow read: if podeLerAviso(resource.data);
+
+      // A gestão envia em seu próprio nome, para um dos públicos da tela, e ninguém nasce lido
+      allow create: if canManage()
+        && request.resource.data.keys().hasOnly([
+          'title', 'message', 'isImportant', 'targetRole', 'authorId', 'authorName', 'createdAt', 'readBy'
+        ])
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.targetRole in ['equipe', 'terapeutas', 'coordenador', 'familiar', 'profissional']
+        && request.resource.data.isImportant is bool
+        && request.resource.data.readBy == {}
+        && textoValido(request.resource.data);
+
+      allow update: if (
+        // Confirmar a leitura: cada um marca só a própria, nos avisos que pode ler
+        podeLerAviso(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy'])
+        && request.resource.data.readBy.diff(resource.data.readBy).affectedKeys().hasOnly([request.auth.uid])
+      ) || (
+        // Editar: só o título e o texto
+        podeMexerNoAviso()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'message'])
+        && textoValido(request.resource.data)
+      );
+
+      allow delete: if podeMexerNoAviso();
     }
   }
 }
