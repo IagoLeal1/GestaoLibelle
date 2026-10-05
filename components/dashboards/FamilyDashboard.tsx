@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
 import { 
+  Baby,
   Calendar, 
   MapPin, 
   ChevronRight,
@@ -23,20 +24,12 @@ import { CommunicationsWidget } from "@/components/dashboard/communications-widg
 import { collection, query, where, getDocs, orderBy, limit, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebaseConfig';
 import { Patient } from "@/services/patientService"; // Importando a tipagem correta
-
-interface AppointmentDisplay {
-  id: string;
-  start: Date;
-  patientName: string;
-  professionalName: string;
-  specialty: string;
-  status: string;
-  room?: string;
-}
+import { getRooms } from "@/services/roomService";
+import { partesDaData, ProximoAtendimento, proximosAtendimentos } from "@/lib/painelDaFamilia";
 
 export function FamilyDashboard() {
   const { user, firestoreUser } = useAuth();
-  const [appointments, setAppointments] = useState<AppointmentDisplay[]>([]);
+  const [appointments, setAppointments] = useState<ProximoAtendimento[]>([]);
   const [loading, setLoading] = useState(true);
   const [linkedPatientNames, setLinkedPatientNames] = useState<string[]>([]);
 
@@ -98,26 +91,25 @@ export function FamilyDashboard() {
                 where('patientId', 'in', patientIds),
                 where('start', '>=', Timestamp.fromDate(now)),
                 orderBy('start', 'asc'),
-                limit(5)
+                limit(15)
             );
 
             // Só pelos ids das crianças da família: a busca por nome podia trazer outra criança com o mesmo nome
-            const appSnap = await getDocs(qAppointments);
-            
-            const appList: AppointmentDisplay[] = appSnap.docs.map(doc => {
+            const [appSnap, salas] = await Promise.all([getDocs(qAppointments), getRooms()]);
+            const atendimentos = appSnap.docs.map(doc => {
                 const data = doc.data();
                 return {
                     id: doc.id,
-                    start: data.start ? data.start.toDate() : new Date(), 
-                    patientName: data.patientName || 'Paciente',
-                    professionalName: data.professionalName || 'Profissional',
-                    specialty: data.tipo || 'Terapia', 
+                    start: data.start ? data.start.toDate() : new Date(),
+                    patientName: data.patientName,
+                    professionalName: data.professionalName,
+                    tipo: data.tipo,
                     status: data.status,
-                    room: data.sala 
+                    sala: data.sala,
                 };
             });
 
-            setAppointments(appList);
+            setAppointments(proximosAtendimentos(atendimentos, { salas, criancas: uniquePatients.size }));
         }
       } catch (error) {
         console.error("Erro ao carregar dashboard familiar:", error);
@@ -128,16 +120,6 @@ export function FamilyDashboard() {
 
     fetchData();
   }, [user]);
-
-  // Formatações
-  const formatDate = (date: Date) => {
-    if (!date) return "--";
-    return new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit', month: 'long' }).format(date);
-  };
-  const formatTime = (date: Date) => {
-    if (!date) return "--:--";
-    return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(date);
-  };
 
   return (
     <div className="space-y-6 p-1">
@@ -173,40 +155,46 @@ export function FamilyDashboard() {
                         </div>
                     ) : appointments.length > 0 ? (
                         <div className="space-y-4">
-                            {appointments.map((app) => (
-                                <div key={app.id} className="flex items-start gap-4 p-4 rounded-xl border bg-card hover:bg-accent/50 transition-colors">
-                                    {/* Data Box */}
-                                    <div className="flex flex-col items-center justify-center bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-lg p-3 min-w-[80px]">
-                                        <span className="text-xs font-semibold uppercase">{formatDate(app.start).split(',')[0]}</span>
-                                        <span className="text-2xl font-bold">{app.start.getDate()}</span>
-                                        <span className="text-xs">{formatTime(app.start)}</span>
+                            {appointments.map((app) => {
+                                const data = partesDaData(app.start);
+                                return (
+                                <div key={app.id} className="flex items-start gap-3 rounded-xl border bg-card p-3 transition-colors hover:bg-accent/50 sm:gap-4 sm:p-4">
+                                    {/* Data: dia da semana, dia, mês e hora */}
+                                    <div className="flex w-16 shrink-0 flex-col items-center rounded-lg bg-blue-50 px-2 py-2 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
+                                        <span className="text-[11px] font-semibold uppercase">{data.diaDaSemana}</span>
+                                        <span className="text-2xl font-bold leading-tight">{data.dia}</span>
+                                        <span className="text-[11px] font-semibold uppercase">{data.mes}</span>
+                                        <span className="mt-1 text-xs">{data.hora}</span>
                                     </div>
-                                    
-                                    {/* Info */}
-                                    <div className="flex-1 space-y-1">
-                                        <div className="flex justify-between items-start">
-                                            <h4 className="font-semibold text-base">{app.specialty}</h4>
-                                            <Badge variant={app.status === 'agendado' ? 'default' : 'secondary'} className="capitalize">
-                                                {app.status}
+
+                                    {/* Info: min-w-0 deixa os textos quebrarem em vez de alargar o cartão no celular */}
+                                    <div className="min-w-0 flex-1 space-y-1">
+                                        <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+                                            <h4 className="text-base font-semibold">{app.terapia}</h4>
+                                            <Badge variant="outline" className={`shrink-0 border-transparent ${app.status.classe}`}>
+                                                {app.status.rotulo}
                                             </Badge>
                                         </div>
-                                        <div className="flex items-center text-sm text-muted-foreground gap-2">
-                                            <User className="h-3 w-3" />
-                                            <span>{app.professionalName}</span>
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                            <User className="h-3 w-3 shrink-0" />
+                                            <span className="truncate">{app.profissional}</span>
                                         </div>
-                                        <div className="flex items-center text-sm text-muted-foreground gap-2">
-                                            <User className="h-3 w-3" />
-                                            <span>Paciente: {app.patientName}</span>
-                                        </div>
-                                        {app.room && (
-                                            <div className="flex items-center text-xs text-blue-600 bg-blue-50 w-fit px-2 py-1 rounded-full mt-1">
-                                                <MapPin className="h-3 w-3 mr-1" />
-                                                {app.room}
+                                        {app.crianca && (
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <Baby className="h-3 w-3 shrink-0" />
+                                                <span className="truncate">{app.crianca}</span>
+                                            </div>
+                                        )}
+                                        {app.sala && (
+                                            <div className="mt-1 flex w-fit items-center rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-600">
+                                                <MapPin className="mr-1 h-3 w-3" />
+                                                {app.sala}
                                             </div>
                                         )}
                                     </div>
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     ) : (
                         <div className="text-center py-12 text-muted-foreground bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-dashed">
