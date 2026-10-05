@@ -25,6 +25,8 @@ const SENHA_TESTE = 'libelle-teste-123';
 
 const USUARIOS = [
   { uid: 'admin-teste', email: 'admin@libelle.test', displayName: 'Ana Admin', role: 'admin', status: 'aprovado' },
+  // Admin de login fácil, pedido pelo usuário para testar à mão (só existe no emulador)
+  { uid: 'admin-facil', email: 'admin@admin.com', displayName: 'Admin', role: 'admin', status: 'aprovado', senha: 'admin123' },
   { uid: 'coord-teste', email: 'coordenacao@libelle.test', displayName: 'Carla Coordenadora', role: 'coordenador', status: 'aprovado' },
   { uid: 'recepcao-teste', email: 'recepcao@libelle.test', displayName: 'Rafa Recepção', role: 'funcionario', status: 'aprovado' },
   { uid: 'terapeuta1-teste', email: 'terapeuta1@libelle.test', displayName: 'Paula Fonoaudióloga', role: 'profissional', status: 'aprovado' },
@@ -119,7 +121,7 @@ for (const usuario of USUARIOS) {
   await auth.createUser({
     uid: usuario.uid,
     email: usuario.email,
-    password: SENHA_TESTE,
+    password: usuario.senha ?? SENHA_TESTE,
     displayName: usuario.displayName,
   });
 }
@@ -355,7 +357,7 @@ for (const [id, targetRole, autorUid, dias, isImportant, leram, title, message] 
 
 await batch.commit();
 
-console.log('Emulador populado. Logins de teste (senha em SENHA_TESTE, neste arquivo):');
+console.log('Emulador populado. Logins de teste (senha em SENHA_TESTE, neste arquivo, ou no campo senha):');
 for (const usuario of USUARIOS) {
   const perfil = usuario.role ? `${usuario.role}, ${usuario.status}` : 'sem documento em users';
   console.log(`  ${usuario.email.padEnd(26)} ${usuario.displayName} (${perfil})`);
