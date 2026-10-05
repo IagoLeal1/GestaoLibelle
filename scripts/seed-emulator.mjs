@@ -30,7 +30,8 @@ const USUARIOS = [
   { uid: 'coord-teste', email: 'coordenacao@libelle.test', displayName: 'Carla Coordenadora', role: 'coordenador', status: 'aprovado' },
   { uid: 'recepcao-teste', email: 'recepcao@libelle.test', displayName: 'Rafa Recepção', role: 'funcionario', status: 'aprovado' },
   { uid: 'terapeuta1-teste', email: 'terapeuta1@libelle.test', displayName: 'Paula Fonoaudióloga', role: 'profissional', status: 'aprovado' },
-  { uid: 'terapeuta2-teste', email: 'terapeuta2@libelle.test', displayName: 'Rui Psicólogo', role: 'profissional', status: 'aprovado' },
+  // Conta antiga: sem o código do profissional no perfil. O painel e a grade acham a agenda dele pelo cadastro
+  { uid: 'terapeuta2-teste', email: 'terapeuta2@libelle.test', displayName: 'Rui Psicólogo', role: 'profissional', status: 'aprovado', contaAntiga: true },
   { uid: 'familia1-teste', email: 'familia1@libelle.test', displayName: 'Maria Souza', role: 'familiar', status: 'aprovado' },
   { uid: 'familia2-teste', email: 'familia2@libelle.test', displayName: 'João Lima', role: 'familiar', status: 'aprovado' },
   { uid: 'pendente-teste', email: 'pendente@libelle.test', displayName: 'Pedro Pendente', role: 'familiar', status: 'pendente' },
@@ -142,7 +143,7 @@ for (const usuario of USUARIOS.filter((u) => u.role)) {
       historyHidden: false,
       ...usuario.perfil,
       // O painel do terapeuta acha a agenda dele por aqui
-      ...(usuario.role === 'profissional' ? { professionalId: usuario.uid } : {}),
+      ...(usuario.role === 'profissional' && !usuario.contaAntiga ? { professionalId: usuario.uid } : {}),
     },
   });
 }
@@ -271,6 +272,47 @@ for (const [semana, extra] of [
     blockId: 'serie-lucas-fono',
     isLastInBlock: semana === 5,
     ...extra,
+  });
+}
+
+// Um dia cheio hoje, para as telas iniciais da gestão e dos terapeutas: o que já passou, o que está
+// acontecendo e o resto do dia, com salas. As horas contam do início da hora em que o seed roda:
+// rodando às 9h07, há atendimentos às 7h e 8h (já passaram), às 9h (acontecendo) e das 10h em diante.
+const inicioDaHora = new Date();
+inicioDaHora.setMinutes(0, 0, 0);
+for (const [pacienteId, profissionalId, horas, status, sala] of [
+  ['paciente-bia', 'terapeuta1-teste', -2, 'finalizado', 'sala-1'],
+  ['paciente-davi', 'terapeuta1-teste', -1, 'finalizado', 'sala-1'],
+  ['paciente-theo', 'terapeuta2-teste', -1, 'nao_compareceu', 'sala-2'],
+  ['paciente-theo', 'terapeuta2-teste', 0, 'em_atendimento', 'sala-2'],
+  ['paciente-davi', 'terapeuta1-teste', 1, 'agendado', 'sala-1'],
+  ['paciente-bia', 'terapeuta2-teste', 1, 'agendado', 'sala-2'],
+  ['paciente-theo', 'terapeuta1-teste', 2, 'cancelado', 'sala-1'],
+  ['paciente-lucas', 'terapeuta2-teste', 3, 'agendado', 'sala-2'],
+  ['paciente-bia', 'terapeuta1-teste', 4, 'agendado', null],
+  ['paciente-davi', 'terapeuta2-teste', 5, 'agendado', 'sala-2'],
+  ['paciente-theo', 'terapeuta1-teste', 6, 'agendado', 'sala-1'],
+  ['paciente-lucas', 'terapeuta1-teste', 7, 'agendado', 'sala-1'],
+  ['paciente-bia', 'terapeuta2-teste', 7, 'agendado', 'sala-2'],
+]) {
+  const inicio = inicioDaHora.getTime() + horas * 60 * 60 * 1000;
+  const paciente = NOMES_DOS_PACIENTES[pacienteId];
+  const profissional = porUid[profissionalId].displayName;
+  batch.set(db.doc(`appointments/hoje-${pacienteId}-${horas}`), {
+    patientId: pacienteId,
+    patientName: paciente,
+    professionalId: profissionalId,
+    professionalName: profissional,
+    title: `${paciente} - ${profissional}`,
+    start: Timestamp.fromMillis(inicio),
+    end: Timestamp.fromMillis(inicio + 50 * 60 * 1000),
+    status,
+    statusSecundario: '',
+    tipo: TERAPIAS[profissionalId],
+    convenio: 'particular',
+    valorConsulta: 150,
+    observacoes: '',
+    ...(sala ? { sala } : {}),
   });
 }
 
