@@ -31,7 +31,7 @@ export function EscolherPaciente({ onEscolher }: { onEscolher: (paciente: Patien
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           placeholder="Buscar pelo nome da criança"
-          className="w-full rounded-md border bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-[#1da7ac]"
+          className="w-full rounded-md border bg-white py-2 pl-9 pr-3 text-base outline-none focus:border-[#1da7ac] md:text-sm"
         />
       </div>
       <div className="max-h-64 overflow-y-auto rounded-md border">

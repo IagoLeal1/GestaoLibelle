@@ -33,7 +33,7 @@ export function SeletorDePessoas({ pessoas, selecionados, onAlternar, sugeridos 
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           placeholder="Buscar pelo nome"
-          className="w-full rounded-md border bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-[#1da7ac]"
+          className="w-full rounded-md border bg-white py-2 pl-9 pr-3 text-base outline-none focus:border-[#1da7ac] md:text-sm"
         />
       </div>
       <div className="max-h-64 space-y-3 overflow-y-auto rounded-md border p-2">

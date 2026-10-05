@@ -373,6 +373,7 @@ export default function ChatDetalhePage({ params }: { params: Promise<{ id: stri
             </div>
 
             {/* --- CAIXA DE TEXTO --- */}
+            {/* Letra de 16px no celular: abaixo disso, o iPhone dá zoom na tela ao tocar no campo */}
             <footer className="border-t bg-white p-3">
                 <div className="mx-auto flex max-w-4xl items-end gap-2">
                     <textarea
@@ -383,7 +384,7 @@ export default function ChatDetalhePage({ params }: { params: Promise<{ id: stri
                         rows={1}
                         placeholder="Escreva uma mensagem"
                         maxLength={TAMANHO_MAXIMO}
-                        className="flex-1 resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-[15px] leading-relaxed outline-none focus:border-[#1da7ac]"
+                        className="flex-1 resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-base leading-relaxed outline-none focus:border-[#1da7ac] md:text-[15px]"
                     />
                     <Button
                         onClick={handleEnviar}

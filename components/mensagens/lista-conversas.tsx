@@ -49,7 +49,7 @@ export function ListaDeConversas() {
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar pelo nome da criança"
-            className="w-full rounded-full border bg-slate-50 py-2 pl-9 pr-3 text-sm outline-none focus:border-[#1da7ac]"
+            className="w-full rounded-full border bg-slate-50 py-2 pl-9 pr-3 text-base outline-none focus:border-[#1da7ac] md:text-sm"
           />
         </div>
         <div className="flex flex-wrap gap-1.5">
