@@ -316,6 +316,86 @@ for (const [pacienteId, profissionalId, horas, status, sala] of [
   });
 }
 
+// Evoluções (lib/evolucoes.ts): a Paula tem uma sessão de anteontem sem evolução (atrasada) e a de
+// ontem escrita; das de hoje, escreveu a das 7h. O Rui escreveu a evolução da sessão em que a
+// recepção marcou falta: aparece como incompatível para a coordenação conferir.
+const SESSOES_ANTERIORES = [
+  ['ontem-paula-lucas', 'paciente-lucas', 'terapeuta1-teste', 1, 14, 'finalizado'],
+  ['anteontem-paula-theo', 'paciente-theo', 'terapeuta1-teste', 2, 15, 'agendado'],
+];
+for (const [id, pacienteId, profissionalId, diasAtras, hora, status] of SESSOES_ANTERIORES) {
+  const inicio = new Date();
+  inicio.setDate(inicio.getDate() - diasAtras);
+  inicio.setHours(hora, 0, 0, 0);
+  batch.set(db.doc(`appointments/${id}`), {
+    patientId: pacienteId,
+    patientName: NOMES_DOS_PACIENTES[pacienteId],
+    professionalId: profissionalId,
+    professionalName: porUid[profissionalId].displayName,
+    title: `${NOMES_DOS_PACIENTES[pacienteId]} - ${porUid[profissionalId].displayName}`,
+    start: Timestamp.fromDate(inicio),
+    end: Timestamp.fromMillis(inicio.getTime() + 50 * 60 * 1000),
+    status,
+    statusSecundario: '',
+    tipo: TERAPIAS[profissionalId],
+    convenio: 'particular',
+    valorConsulta: 150,
+    observacoes: '',
+    sala: 'sala-1',
+  });
+}
+// O início de cada sessão, igual ao gravado na agenda (a regra confere)
+const inicioDe = (id) => {
+  const anterior = SESSOES_ANTERIORES.find(([sessaoId]) => sessaoId === id);
+  if (anterior) {
+    const inicio = new Date();
+    inicio.setDate(inicio.getDate() - anterior[3]);
+    inicio.setHours(anterior[4], 0, 0, 0);
+    return Timestamp.fromDate(inicio);
+  }
+  // hoje-<criança>-<horas>, com as horas negativas para as que já passaram (ex.: hoje-paciente-bia--2)
+  const horas = Number(id.match(/-(-?\d+)$/)[1]);
+  return Timestamp.fromMillis(inicioDaHora.getTime() + horas * 60 * 60 * 1000);
+};
+for (const [sessaoId, pacienteId, autorUid, textos] of [
+  ['ontem-paula-lucas', 'paciente-lucas', 'terapeuta1-teste', {
+    trabalhado: 'Fonema /r/ em sílabas, com espelho e apoio visual.',
+    resposta: 'Participou bem; acertou 7 de 10 tentativas.',
+    orientacao: 'Treinar o /r/ em casa por 5 minutos, com o cartão de figuras.',
+    proximaSessao: 'Passar para palavras com /r/ no início.',
+  }],
+  ['hoje-paciente-bia--2', 'paciente-bia', 'terapeuta1-teste', {
+    trabalhado: 'Sons bilabiais com jogo de memória.',
+    resposta: 'Chegou cansada, mas engajou no meio da sessão.',
+    orientacao: '',
+    proximaSessao: 'Repetir o jogo com novas figuras.',
+  }],
+  ['hoje-paciente-theo--1', 'paciente-theo', 'terapeuta2-teste', {
+    trabalhado: 'Regulação emocional com o termômetro das emoções.',
+    resposta: 'Conseguiu nomear raiva e alegria.',
+    orientacao: 'Usar o termômetro na hora de dormir.',
+    proximaSessao: 'Introduzir estratégias de respiração.',
+  }],
+]) {
+  const profissional = porUid[autorUid];
+  batch.set(db.doc(`patients/${pacienteId}/equipe/${autorUid}`), { atendimentoId: sessaoId, criadoEm: agora });
+  batch.set(db.doc(`patients/${pacienteId}/evolucoes/${sessaoId}`), {
+    appointmentId: sessaoId,
+    patientId: pacienteId,
+    patientName: NOMES_DOS_PACIENTES[pacienteId],
+    professionalId: autorUid,
+    professionalName: profissional.displayName,
+    terapia: TERAPIAS[autorUid],
+    dataDaSessao: inicioDe(sessaoId),
+    autorId: autorUid,
+    autorNome: profissional.displayName,
+    aconteceu: true,
+    ...textos,
+    criadoEm: agora,
+  });
+  batch.update(db.doc(`appointments/${sessaoId}`), { evolucao: 'escrita' });
+}
+
 // Financeiro: conta padrão (recebe os repasses) e o repasse já pago da sessão da semana passada
 batch.set(db.doc('bankAccounts/conta-principal'), { name: 'Conta principal', agency: '0001', account: '12345-6', type: 'Conta Corrente', initialBalance: 0, currentBalance: 0, isDefault: true });
 batch.set(db.doc('bankAccounts/conta-reserva'), { name: 'Reserva', agency: '0001', account: '65432-1', type: 'Conta Poupança', initialBalance: 0, currentBalance: 0, isDefault: false });
@@ -409,5 +489,5 @@ for (const usuario of USUARIOS) {
   const perfil = usuario.role ? `${usuario.role}, ${usuario.status}` : 'sem documento em users';
   console.log(`  ${usuario.email.padEnd(26)} ${usuario.displayName} (${perfil})`);
 }
-console.log('Conversas: grupo-maria-souza (150 mensagens) e grupo-joao-lima (3 mensagens). Avisos: 6, um de cada público.');
+console.log('Conversas: grupo-maria-souza (150 mensagens) e grupo-joao-lima (3 mensagens). Avisos: 6, um de cada público. Evoluções: 3, uma incompatível.');
 process.exit(0);
