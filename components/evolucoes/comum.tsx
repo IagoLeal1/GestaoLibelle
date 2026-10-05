@@ -1,6 +1,6 @@
 "use client"
 
-// Peças das telas de evoluções: os campos, a data da sessão, os selos e o texto de uma evolução.
+// Peças das telas de evoluções: a data da sessão, os selos e o texto de uma evolução.
 import { AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,16 +11,10 @@ import { cn } from "@/lib/utils";
 import { useEvolucoes } from "@/context/EvolucoesContext";
 import type { Evolucao } from "@/lib/evolucoes";
 
-export const CAMPOS = [
-  { campo: "trabalhado", rotulo: "O que foi trabalhado", dica: "Atividades e objetivos da sessão" },
-  { campo: "resposta", rotulo: "Como a criança respondeu", dica: "Participação, avanços e dificuldades" },
-  { campo: "orientacao", rotulo: "Orientação para a família", dica: "O que treinar em casa" },
-  { campo: "proximaSessao", rotulo: "Plano para a próxima sessão", dica: "O próximo passo" },
-] as const;
-
-export type CampoDeTexto = (typeof CAMPOS)[number]["campo"];
-
 const semPonto = (texto: string) => texto.replace(/\.$/, "");
+
+/** "26/09" */
+export const diaEMes = (data: Date) => new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(data);
 
 /** "seg, 05/10 · 09:00" */
 export const quandoFoi = (data: Date) =>
@@ -56,21 +50,12 @@ export function AlertaDeIncompatibilidade({ motivo, className }: { motivo: strin
   );
 }
 
-/** Os campos preenchidos da evolução, só para ler. */
+/** O texto da evolução, só para ler, com as quebras de linha de quem escreveu. */
 export function TextoDaEvolucao({ evolucao }: { evolucao: Evolucao }) {
   if (!evolucao.aconteceu) {
     return <p className="text-sm text-muted-foreground">{evolucao.autorNome} informou que a sessão não aconteceu.</p>;
   }
-  return (
-    <dl className="space-y-3">
-      {CAMPOS.filter(({ campo }) => evolucao[campo]).map(({ campo, rotulo }) => (
-        <div key={campo}>
-          <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{rotulo}</dt>
-          <dd className="mt-0.5 whitespace-pre-wrap text-sm">{evolucao[campo]}</dd>
-        </div>
-      ))}
-    </dl>
-  );
+  return <p className="whitespace-pre-wrap text-sm leading-relaxed">{evolucao.texto}</p>;
 }
 
 export function Confirmar({ aberto, titulo, texto, acao, perigo = false, onFechar, onConfirmar }: {

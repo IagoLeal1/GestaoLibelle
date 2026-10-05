@@ -7,6 +7,7 @@ import { CheckCircle, ChevronDown, ChevronRight, Clock, NotebookPen } from "luci
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Numero } from "@/components/dashboards/comum";
 import { useEvolucoes } from "@/context/EvolucoesContext";
@@ -144,8 +145,9 @@ export function PainelDaCoordenacao({ criancaInicial }: { criancaInicial?: strin
       <Card className="min-w-0">
         <CardHeader className="space-y-3">
           <CardTitle>Por criança</CardTitle>
+          <Label htmlFor="crianca-da-coordenacao" className="-mb-1 font-normal text-muted-foreground">Criança</Label>
           <Select value={crianca} onValueChange={setCrianca}>
-            <SelectTrigger aria-label="Escolha a criança">
+            <SelectTrigger id="crianca-da-coordenacao">
               <SelectValue placeholder="Escolha a criança" />
             </SelectTrigger>
             <SelectContent>

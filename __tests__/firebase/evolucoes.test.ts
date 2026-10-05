@@ -9,7 +9,7 @@ import {
   criarAgendamento, criarPaciente, criarProfissional, criarUsuario, encerrarAmbiente, entrarComo, iniciarAmbiente, limparDados,
 } from './helpers';
 
-const CAMPOS = { aconteceu: true, trabalhado: '  Fonema /r/ com apoio visual.  ', resposta: 'Participou bem.', orientacao: '', proximaSessao: '' };
+const CAMPOS = { aconteceu: true, texto: '  Fonema /r/ com apoio visual. Participou bem.  ' };
 
 beforeAll(iniciarAmbiente);
 afterAll(encerrarAmbiente);
@@ -36,7 +36,7 @@ it('o terapeuta escreve a evolução e a coordenação lê na história da crian
   await entrarComo(carla);
   const { evolucoes } = await getHistoriaDaCrianca('lucas');
   expect(evolucoes).toHaveLength(1);
-  expect(evolucoes[0]).toMatchObject({ autorNome: 'Paula Fonoaudióloga', professionalId: 'prof-paula', trabalhado: 'Fonema /r/ com apoio visual.' });
+  expect(evolucoes[0]).toMatchObject({ autorNome: 'Paula Fonoaudióloga', professionalId: 'prof-paula', texto: 'Fonema /r/ com apoio visual. Participou bem.' });
 });
 
 it('o terapeuta entra na equipe das crianças que atende e lê também as evoluções das outras terapias', async () => {
@@ -72,10 +72,10 @@ it('a última evolução da mesma terapia aparece para dar continuidade', async 
   const { paula } = await montarClinica();
   await criarAgendamento('lucas', 'prof-paula', -8);
   await entrarComo(paula);
-  await escreverEvolucao('ag-lucas-prof-paula--8', { uid: paula.uid, nome: paula.displayName }, { ...CAMPOS, trabalhado: 'Sessão da semana passada.' });
+  await escreverEvolucao('ag-lucas-prof-paula--8', { uid: paula.uid, nome: paula.displayName }, { ...CAMPOS, texto: 'Sessão da semana passada.' });
 
   const ultima = await getUltimaEvolucao('lucas', { terapia: '', antesDe: new Date() });
-  expect(ultima?.trabalhado).toBe('Sessão da semana passada.');
+  expect(ultima?.texto).toBe('Sessão da semana passada.');
 });
 
 it('quem não atende a criança não entra na equipe dela', async () => {
@@ -93,9 +93,9 @@ it('corrigir deixa a evolução marcada como editada', async () => {
   await entrarComo(paula);
   await escreverEvolucao('ag-lucas-prof-paula--1', { uid: paula.uid, nome: paula.displayName }, CAMPOS);
 
-  await corrigirEvolucao('lucas', 'ag-lucas-prof-paula--1', { ...CAMPOS, trabalhado: 'Texto corrigido.' });
+  await corrigirEvolucao('lucas', 'ag-lucas-prof-paula--1', { ...CAMPOS, texto: 'Texto corrigido.' });
 
   const [evolucao] = (await getHistoriaDaCrianca('lucas')).evolucoes;
-  expect(evolucao.trabalhado).toBe('Texto corrigido.');
+  expect(evolucao.texto).toBe('Texto corrigido.');
   expect(evolucao.editadoEm).toBeInstanceOf(Date);
 });

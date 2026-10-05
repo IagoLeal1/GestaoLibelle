@@ -37,10 +37,7 @@ const evolucao = (appointmentId: string, extra: Record<string, unknown> = {}) =>
   autorId: 'paula',
   autorNome: 'Paula Fonoaudióloga',
   aconteceu: true,
-  trabalhado: 'Fonema /r/.',
-  resposta: 'Participou bem.',
-  orientacao: 'Treinar em casa.',
-  proximaSessao: 'Palavras com /r/.',
+  texto: 'Fonema /r/. Participou bem. Treinar em casa.',
   ...extra,
 });
 

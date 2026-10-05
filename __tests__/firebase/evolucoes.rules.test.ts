@@ -47,10 +47,7 @@ const evolucao = (sessaoId: keyof typeof SESSOES, autorId: string, extra: Record
   autorId,
   autorNome: autorId,
   aconteceu: true,
-  trabalhado: 'Fonema /r/ com apoio visual.',
-  resposta: 'Participou bem.',
-  orientacao: 'Treinar o /r/ em casa.',
-  proximaSessao: 'Seguir com o /r/ em palavras.',
+  texto: 'Fonema /r/ com apoio visual. Participou bem. Treinar o /r/ em casa.',
   criadoEm: serverTimestamp(),
   ...extra,
 });
@@ -102,7 +99,7 @@ describe('quem escreve', () => {
   });
 
   it('o terapeuta informa que a sessão não aconteceu', async () => {
-    await assertSucceeds(escrever('paula', 'sessao-paula-lucas', { aconteceu: false, trabalhado: '', resposta: '', orientacao: '', proximaSessao: '' }));
+    await assertSucceeds(escrever('paula', 'sessao-paula-lucas', { aconteceu: false, texto: '' }));
   });
 
   it('outro terapeuta não escreve a evolução de uma sessão que não é dele', async () => {
@@ -127,9 +124,10 @@ describe('quem escreve', () => {
     await assertFails(escrever('paula', 'sessao-cancelada'));
   });
 
-  it('o texto tem limite de tamanho e não aceita campos a mais', async () => {
-    await assertFails(escrever('paula', 'sessao-paula-lucas', { trabalhado: 'a'.repeat(4001) }));
+  it('o texto é um campo só, com limite de tamanho, e não aceita campos a mais', async () => {
+    await assertFails(escrever('paula', 'sessao-paula-lucas', { texto: 'a'.repeat(8001) }));
     await assertFails(escrever('paula', 'sessao-paula-lucas', { nota: 10 }));
+    await assertFails(escrever('paula', 'sessao-paula-lucas', { trabalhado: 'Campo separado' }));
   });
 });
 
@@ -206,7 +204,7 @@ describe('quem lê', () => {
 
 describe('quem corrige e apaga', () => {
   it('quem escreveu corrige o texto, e fica marcado como editada', async () => {
-    await assertSucceeds(updateDoc(evolucaoDe('rui', 'lucas', 'sessao-rui-lucas'), { trabalhado: 'Texto corrigido.', editadoEm: serverTimestamp() }));
+    await assertSucceeds(updateDoc(evolucaoDe('rui', 'lucas', 'sessao-rui-lucas'), { texto: 'Texto corrigido.', editadoEm: serverTimestamp() }));
   });
 
   it('a correção não troca a criança, a sessão nem o autor', async () => {
@@ -217,7 +215,7 @@ describe('quem corrige e apaga', () => {
   it('outro terapeuta e a coordenação não corrigem a evolução de alguém', async () => {
     await assertSucceeds(escrever('paula', 'sessao-paula-lucas'));
     for (const uid of ['paula', 'carla']) {
-      await assertFails(updateDoc(evolucaoDe(uid, 'lucas', 'sessao-rui-lucas'), { trabalhado: 'Outro texto.', editadoEm: serverTimestamp() }));
+      await assertFails(updateDoc(evolucaoDe(uid, 'lucas', 'sessao-rui-lucas'), { texto: 'Outro texto.', editadoEm: serverTimestamp() }));
     }
   });
 

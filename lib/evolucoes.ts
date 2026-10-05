@@ -43,12 +43,10 @@ export interface Evolucao {
   dataDaSessao: Date;
   autorId: string;
   autorNome: string;
-  /** false: o terapeuta informou que a sessão não aconteceu (os textos ficam vazios). */
+  /** false: o terapeuta informou que a sessão não aconteceu (o texto fica vazio). */
   aconteceu: boolean;
-  trabalhado: string;
-  resposta: string;
-  orientacao: string;
-  proximaSessao: string;
+  /** O que aconteceu na sessão, num texto só, como no papel. */
+  texto: string;
   criadoEm?: Date;
   editadoEm?: Date;
 }

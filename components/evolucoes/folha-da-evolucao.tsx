@@ -13,7 +13,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useEvolucoes } from "@/context/EvolucoesContext";
 import { incompatibilidade, type Evolucao, type SessaoDaAgenda } from "@/lib/evolucoes";
 import { apagarEvolucao, corrigirEvolucao, escreverEvolucao, getEvolucao, getUltimaEvolucao } from "@/services/evolucaoService";
-import { AlertaDeIncompatibilidade, CAMPOS, type CampoDeTexto, Confirmar, quandoFoi, SeloNaoAconteceu, TextoDaEvolucao } from "./comum";
+import { AlertaDeIncompatibilidade, Confirmar, diaEMes, quandoFoi, SeloNaoAconteceu, TextoDaEvolucao } from "./comum";
 
 /** A sessão aberta: da agenda (para escrever) e/ou a evolução já gravada (para ler ou corrigir). */
 export interface AlvoDaFolha {
@@ -21,8 +21,7 @@ export interface AlvoDaFolha {
   evolucao?: Evolucao;
 }
 
-const VAZIO: Record<CampoDeTexto, string> = { trabalhado: "", resposta: "", orientacao: "", proximaSessao: "" };
-const LIMITE = 4000;
+const LIMITE = 8000;
 
 export function FolhaDaEvolucao({ alvo, onFechar, onMudou }: { alvo: AlvoDaFolha | null; onFechar: () => void; onMudou?: () => void }) {
   const { firestoreUser } = useAuth();
@@ -30,7 +29,7 @@ export function FolhaDaEvolucao({ alvo, onFechar, onMudou }: { alvo: AlvoDaFolha
   const [evolucao, setEvolucao] = useState<Evolucao | null>(null);
   const [ultima, setUltima] = useState<Evolucao | null>(null);
   const [carregando, setCarregando] = useState(false);
-  const [campos, setCampos] = useState(VAZIO);
+  const [texto, setTexto] = useState("");
   const [editando, setEditando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [falta, setFalta] = useState(false);
@@ -48,7 +47,7 @@ export function FolhaDaEvolucao({ alvo, onFechar, onMudou }: { alvo: AlvoDaFolha
   useEffect(() => {
     setEvolucao(alvo?.evolucao ?? null);
     setUltima(null);
-    setCampos(VAZIO);
+    setTexto("");
     setEditando(false);
     setFalta(false);
     if (!alvo) return;
@@ -78,19 +77,19 @@ export function FolhaDaEvolucao({ alvo, onFechar, onMudou }: { alvo: AlvoDaFolha
   const autor = { uid: firestoreUser?.uid ?? "", nome: firestoreUser?.displayName ?? "" };
 
   async function salvar() {
-    if (!campos.trabalhado.trim()) {
+    if (!texto.trim()) {
       setFalta(true);
       return;
     }
     setSalvando(true);
     try {
       if (evolucao) {
-        await corrigirEvolucao(patientId, appointmentId, { aconteceu: true, ...campos });
-        setEvolucao({ ...evolucao, ...campos, aconteceu: true, editadoEm: new Date() });
+        await corrigirEvolucao(patientId, appointmentId, { aconteceu: true, texto });
+        setEvolucao({ ...evolucao, texto: texto.trim(), aconteceu: true, editadoEm: new Date() });
         setEditando(false);
         toast.success("Evolução corrigida");
       } else {
-        await escreverEvolucao(appointmentId, autor, { aconteceu: true, ...campos });
+        await escreverEvolucao(appointmentId, autor, { aconteceu: true, texto });
         toast.success("Evolução salva");
         onFechar();
       }
@@ -108,7 +107,7 @@ export function FolhaDaEvolucao({ alvo, onFechar, onMudou }: { alvo: AlvoDaFolha
     setConfirmar(null);
     setSalvando(true);
     try {
-      await escreverEvolucao(appointmentId, autor, { aconteceu: false, ...VAZIO });
+      await escreverEvolucao(appointmentId, autor, { aconteceu: false, texto: "" });
       marcar(appointmentId, "nao_aconteceu");
       onMudou?.();
       toast.success("Sessão marcada como não aconteceu");
@@ -140,7 +139,7 @@ export function FolhaDaEvolucao({ alvo, onFechar, onMudou }: { alvo: AlvoDaFolha
 
   const corrigir = () => {
     if (!evolucao) return;
-    setCampos({ trabalhado: evolucao.trabalhado, resposta: evolucao.resposta, orientacao: evolucao.orientacao, proximaSessao: evolucao.proximaSessao });
+    setTexto(evolucao.texto);
     setEditando(true);
   };
 
@@ -151,7 +150,8 @@ export function FolhaDaEvolucao({ alvo, onFechar, onMudou }: { alvo: AlvoDaFolha
           <SheetHeader className="space-y-1 text-left">
             <SheetTitle className="text-xl leading-tight">{sessao?.patientName ?? alvo?.evolucao?.patientName}</SheetTitle>
             <SheetDescription>
-              {[terapia, dataDaSessao && quandoFoi(dataDaSessao), sessao?.professionalName ?? alvo?.evolucao?.professionalName]
+              {/* Na sessão dele, o terapeuta não precisa ver o próprio nome */}
+              {[terapia, dataDaSessao && quandoFoi(dataDaSessao), !minhaSessao && (sessao?.professionalName ?? alvo?.evolucao?.professionalName)]
                 .filter(Boolean)
                 .join(" · ")}
             </SheetDescription>
@@ -169,32 +169,29 @@ export function FolhaDaEvolucao({ alvo, onFechar, onMudou }: { alvo: AlvoDaFolha
               <>
                 {ultima && !editando && (
                   <div className="rounded-lg bg-muted/60 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Última evolução de {ultima.terapia || "terapia"} · {quandoFoi(ultima.dataDaSessao)}
-                    </p>
-                    <p className="mt-1 line-clamp-4 whitespace-pre-wrap text-sm">{[ultima.trabalhado, ultima.proximaSessao].filter(Boolean).join("\n")}</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Última evolução · {diaEMes(ultima.dataDaSessao)}</p>
+                    <p className="mt-1 line-clamp-4 whitespace-pre-wrap text-sm">{ultima.texto}</p>
                   </div>
                 )}
-                {CAMPOS.map(({ campo, rotulo, dica }) => (
-                  <div key={campo} className="space-y-1.5">
-                    <Label htmlFor={`evolucao-${campo}`}>
-                      {rotulo}
-                      {campo === "trabalhado" && <span className="text-destructive"> *</span>}
-                    </Label>
-                    <Textarea
-                      id={`evolucao-${campo}`}
-                      rows={campo === "trabalhado" || campo === "resposta" ? 4 : 2}
-                      maxLength={LIMITE}
-                      placeholder={dica}
-                      value={campos[campo]}
-                      onChange={(e) => {
-                        setCampos((atuais) => ({ ...atuais, [campo]: e.target.value }));
-                        if (campo === "trabalhado") setFalta(false);
-                      }}
-                    />
-                    {campo === "trabalhado" && falta && <p className="text-sm text-destructive">Escreva o que foi trabalhado na sessão.</p>}
-                  </div>
-                ))}
+                {/* Um campo só, como no papel: a criança, a terapia e a data já vêm da agenda */}
+                <div className="space-y-2">
+                  <Label htmlFor="evolucao-texto" className="text-base font-semibold">
+                    O que aconteceu na sessão
+                  </Label>
+                  <Textarea
+                    id="evolucao-texto"
+                    rows={12}
+                    maxLength={LIMITE}
+                    placeholder="Conte como foi a sessão: o que foi trabalhado, como a criança respondeu e o que orientar à família."
+                    className="min-h-[260px] text-base leading-relaxed"
+                    value={texto}
+                    onChange={(e) => {
+                      setTexto(e.target.value);
+                      setFalta(false);
+                    }}
+                  />
+                  {falta && <p className="text-sm text-destructive">Escreva o que aconteceu na sessão.</p>}
+                </div>
                 <div className="flex flex-col gap-2 pt-2 sm:flex-row-reverse sm:justify-between">
                   <Button onClick={salvar} disabled={salvando} className="bg-primary-teal text-white hover:bg-primary-teal/90">
                     {salvando ? "Salvando..." : editando ? "Salvar correção" : "Salvar evolução"}

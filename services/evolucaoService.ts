@@ -15,10 +15,7 @@ import { ultimaEvolucao, type Evolucao, type MarcaDaEvolucao, type SessaoDaAgend
 
 export interface CamposDaEvolucao {
   aconteceu: boolean;
-  trabalhado: string;
-  resposta: string;
-  orientacao: string;
-  proximaSessao: string;
+  texto: string;
 }
 
 const POR_PAGINA = 30;
@@ -35,11 +32,9 @@ const paraEvolucao = (dados: DocumentData): Evolucao => ({
   editadoEm: dados.editadoEm?.toDate(),
 });
 
-/** Sem os espaços das pontas; quando a sessão não aconteceu, os textos ficam vazios. */
+/** Sem os espaços das pontas; quando a sessão não aconteceu, o texto fica vazio. */
 const limpos = (campos: CamposDaEvolucao): CamposDaEvolucao =>
-  campos.aconteceu
-    ? { aconteceu: true, trabalhado: campos.trabalhado.trim(), resposta: campos.resposta.trim(), orientacao: campos.orientacao.trim(), proximaSessao: campos.proximaSessao.trim() }
-    : { aconteceu: false, trabalhado: "", resposta: "", orientacao: "", proximaSessao: "" };
+  campos.aconteceu ? { aconteceu: true, texto: campos.texto.trim() } : { aconteceu: false, texto: "" };
 
 /** A sessão da agenda no formato das evoluções (datas em Date). */
 export const sessaoDaAgenda = (a: Appointment): SessaoDaAgenda => ({

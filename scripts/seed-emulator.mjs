@@ -357,25 +357,14 @@ const inicioDe = (id) => {
   const horas = Number(id.match(/-(-?\d+)$/)[1]);
   return Timestamp.fromMillis(inicioDaHora.getTime() + horas * 60 * 60 * 1000);
 };
-for (const [sessaoId, pacienteId, autorUid, textos] of [
-  ['ontem-paula-lucas', 'paciente-lucas', 'terapeuta1-teste', {
-    trabalhado: 'Fonema /r/ em sílabas, com espelho e apoio visual.',
-    resposta: 'Participou bem; acertou 7 de 10 tentativas.',
-    orientacao: 'Treinar o /r/ em casa por 5 minutos, com o cartão de figuras.',
-    proximaSessao: 'Passar para palavras com /r/ no início.',
-  }],
-  ['hoje-paciente-bia--2', 'paciente-bia', 'terapeuta1-teste', {
-    trabalhado: 'Sons bilabiais com jogo de memória.',
-    resposta: 'Chegou cansada, mas engajou no meio da sessão.',
-    orientacao: '',
-    proximaSessao: 'Repetir o jogo com novas figuras.',
-  }],
-  ['hoje-paciente-theo--1', 'paciente-theo', 'terapeuta2-teste', {
-    trabalhado: 'Regulação emocional com o termômetro das emoções.',
-    resposta: 'Conseguiu nomear raiva e alegria.',
-    orientacao: 'Usar o termômetro na hora de dormir.',
-    proximaSessao: 'Introduzir estratégias de respiração.',
-  }],
+// Um texto só por evolução, como no papel
+for (const [sessaoId, pacienteId, autorUid, texto] of [
+  ['ontem-paula-lucas', 'paciente-lucas', 'terapeuta1-teste',
+    'Fonema /r/ em sílabas, com espelho e apoio visual. Participou bem e acertou 7 de 10 tentativas. Orientei a família a treinar 5 minutos por dia com o cartão de figuras. Na próxima, palavras com /r/ no início.'],
+  ['hoje-paciente-bia--2', 'paciente-bia', 'terapeuta1-teste',
+    'Sons bilabiais com jogo de memória. Chegou cansada, mas engajou no meio da sessão. Na próxima, repetir o jogo com figuras novas.'],
+  ['hoje-paciente-theo--1', 'paciente-theo', 'terapeuta2-teste',
+    'Regulação emocional com o termômetro das emoções. Conseguiu nomear raiva e alegria. Sugeri à família usar o termômetro na hora de dormir.'],
 ]) {
   const profissional = porUid[autorUid];
   batch.set(db.doc(`patients/${pacienteId}/equipe/${autorUid}`), { atendimentoId: sessaoId, criadoEm: agora });
@@ -390,7 +379,7 @@ for (const [sessaoId, pacienteId, autorUid, textos] of [
     autorId: autorUid,
     autorNome: profissional.displayName,
     aconteceu: true,
-    ...textos,
+    texto,
     criadoEm: agora,
   });
   batch.update(db.doc(`appointments/${sessaoId}`), { evolucao: 'escrita' });

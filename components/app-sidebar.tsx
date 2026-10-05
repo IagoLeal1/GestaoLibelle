@@ -80,7 +80,7 @@ export function AppSidebar() {
                       {item.url === "/evolucoes" && evolucoesParaEscrever > 0 && (
                         <span
                           aria-label={`${evolucoesParaEscrever} evoluções para escrever`}
-                          className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-xs font-bold text-white"
+                          className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-700 px-1.5 text-xs font-bold text-white"
                         >
                           {evolucoesParaEscrever}
                         </span>
