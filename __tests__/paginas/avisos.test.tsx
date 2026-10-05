@@ -82,4 +82,27 @@ describe('painel da gestão', () => {
 
     expect((await screen.findAllByText('1 de 3')).length).toBeGreaterThan(0);
   });
+
+  it('separa os avisos da equipe e os das famílias em duas abas', async () => {
+    entrarComo('carla', 'coordenador');
+    (getCommunications as jest.Mock).mockResolvedValue([
+      aviso('Feriado de 12/10', { targetRole: 'familiar', authorId: 'ana' }),
+      aviso('Evoluções do mês', { targetRole: 'terapeutas', authorId: 'carla' }),
+    ]);
+    (getPessoasDaClinica as jest.Mock).mockResolvedValue([]);
+
+    render(<PainelDeAvisos />);
+
+    const abaDaEquipe = await screen.findByRole('tab', { name: 'Para a equipe (1)' });
+    const abaDasFamilias = screen.getByRole('tab', { name: 'Para as famílias (1)' });
+    expect(abaDaEquipe).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getAllByText('Evoluções do mês').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Feriado de 12/10')).not.toBeInTheDocument();
+
+    fireEvent.mouseDown(abaDasFamilias, { button: 0 });
+
+    expect(await screen.findAllByText('Feriado de 12/10')).not.toHaveLength(0);
+    expect(screen.queryByText('Evoluções do mês')).not.toBeInTheDocument();
+  });
 });
+

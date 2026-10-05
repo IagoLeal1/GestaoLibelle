@@ -57,3 +57,9 @@ export const contarNovos = (avisos: AvisoParaConta[], eu: QuemUsa) => avisos.fil
 /** Editar e excluir: quem escreveu, a administração e a coordenação. */
 export const possoMexer = (aviso: AvisoParaConta, eu: QuemUsa) =>
   aviso.authorId === eu.uid || eu.papel === "admin" || eu.papel === "coordenador";
+
+/** No painel da gestão, os avisos da equipe e os das famílias ficam em abas separadas. */
+export const separarPorPublico = <A extends { targetRole: PublicoDoAviso }>(avisos: A[]) => ({
+  equipe: avisos.filter((a) => a.targetRole !== "familiar"),
+  familias: avisos.filter((a) => a.targetRole === "familiar"),
+});

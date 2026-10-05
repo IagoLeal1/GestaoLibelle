@@ -3,7 +3,7 @@
 // pode editar ou excluir. As regras do banco (firestore.rules) seguem o mesmo desenho.
 import {
   contarNovos, destinatarios, leitura, novoParaMim, PapelDeUsuario, possoMexer, PUBLICOS_PARA_ENVIAR,
-  publicosQueRecebe, PublicoDoAviso,
+  publicosQueRecebe, PublicoDoAviso, separarPorPublico,
 } from '@/lib/avisos';
 
 const pessoas: { uid: string; papel: PapelDeUsuario }[] = [
@@ -92,5 +92,16 @@ describe('quem vê e quem mexe', () => {
     expect(possoMexer(doRafa, { uid: 'carla', papel: 'coordenador' })).toBe(true);
     expect(possoMexer(doRafa, { uid: 'ana', papel: 'admin' })).toBe(true);
     expect(possoMexer(doRafa, paula)).toBe(false);
+  });
+});
+
+describe('abas do painel da gestão', () => {
+  it('separa os avisos das famílias dos avisos da equipe', () => {
+    const avisos = (['familiar', 'equipe', 'terapeutas', 'coordenador', 'profissional'] as PublicoDoAviso[]).map((p) => aviso(p));
+
+    const { equipe, familias } = separarPorPublico(avisos);
+
+    expect(equipe.map((a) => a.targetRole)).toEqual(['equipe', 'terapeutas', 'coordenador', 'profissional']);
+    expect(familias.map((a) => a.targetRole)).toEqual(['familiar']);
   });
 });

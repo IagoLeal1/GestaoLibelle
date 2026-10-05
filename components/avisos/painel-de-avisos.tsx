@@ -1,6 +1,6 @@
 "use client"
 // Avisos da gestão (admin, coordenação e recepção): números no topo, os avisos novos para a
-// própria pessoa e a tabela com a leitura de cada aviso. O aviso abre numa gaveta lateral, com
+// própria pessoa e, em abas separadas, os avisos da equipe e os das famílias, com a leitura de cada um. O aviso abre numa gaveta lateral, com
 // quem leu, editar e excluir; o "Novo aviso" também abre numa gaveta.
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Timestamp } from "firebase/firestore"
@@ -11,8 +11,9 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAuth } from "@/context/AuthContext"
-import { leitura, novoParaMim, PapelDeUsuario, possoMexer, PUBLICOS, souDestinatario } from "@/lib/avisos"
+import { leitura, novoParaMim, PapelDeUsuario, possoMexer, PUBLICOS, separarPorPublico, souDestinatario } from "@/lib/avisos"
 import {
   Communication, CommunicationFormData, createCommunication, deleteCommunication, getCommunications,
   getPessoasDaClinica, markCommunicationAsRead, PessoaDaClinica, updateCommunication,
@@ -52,6 +53,85 @@ function Resumo({ aviso, onAbrir }: { aviso: Communication; onAbrir: () => void 
   )
 }
 
+/** A lista de avisos de uma aba: tabela no computador e um cartão por aviso no celular. */
+function ListaDeAvisos({ avisos, pessoas, mostrarPublico, vazio, onAbrir }: {
+  avisos: Communication[]
+  pessoas: PessoaDaClinica[]
+  mostrarPublico: boolean
+  vazio: string
+  onAbrir: (aviso: Communication) => void
+}) {
+  if (avisos.length === 0) {
+    return <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{vazio}</p>
+  }
+  return (
+    <>
+      <Card className="hidden md:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Aviso</TableHead>
+              {mostrarPublico && <TableHead>Para</TableHead>}
+              <TableHead className="w-48">Leitura</TableHead>
+              <TableHead className="w-28">Enviado</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {avisos.map((a) => {
+              const { leram, total } = leitura(a, pessoas)
+              return (
+                <TableRow key={a.id} className="cursor-pointer" onClick={() => onAbrir(a)}>
+                  <TableCell>
+                    <div className="font-medium">{a.title}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      {a.isImportant && <SeloImportante />}
+                      <span className="text-xs text-muted-foreground">{a.authorName}</span>
+                    </div>
+                  </TableCell>
+                  {mostrarPublico && <TableCell className="text-sm">{PUBLICOS[a.targetRole]?.nome ?? a.targetRole}</TableCell>}
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Progress value={total ? (leram.length / total) * 100 : 0} className="h-2" />
+                      <span className="shrink-0 text-xs text-muted-foreground">{leram.length}/{total}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{quando(a.createdAt.toDate())}</TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </Card>
+
+      <div className="space-y-2 md:hidden">
+        {avisos.map((a) => {
+          const { leram, total } = leitura(a, pessoas)
+          return (
+            <button key={a.id} onClick={() => onAbrir(a)} className="block w-full rounded-lg border bg-card p-4 text-left shadow-sm">
+              <span className="flex items-start justify-between gap-2">
+                <span className="font-medium">{a.title}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">{quando(a.createdAt.toDate())}</span>
+              </span>
+              {(a.isImportant || mostrarPublico) && (
+                <span className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {a.isImportant && <SeloImportante />}
+                  {mostrarPublico && <SeloPublico publico={a.targetRole} />}
+                </span>
+              )}
+              <span className="mt-3 flex items-center gap-2">
+                <Progress value={total ? (leram.length / total) * 100 : 0} className="h-2" />
+                <span className="shrink-0 text-xs text-muted-foreground">{leram.length} de {total}</span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </>
+  )
+}
+
+type Aba = "equipe" | "familias"
+
 export function PainelDeAvisos() {
   const { firestoreUser, fetchUnreadCount } = useAuth()
   const eu = useMemo(
@@ -65,6 +145,7 @@ export function PainelDeAvisos() {
   const [editando, setEditando] = useState(false)
   const [excluindo, setExcluindo] = useState<Communication | null>(null)
   const [salvando, setSalvando] = useState(false)
+  const [aba, setAba] = useState<Aba>("equipe")
 
   const carregar = useCallback(async () => {
     if (!eu) return
@@ -79,6 +160,7 @@ export function PainelDeAvisos() {
 
   const todos = avisos ?? []
   const paraMim = todos.filter((a) => novoParaMim(a, eu))
+  const { equipe, familias } = separarPorPublico(todos)
   const aberto = todos.find((a) => a.id === abertoId) ?? null
 
   const atualizarLocal = (id: string, mudanca: Partial<Communication>) =>
@@ -111,6 +193,7 @@ export function PainelDeAvisos() {
     }
     toast.success(`Aviso enviado para ${quantosRecebem(dados.targetRole, pessoas, eu.uid)} pessoas.`)
     setEscrevendo(false)
+    setAba(dados.targetRole === "familiar" ? "familias" : "equipe")
     await carregar()
   }
 
@@ -170,77 +253,19 @@ export function PainelDeAvisos() {
             </section>
           )}
 
-          <section className="space-y-3">
-            <h3 className="font-semibold">Todos os avisos</h3>
-            {todos.length === 0 && (
-              <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                Nenhum aviso ainda. Use “Novo aviso” para enviar o primeiro.
-              </p>
-            )}
-
-            {/* Computador: tabela */}
-            {todos.length > 0 && (
-              <Card className="hidden md:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Aviso</TableHead>
-                      <TableHead>Para</TableHead>
-                      <TableHead className="w-48">Leitura</TableHead>
-                      <TableHead className="w-28">Enviado</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {todos.map((a) => {
-                      const { leram, total } = leitura(a, pessoas)
-                      return (
-                        <TableRow key={a.id} className="cursor-pointer" onClick={() => abrir(a)}>
-                          <TableCell>
-                            <div className="font-medium">{a.title}</div>
-                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                              {a.isImportant && <SeloImportante />}
-                              <span className="text-xs text-muted-foreground">{a.authorName}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-sm">{PUBLICOS[a.targetRole]?.nome ?? a.targetRole}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Progress value={total ? (leram.length / total) * 100 : 0} className="h-2" />
-                              <span className="shrink-0 text-xs text-muted-foreground">{leram.length}/{total}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">{quando(a.createdAt.toDate())}</TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </Card>
-            )}
-
-            {/* Celular: um cartão por aviso */}
-            <div className="space-y-2 md:hidden">
-              {todos.map((a) => {
-                const { leram, total } = leitura(a, pessoas)
-                return (
-                  <button key={a.id} onClick={() => abrir(a)} className="block w-full rounded-lg border bg-card p-4 text-left shadow-sm">
-                    <span className="flex items-start justify-between gap-2">
-                      <span className="font-medium">{a.title}</span>
-                      <span className="shrink-0 text-xs text-muted-foreground">{quando(a.createdAt.toDate())}</span>
-                    </span>
-                    <span className="mt-2 flex flex-wrap items-center gap-1.5">
-                      {a.isImportant && <SeloImportante />}
-                      <SeloPublico publico={a.targetRole} />
-                    </span>
-                    <span className="mt-3 flex items-center gap-2">
-                      <Progress value={total ? (leram.length / total) * 100 : 0} className="h-2" />
-                      <span className="shrink-0 text-xs text-muted-foreground">{leram.length} de {total}</span>
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          </section>
+          {/* Os avisos da equipe e os das famílias em abas separadas */}
+          <Tabs value={aba} onValueChange={(valor) => setAba(valor as Aba)} className="space-y-3">
+            <TabsList className="grid w-full grid-cols-2 sm:inline-flex sm:w-auto">
+              <TabsTrigger value="equipe">Para a equipe ({equipe.length})</TabsTrigger>
+              <TabsTrigger value="familias">Para as famílias ({familias.length})</TabsTrigger>
+            </TabsList>
+            <TabsContent value="equipe" className="mt-0">
+              <ListaDeAvisos avisos={equipe} pessoas={pessoas} mostrarPublico vazio="Nenhum aviso para a equipe ainda." onAbrir={abrir} />
+            </TabsContent>
+            <TabsContent value="familias" className="mt-0">
+              <ListaDeAvisos avisos={familias} pessoas={pessoas} mostrarPublico={false} vazio="Nenhum aviso para as famílias ainda." onAbrir={abrir} />
+            </TabsContent>
+          </Tabs>
         </>
       )}
 
