@@ -322,6 +322,37 @@ mensagensB.forEach((mensagem, i) => {
   batch.set(db.doc(`chat_groups/grupo-joao-lima/messages/msg-${i + 1}`), mensagem);
 });
 
+// Avisos: um de cada público. O do feriado é importante e a Maria ainda não confirmou; o da
+// reunião é da Carla (ela não entra na conta de quem leu); o último é um interno antigo
+// ("profissional", de antes da tela de Avisos), que vai para a equipe toda.
+const AVISOS = [
+  ['aviso-feriado', 'familiar', 'admin-teste', 0, true, ['familia2-teste'], 'Feriado de 12/10: a clínica não abre',
+    'Na segunda, 12 de outubro, não haverá atendimentos. As sessões desse dia serão remarcadas pela recepção, que vai entrar em contato com cada família até quinta-feira.'],
+  ['aviso-reuniao', 'equipe', 'coord-teste', 1, true, ['terapeuta2-teste', 'recepcao-teste'], 'Reunião de equipe na sexta, às 18h',
+    'Vamos alinhar as férias de dezembro e a nova grade de horários. Quem não puder comparecer, avise a coordenação até quinta.'],
+  ['aviso-horario', 'familiar', 'recepcao-teste', 3, false, [], 'Novo horário da recepção',
+    'A partir de novembro, a recepção atende das 7h às 19h, de segunda a sexta.'],
+  ['aviso-evolucoes', 'terapeutas', 'coord-teste', 4, false, ['terapeuta2-teste'], 'Evoluções do mês até o dia 30',
+    'Lembrem de registrar a evolução de cada paciente no plano evolutivo até o dia 30.'],
+  ['aviso-supervisao', 'coordenador', 'admin-teste', 5, false, ['coord-teste'], 'Escala de supervisão de outubro',
+    'A escala de supervisão dos grupos de Mensagens está na pasta compartilhada.'],
+  ['aviso-antigo', 'profissional', 'admin-teste', 20, false, ['terapeuta1-teste', 'terapeuta2-teste', 'recepcao-teste'], 'Uniforme novo da equipe',
+    'As camisetas novas chegaram e estão na recepção.'],
+];
+for (const [id, targetRole, autorUid, dias, isImportant, leram, title, message] of AVISOS) {
+  const enviadoEm = agora.toMillis() - dias * DIA;
+  batch.set(db.doc(`communications/${id}`), {
+    title,
+    message,
+    isImportant,
+    targetRole,
+    authorId: autorUid,
+    authorName: porUid[autorUid].displayName,
+    createdAt: Timestamp.fromMillis(enviadoEm),
+    readBy: Object.fromEntries(leram.map((uid) => [uid, Timestamp.fromMillis(enviadoEm + 60 * 60 * 1000)])),
+  });
+}
+
 await batch.commit();
 
 console.log('Emulador populado. Logins de teste (senha em SENHA_TESTE, neste arquivo):');
@@ -329,5 +360,5 @@ for (const usuario of USUARIOS) {
   const perfil = usuario.role ? `${usuario.role}, ${usuario.status}` : 'sem documento em users';
   console.log(`  ${usuario.email.padEnd(26)} ${usuario.displayName} (${perfil})`);
 }
-console.log('Conversas: grupo-maria-souza (150 mensagens) e grupo-joao-lima (3 mensagens).');
+console.log('Conversas: grupo-maria-souza (150 mensagens) e grupo-joao-lima (3 mensagens). Avisos: 6, um de cada público.');
 process.exit(0);
