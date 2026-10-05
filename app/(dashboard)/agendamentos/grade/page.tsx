@@ -12,7 +12,7 @@ export default function GradeAgendamentoPage() {
         </Link>
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Grade de Agendamentos</h2>
-          <p className="text-muted-foreground">Selecione um paciente e monte a grade de horários da semana.</p>
+          <p className="text-muted-foreground">Veja a semana de cada paciente. A gestão também monta a grade de horários por aqui.</p>
         </div>
       </div>
       <GradeAgendamentosClientPage />

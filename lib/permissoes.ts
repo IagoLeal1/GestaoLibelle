@@ -15,12 +15,13 @@ const EQUIPE: Papel[] = [...GESTAO, "profissional"];
 export const PAPEIS_POR_TELA: Record<string, Papel[]> = {
   "/": TODOS,
   "/agendamentos": EQUIPE,
-  // Telas de montar e alterar a agenda: o terapeuta só consulta a agenda do dia
+  // Montar e alterar a agenda: só a gestão
   "/agendamentos/novo": GESTAO,
-  "/agendamentos/grade": GESTAO,
-  "/agendamentos/terapia": GESTAO,
-  "/agendamentos/terapeuta": GESTAO,
   "/agendamentos/renovacoes": GESTAO,
+  // As grades da semana: o terapeuta também vê, para se organizar, mas só a gestão agenda nelas
+  "/agendamentos/grade": EQUIPE,
+  "/agendamentos/terapia": EQUIPE,
+  "/agendamentos/terapeuta": EQUIPE,
   "/agendamentos/assistente": GESTAO,
   "/mapeamento-salas": GESTAO,
   "/pacientes": EQUIPE,

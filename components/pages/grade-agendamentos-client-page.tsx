@@ -17,6 +17,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { QuickAppointmentModal } from "@/components/modals/quick-appointment-modal";
 import { EditAppointmentModal } from "@/components/modals/edit-appointment-modal";
 import { formatSpecialtyName } from "@/lib/formatters";
+import { ehGestao } from "@/lib/permissoes";
+import { useAuth } from "@/context/AuthContext";
 import { Badge } from "@/components/ui/badge";
 
 // Icons
@@ -48,6 +50,10 @@ const HORARIOS_CLINICA = [
 ];
 
 export function GradeAgendamentosClientPage() {
+    // Só a gestão agenda, edita e salva pela grade; o terapeuta vê a semana para se organizar
+    const { firestoreUser } = useAuth();
+    const podeAgendar = ehGestao(firestoreUser?.profile.role);
+
     // Estados de dados
     const [patients, setPatients] = useState<Patient[]>([]);
     const [professionals, setProfessionals] = useState<Professional[]>([]);
@@ -243,9 +249,11 @@ export function GradeAgendamentosClientPage() {
                     </div>
 
                     <div className="w-full md:w-1/3 flex justify-end">
+                        {podeAgendar && (
                         <Button onClick={handleSaveAllAppointments} disabled={loading || totalPending === 0}>
                             <Save className="mr-2 h-4 w-4" /> Salvar Agenda ({totalPending})
                         </Button>
+                        )}
                     </div>
                 </CardContent>
             </Card>
@@ -280,7 +288,7 @@ export function GradeAgendamentosClientPage() {
                                         const allAppointmentsInSlot = [...existingAppointments, ...pendingAppointmentsInSlot];
 
                                         return (
-                                            <td key={day.toISOString()} className="p-1 border align-top hover:bg-green-50 transition-colors cursor-pointer" onClick={() => handleOpenQuickModal(day, time)}>
+                                            <td key={day.toISOString()} className={`p-1 border align-top ${podeAgendar ? 'hover:bg-green-50 transition-colors cursor-pointer' : ''}`} onClick={podeAgendar ? () => handleOpenQuickModal(day, time) : undefined}>
                                                 <div className="space-y-1">
                                                 {allAppointmentsInSlot.map((app, index) => {
                                                     const isExisting = 'id' in app;
@@ -291,7 +299,7 @@ export function GradeAgendamentosClientPage() {
                                                           key={isExisting ? (app as Appointment).id : `${slotKey}-${index}`} 
                                                           className={`p-2 rounded shadow-sm text-xs ${isExisting ? 'bg-white' : 'bg-yellow-100 border-l-4 border-yellow-500'}`}
                                                           onClick={(e) => {
-                                                              if(isExisting) {
+                                                              if(isExisting && podeAgendar) {
                                                                   e.stopPropagation();
                                                                   handleOpenEditModal(app as Appointment);
                                                               }
@@ -315,6 +323,7 @@ export function GradeAgendamentosClientPage() {
                 )}
             </div>
             
+            {podeAgendar && (<>
             <QuickAppointmentModal 
                 isOpen={isQuickModalOpen}
                 onClose={() => setIsQuickModalOpen(false)}
@@ -335,6 +344,7 @@ export function GradeAgendamentosClientPage() {
                 patients={patients}
                 professionals={professionals}
             />
+            </>)}
         </div>
     );
 }

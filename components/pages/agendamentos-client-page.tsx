@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Filter, MoreHorizontal, Sun, Sunset, Moon, Download, Plus, AlertCircle, ChevronDown, CalendarSearch, Clock, User, Mic, Home, DollarSign } from "lucide-react"
+import { Search, Filter, MoreHorizontal, Sun, Sunset, Moon, Download, Plus, AlertCircle, ChevronDown, CalendarSearch, LayoutGrid, Clock, User, Mic, Home, DollarSign } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { 
     getAppointmentsByDate, 
@@ -459,6 +459,20 @@ export function AgendamentosClientPage() {
                         Assistente de Agendamento
                     </DropdownMenuItem>
                   </Link>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            )}
+            {!podeEditar && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="w-full">
+                      <LayoutGrid className="mr-2 h-4 w-4" /> Ver grade <ChevronDown className="ml-2 h-4 w-4" />
+                  </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                  <DropdownMenuItem asChild><Link href="/agendamentos/grade">Grade por paciente</Link></DropdownMenuItem>
+                  <DropdownMenuItem asChild><Link href="/agendamentos/terapia">Grade por terapia</Link></DropdownMenuItem>
+                  <DropdownMenuItem asChild><Link href="/agendamentos/terapeuta">Grade por terapeuta</Link></DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             )}

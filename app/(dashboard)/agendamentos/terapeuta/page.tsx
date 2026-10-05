@@ -20,7 +20,7 @@ export default async function GradeTerapeutaPage({ searchParams }: Props) {
         </Button>
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Grade por Terapeuta</h2>
-          <p className="text-muted-foreground">Visualize os atendimentos semanais e agende diretamente com o profissional.</p>
+          <p className="text-muted-foreground">Veja os atendimentos da semana de cada profissional. A gestão também agenda direto na grade.</p>
         </div>
       </div>
       <GradeTerapeutaClientPage initialProfessionalId={professionalId ?? ""} />

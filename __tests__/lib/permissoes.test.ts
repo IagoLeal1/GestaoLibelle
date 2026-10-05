@@ -34,10 +34,18 @@ describe('telas por papel', () => {
     expect(podeAcessar('/agendamentos/assistente', 'profissional')).toBe(false);
   });
 
-  it('as telas de montar a agenda são só da gestão: o terapeuta só consulta', () => {
-    for (const tela of ['/agendamentos/novo', '/agendamentos/grade', '/agendamentos/terapia', '/agendamentos/terapeuta', '/agendamentos/renovacoes']) {
+  it('montar a agenda é só da gestão', () => {
+    for (const tela of ['/agendamentos/novo', '/agendamentos/renovacoes']) {
       expect(podeAcessar(tela, 'profissional')).toBe(false);
       expect(podeAcessar(tela, 'funcionario')).toBe(true);
+    }
+  });
+
+  it('o terapeuta vê as grades da semana para se organizar', () => {
+    for (const tela of ['/agendamentos/grade', '/agendamentos/terapia', '/agendamentos/terapeuta']) {
+      expect(podeAcessar(tela, 'profissional')).toBe(true);
+      expect(podeAcessar(tela, 'funcionario')).toBe(true);
+      expect(podeAcessar(tela, 'familiar')).toBe(false);
     }
   });
 
