@@ -3,13 +3,7 @@
 // (nunca o código interno dela), o status por extenso e o nome da criança só quando a família
 // tem mais de uma.
 
-export const STATUS_DO_ATENDIMENTO: Record<string, { rotulo: string; classe: string }> = {
-  agendado: { rotulo: "Agendado", classe: "bg-blue-100 text-blue-800" },
-  em_atendimento: { rotulo: "Em atendimento", classe: "bg-orange-100 text-orange-800" },
-  finalizado: { rotulo: "Finalizado", classe: "bg-green-100 text-green-800" },
-  nao_compareceu: { rotulo: "Não compareceu", classe: "bg-red-100 text-red-800" },
-  cancelado: { rotulo: "Cancelado", classe: "bg-gray-100 text-gray-800" },
-};
+import { statusDoAtendimento } from "@/lib/statusDoAtendimento";
 
 export interface AtendimentoDaFamilia {
   id: string;
@@ -50,7 +44,7 @@ export function proximosAtendimentos(
       terapia: a.tipo || "Terapia",
       profissional: a.professionalName || "Profissional",
       crianca: criancas > 1 ? a.patientName : undefined,
-      status: STATUS_DO_ATENDIMENTO[a.status] ?? { rotulo: a.status, classe: STATUS_DO_ATENDIMENTO.cancelado.classe },
+      status: statusDoAtendimento(a.status),
       sala: a.sala ? nomeDaSala.get(a.sala) : undefined,
     }));
 }

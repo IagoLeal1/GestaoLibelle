@@ -1,7 +1,9 @@
 // __tests__/services/dashboardService.test.ts
+// Os números da tela inicial da gestão. Os atendimentos de hoje saem da própria lista do dia; aqui
+// ficam os pacientes e profissionais ativos e, só para o admin (quem aprova), os pedidos de acesso.
 
 import { getAdminDashboardStats } from '@/services/dashboardService';
-import { getCountFromServer, query } from 'firebase/firestore';
+import { getCountFromServer, where } from 'firebase/firestore';
 
 // Simula apenas as funções do Firestore que o serviço realmente utiliza
 jest.mock('firebase/firestore', () => {
@@ -9,19 +11,17 @@ jest.mock('firebase/firestore', () => {
   return {
     ...originalModule,
     collection: jest.fn(),
-    query: jest.fn(),
-    where: jest.fn(),
-    Timestamp: {
-      fromDate: jest.fn((date) => date),
-    },
+    query: jest.fn((...partes) => partes),
+    where: jest.fn((...filtro) => filtro),
     // A simulação mais importante: interceptamos a chamada de contagem
     getCountFromServer: jest.fn(),
   };
 });
+jest.mock('@/lib/firebaseConfig', () => ({ db: {} }));
 
-// Tipos para os mocks
 const mockedGetCountFromServer = getCountFromServer as jest.Mock;
-const mockedQuery = query as jest.Mock;
+const contagem = (count: number) => ({ data: () => ({ count }) });
+const filtros = () => (where as jest.Mock).mock.calls.map(([campo]) => campo);
 
 describe('Dashboard Service', () => {
   beforeEach(() => {
@@ -29,47 +29,34 @@ describe('Dashboard Service', () => {
   });
 
   describe('getAdminDashboardStats', () => {
-    it('should calculate all admin stats correctly', async () => {
-      // --- Arrange (Organização) ---
-      // Dizemos ao mock para retornar um valor diferente a cada vez que for chamado.
-      // A ordem é a mesma que aparece em `Promise.all` no seu serviço.
+    it('para o admin, conta os pacientes e profissionais ativos e os pedidos de acesso', async () => {
       mockedGetCountFromServer
-        .mockResolvedValueOnce({ data: () => ({ count: 15 }) }) // 1. Pacientes Ativos
-        .mockResolvedValueOnce({ data: () => ({ count: 4 }) })  // 2. Profissionais Ativos
-        .mockResolvedValueOnce({ data: () => ({ count: 7 }) })  // 3. Usuários Pendentes
-        .mockResolvedValueOnce({ data: () => ({ count: 2 }) }); // 4. Agendamentos de Hoje
+        .mockResolvedValueOnce(contagem(15)) // pacientes ativos
+        .mockResolvedValueOnce(contagem(4)) // profissionais ativos
+        .mockResolvedValueOnce(contagem(7)); // pedidos de acesso
 
-      // --- Act (Ação) ---
-      const stats = await getAdminDashboardStats();
+      const stats = await getAdminDashboardStats({ comAprovacoes: true });
 
-      // --- Assert (Verificação) ---
-      
-      // O query foi chamado 4 vezes para cada estatística?
-      expect(mockedQuery).toHaveBeenCalledTimes(4);
-
-      // O resultado final bate com os dados que simulamos?
-      expect(stats).toEqual({
-        activePatients: 15,
-        activeProfessionals: 4,
-        pendingUsers: 7,
-        appointmentsToday: 2,
-      });
+      expect(stats).toEqual({ activePatients: 15, activeProfessionals: 4, pendingUsers: 7 });
+      expect(filtros()).toContain('profile.status');
     });
 
-    it('should handle Firestore errors gracefully and return zeros', async () => {
-        // Arrange: Simulamos um erro na chamada ao banco de dados
-        mockedGetCountFromServer.mockRejectedValue(new Error("Firebase permission error"));
-  
-        // Act
-        const stats = await getAdminDashboardStats();
-  
-        // Assert: A função deve capturar o erro e retornar um objeto com zeros
-        expect(stats).toEqual({
-          activePatients: 0,
-          activeProfessionals: 0,
-          pendingUsers: 0,
-          appointmentsToday: 0,
-        });
-      });
+    it('para a coordenação e a recepção, nem busca os pedidos de acesso', async () => {
+      mockedGetCountFromServer.mockResolvedValueOnce(contagem(15)).mockResolvedValueOnce(contagem(4));
+
+      const stats = await getAdminDashboardStats({ comAprovacoes: false });
+
+      expect(stats).toEqual({ activePatients: 15, activeProfessionals: 4, pendingUsers: 0 });
+      expect(mockedGetCountFromServer).toHaveBeenCalledTimes(2);
+      expect(filtros()).not.toContain('profile.status');
+    });
+
+    it('se o banco falhar, mostra zeros em vez de quebrar a tela', async () => {
+      mockedGetCountFromServer.mockRejectedValue(new Error('Firebase permission error'));
+
+      const stats = await getAdminDashboardStats({ comAprovacoes: true });
+
+      expect(stats).toEqual({ activePatients: 0, activeProfessionals: 0, pendingUsers: 0 });
+    });
   });
 });
