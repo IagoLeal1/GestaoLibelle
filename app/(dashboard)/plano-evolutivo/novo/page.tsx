@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ArrowLeft, User, FileText, Brain, Users, Activity, Globe, Target, Save, X, Eye } from "lucide-react"
 import Link from "next/link"
+import { format } from "date-fns"
 
 const pacientes = [
   { id: 1, nome: "Maria Santos Silva", idade: 8 },
@@ -142,7 +143,8 @@ export default function NovoPlanoEvolutivo() {
   const [formData, setFormData] = useState({
     paciente: "",
     profissional: "",
-    dataElaboracao: new Date().toISOString().split("T")[0],
+    // O dia no relógio do aparelho: em UTC, depois das 21h de Brasília já seria amanhã
+    dataElaboracao: format(new Date(), "yyyy-MM-dd"),
     diagnosticoFuncional: "",
     funcoesCorpo: [] as string[],
     observacoesFuncoes: "",

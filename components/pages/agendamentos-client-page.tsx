@@ -32,7 +32,7 @@ import { useAuth } from "@/context/AuthContext";
 import { ehGestao } from "@/lib/permissoes";
 import { MultiSelectFilter, MultiSelectOption } from "@/components/ui/multi-select-filter"
 import Link from "next/link"
-import { format } from "date-fns"
+import { format, parseISO } from "date-fns"
 import { toast } from "sonner" // 🔥 Sonner
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatSpecialtyName } from "@/lib/formatters";
@@ -91,7 +91,8 @@ export function AgendamentosClientPage() {
   const [isPageLoading, setIsPageLoading] = useState(true);
   const [isTableLoading, setIsTableLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  // O dia no relógio do aparelho: em UTC, depois das 21h de Brasília já seria amanhã
+  const [selectedDate, setSelectedDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
   const [searchTerm, setSearchTerm] = useState("");
   const [professionalFilter, setProfessionalFilter] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
@@ -232,8 +233,9 @@ export function AgendamentosClientPage() {
   };
   
   const handleGenerateReport = async (professionalId: string | undefined, patientId: string | undefined, startDateStr: string, endDateStr: string) => {
-    const startDate = new Date(startDateStr);
-    const endDate = new Date(endDateStr);
+    // parseISO lê "2026-10-01" como meia-noite daqui; new Date() leria como meia-noite em UTC (21h da véspera)
+    const startDate = parseISO(startDateStr);
+    const endDate = parseISO(endDateStr);
     const appointmentsToExport = await getAppointmentsForReport({ professionalId, patientId, startDate, endDate });
     if (appointmentsToExport.length === 0) {
       alert("Nenhum agendamento encontrado para os filtros selecionados.");

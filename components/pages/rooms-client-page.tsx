@@ -79,7 +79,8 @@ export function RoomsClientPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [andarSelecionado, setAndarSelecionado] = useState("todos");
   const [tipoSelecionado, setTipoSelecionado] = useState("todos");
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  // O dia no relógio do aparelho: em UTC, depois das 21h de Brasília já seria amanhã
+  const [selectedDate, setSelectedDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -103,7 +104,7 @@ export function RoomsClientPage() {
     const updatedRooms: ProcessedRoom[] = baseRooms.map(room => {
       const appointmentsForRoom = appointments.filter(a => a.sala === room.id && a.status !== 'cancelado');
       const now = new Date();
-      const isToday = selectedDate === new Date().toISOString().split('T')[0];
+      const isToday = selectedDate === format(now, 'yyyy-MM-dd');
       const isCurrentlyOccupied = isToday && appointmentsForRoom.some(a => isWithinInterval(now, { start: a.start.toDate(), end: a.end.toDate() }));
       
       const dynamicStatus = room.status !== 'ativa' ? 'manutencao' : isCurrentlyOccupied ? 'ocupada' : 'livre';

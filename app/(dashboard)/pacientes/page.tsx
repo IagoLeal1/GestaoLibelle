@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/AuthContext";
 import { ehGestao } from "@/lib/permissoes";
+import { format } from "date-fns";
 
 export default function PacientesPage() {
   // Cadastrar criança é da gestão; o terapeuta só consulta
@@ -60,7 +61,8 @@ export default function PacientesPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", `pacientes_${exportFilter}_${new Date().toISOString().split('T')[0]}.csv`);
+    // O dia no relógio do aparelho: em UTC, depois das 21h de Brasília já seria amanhã
+    link.setAttribute("download", `pacientes_${exportFilter}_${format(new Date(), "yyyy-MM-dd")}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
