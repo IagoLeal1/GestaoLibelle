@@ -18,6 +18,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QuickAppointmentModal } from "@/components/modals/quick-appointment-modal";
+import { SemanaNoCelular } from "@/components/agenda/semana-no-celular";
+import { statusDoAtendimento } from "@/lib/statusDoAtendimento";
+import type { ItemDaSemana } from "@/lib/semanaNoCelular";
 
 const CLINIC_TIMES = [
   "07:20", "08:10", "09:00", "09:50", "10:40", "11:30", "12:20",
@@ -191,6 +194,21 @@ export function GradeTerapeutaClientPage({ initialProfessionalId }: Props) {
     return grouped;
   }, [appointments]);
 
+  // No celular, um dia por vez (components/agenda/semana-no-celular)
+  const nomeDaSala = (id?: string) => (id ? rooms.find(room => room.id === id)?.name : undefined);
+  const sessoesDoDia = (dia: Date): ItemDaSemana[] =>
+    appointments
+      .filter(appointment => format(appointment.start.toDate(), "yyyy-MM-dd") === format(dia, "yyyy-MM-dd"))
+      .map(appointment => ({
+        id: appointment.id,
+        hora: format(appointment.start.toDate(), "HH:mm"),
+        fim: format(appointment.end.toDate(), "HH:mm"),
+        titulo: appointment.patientName,
+        detalhe: [formatSpecialtyName(appointment.tipo), nomeDaSala(appointment.sala)].filter(Boolean).join(" · "),
+        status: statusDoAtendimento(appointment.status),
+        marca: appointment.status === "cancelado" ? "cancelada" : undefined,
+      }));
+
   return (
     <div className="space-y-4">
       <Card>
@@ -237,7 +255,15 @@ export function GradeTerapeutaClientPage({ initialProfessionalId }: Props) {
         <p role="alert" className="p-8 text-center text-destructive">Não foi possível carregar os agendamentos desta semana.</p>
       )}
       {selectedProfessional && !loadingAppointments && loadedWeekKey === weekKey && !loadError && (
-        <div className="overflow-x-auto">
+        <>
+        <SemanaNoCelular
+          className="md:hidden"
+          dias={weekDays}
+          horarios={CLINIC_TIMES}
+          itensDoDia={sessoesDoDia}
+          aoAgendar={canCreate ? (dia, hora) => void openSlot(dia, hora) : undefined}
+        />
+        <div className="hidden overflow-x-auto md:block">
           {canCreate && <p className="pb-2 text-xs text-muted-foreground">Clique ou toque em um espaço da grade para agendar.</p>}
           {appointments.length === 0 && (
             <p className="pb-4 text-center text-muted-foreground">Nenhum agendamento nesta semana.</p>
@@ -281,6 +307,7 @@ export function GradeTerapeutaClientPage({ initialProfessionalId }: Props) {
             </tbody>
           </table>
         </div>
+        </>
       )}
       {canCreate && selectedProfessional && (
           <QuickAppointmentModal

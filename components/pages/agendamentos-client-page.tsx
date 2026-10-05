@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Filter, MoreHorizontal, Sun, Sunset, Moon, Download, Plus, AlertCircle, ChevronDown, CalendarSearch, LayoutGrid, Clock, User, Mic, Home, DollarSign } from "lucide-react"
+import { Search, Filter, MoreHorizontal, Sun, Sunset, Moon, Download, Plus, AlertCircle, ChevronDown, ChevronLeft, ChevronRight, CalendarSearch, LayoutGrid } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { 
     getAppointmentsByDate, 
@@ -29,10 +29,13 @@ import { ReportModal } from "@/components/modals/report-modal"
 import { EditAppointmentModal } from "@/components/modals/edit-appointment-modal"
 import { RenewalNotificationButton } from "@/components/features/RenewalNotificationButton";
 import { useAuth } from "@/context/AuthContext";
+import { useEvolucoes } from "@/context/EvolucoesContext";
 import { ehGestao } from "@/lib/permissoes";
+import { nomeDoDia, resumoDoDia } from "@/lib/agendaDoDia";
+import { cn } from "@/lib/utils";
 import { MultiSelectFilter, MultiSelectOption } from "@/components/ui/multi-select-filter"
 import Link from "next/link"
-import { format, parseISO } from "date-fns"
+import { addDays, format, parseISO } from "date-fns"
 import { toast } from "sonner" // 🔥 Sonner
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatSpecialtyName } from "@/lib/formatters";
@@ -84,6 +87,12 @@ export function AgendamentosClientPage() {
   // Só a recepção e a gestão alteram a agenda; o terapeuta consulta (as regras do banco também barram)
   const { firestoreUser } = useAuth();
   const podeEditar = ehGestao(firestoreUser?.profile?.role);
+  // O terapeuta abre nas próprias sessões; a gestão, na clínica toda
+  const ehTerapeuta = firestoreUser?.profile?.role === "profissional";
+  const { professionalId: meuProfissionalId, semCadastro } = useEvolucoes();
+  const [visao, setVisao] = useState<"minhas" | "clinica">(ehTerapeuta ? "minhas" : "clinica");
+  // No celular, os filtros ficam guardados atrás de um botão
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -106,6 +115,8 @@ export function AgendamentosClientPage() {
     const room = rooms.find(r => r.id === roomId);
     return room ? room.name : "Sala Excluída";
   };
+  const salaConhecida = (roomId?: string) => (roomId ? rooms.find(r => r.id === roomId)?.name : undefined);
+  const mudarDia = (dias: number) => setSelectedDate(format(addDays(parseISO(selectedDate), dias), "yyyy-MM-dd"));
 
   const fetchData = useCallback(async (isInitialLoad = false) => {
     if (isInitialLoad) setIsPageLoading(true);
@@ -276,12 +287,18 @@ export function AgendamentosClientPage() {
     document.body.removeChild(link);
   };
 
-  const appointmentsFiltrados = useMemo(() => appointments.filter((appointment) => {
+  const doDia = useMemo(
+    () => (visao === "minhas" ? appointments.filter(appointment => appointment.professionalId === meuProfissionalId) : appointments),
+    [appointments, visao, meuProfissionalId]
+  );
+  const filtrosAtivos = (searchTerm ? 1 : 0) + professionalFilter.length + statusFilter.length;
+
+  const appointmentsFiltrados = useMemo(() => doDia.filter((appointment) => {
     const matchesSearch = appointment.patientName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter.length === 0 || statusFilter.includes(appointment.status);
     const matchesProfessional = professionalFilter.length === 0 || professionalFilter.includes(appointment.professionalId);
     return matchesSearch && matchesStatus && matchesProfessional;
-  }), [appointments, searchTerm, professionalFilter, statusFilter]);
+  }), [doDia, searchTerm, professionalFilter, statusFilter]);
 
   const appointmentsPorPeriodo = {
     manha: appointmentsFiltrados.filter(a => getPeriodoFromDate(a.start.toDate()) === 'manha'),
@@ -393,34 +410,53 @@ export function AgendamentosClientPage() {
         </Table>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:hidden">
+      {/* No celular, cartões compactos: horário, criança, profissional (ou terapia) e sala, status */}
+      <div className="md:hidden">
         {loading ? (
-           Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-40 w-full" />)
+          <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
         ) : agendamentos.length > 0 ? (
-          agendamentos.map(appointment => (
-            <Card key={appointment.id} onClick={podeEditar ? () => handleOpenEditModal(appointment) : undefined} className={podeEditar ? "cursor-pointer" : undefined}>
-                <CardContent className="p-4 space-y-3">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="font-bold">{appointment.patientName}</p>
-                            <p className="text-sm text-muted-foreground">{appointment.professionalName}</p>
-                        </div>
-                        <div className="flex flex-col items-end gap-1">
-                             {getStatusBadge(appointment.status)}
-                             {getStatusSecundarioBadge(appointment.statusSecundario)}
-                        </div>
-                    </div>
-                    <div className="text-sm text-muted-foreground space-y-2 pt-3 border-t">
-                        <div className="flex items-center gap-2"><Mic className="h-4 w-4"/><span>{formatSpecialtyName(appointment.tipo)}</span></div>
-                        <div className="flex items-center gap-2"><Clock className="h-4 w-4"/><span>{format(appointment.start.toDate(), 'HH:mm')} - {format(appointment.end.toDate(), 'HH:mm')}</span></div>
-                        <div className="flex items-center gap-2"><Home className="h-4 w-4"/><span>Sala: {getRoomNameById(appointment.sala)}</span></div>
-                        <div className="flex items-center gap-2"><DollarSign className="h-4 w-4"/><span>{appointment.convenio || 'Particular'}</span></div>
-                    </div>
-                </CardContent>
-            </Card>
-          ))
+          <ul aria-label="Sessões do dia" className="space-y-2">
+            {agendamentos.map(appointment => {
+              const agora = appointment.status === "em_atendimento";
+              const detalhe = [visao === "minhas" ? formatSpecialtyName(appointment.tipo) : appointment.professionalName, salaConhecida(appointment.sala)]
+                .filter(Boolean)
+                .join(" · ");
+              const conteudo = (
+                <>
+                  <div className="w-12 shrink-0">
+                    <p className={cn("text-[15px] font-bold tabular-nums", agora && "text-[#127a7e]")}>{format(appointment.start.toDate(), "HH:mm")}</p>
+                    <p className="text-xs tabular-nums text-muted-foreground">{format(appointment.end.toDate(), "HH:mm")}</p>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-medium">{appointment.patientName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{detalhe}</p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    {getStatusBadge(appointment.status)}
+                    {getStatusSecundarioBadge(appointment.statusSecundario)}
+                  </div>
+                </>
+              );
+              const estilo = cn("flex w-full items-center gap-3 rounded-xl border bg-card p-3 text-left", agora && "border-2 border-primary-teal");
+              return (
+                <li key={appointment.id}>
+                  {podeEditar ? (
+                    <button type="button" onClick={() => handleOpenEditModal(appointment)} className={cn(estilo, "hover:bg-muted/40")}>{conteudo}</button>
+                  ) : (
+                    <div className={estilo}>{conteudo}</div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         ) : (
-          <p className="text-center text-muted-foreground py-8">Nenhum agendamento encontrado.</p>
+          <p className="rounded-xl border border-dashed bg-card py-8 text-center text-sm text-muted-foreground">
+            {visao === "minhas" && semCadastro
+              ? "Não encontramos seu cadastro de profissional. Peça à coordenação para conferir."
+              : visao === "minhas"
+                ? "Nenhuma sessão sua neste dia."
+                : "Nenhum agendamento encontrado."}
+          </p>
         )}
       </div>
     </>
@@ -431,8 +467,47 @@ export function AgendamentosClientPage() {
 
   return (
     <>
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="space-y-4 md:space-y-6">
+        {/* No celular: o título e um botão "⋯" com o relatório e as grades */}
+        <div className="flex items-center justify-between gap-2 md:hidden">
+          <h2 className="text-2xl font-bold tracking-tight">Agendamentos</h2>
+          <div className="flex gap-2">
+            {podeEditar && <RenewalNotificationButton />}
+            {podeEditar && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="icon" className="h-11 w-11" aria-label="Novo agendamento"><Plus className="h-5 w-5" /></Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem asChild><Link href="/agendamentos/novo">Agendamento Único/Sequencial</Link></DropdownMenuItem>
+                  <DropdownMenuItem asChild><Link href="/agendamentos/grade">Agendamento em Grade por paciente</Link></DropdownMenuItem>
+                  <DropdownMenuItem asChild><Link href="/agendamentos/terapia">Agendamento em Grade por terapia</Link></DropdownMenuItem>
+                  <DropdownMenuItem asChild><Link href="/agendamentos/terapeuta">Grade por terapeuta</Link></DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild><Link href="/agendamentos/assistente"><CalendarSearch className="mr-2 h-4 w-4" />Assistente de Agendamento</Link></DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="h-11 w-11" aria-label="Mais opções"><MoreHorizontal className="h-5 w-5" /></Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setIsReportModalOpen(true)}><Download className="mr-2 h-4 w-4" />Exportar relatório</DropdownMenuItem>
+                {!podeEditar && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild><Link href="/agendamentos/grade">Grade por paciente</Link></DropdownMenuItem>
+                    <DropdownMenuItem asChild><Link href="/agendamentos/terapia">Grade por terapia</Link></DropdownMenuItem>
+                    <DropdownMenuItem asChild><Link href="/agendamentos/terapeuta">Grade por terapeuta</Link></DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        <div className="hidden flex-col sm:flex-row justify-between items-start sm:items-center gap-4 md:flex">
           <div>
             <h2 className="text-2xl font-bold tracking-tight">Agendamentos</h2>
             <p className="text-muted-foreground">Gerencie todos os agendamentos da clínica por período</p>
@@ -481,8 +556,40 @@ export function AgendamentosClientPage() {
           </div>
         </div>
         
-        <BlocoDeEstatisticas agendamentos={appointments} />
-        <Card>
+        {ehTerapeuta && (
+          <div role="group" aria-label="O que mostrar" className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1 md:max-w-sm">
+            {([["minhas", "Minhas sessões"], ["clinica", "Clínica toda"]] as const).map(([valor, rotulo]) => (
+              <button
+                key={valor}
+                type="button"
+                aria-pressed={visao === valor}
+                onClick={() => setVisao(valor)}
+                className={cn("h-10 rounded-md text-sm font-medium", visao === valor ? "bg-background font-semibold shadow-sm" : "text-muted-foreground")}
+              >
+                {rotulo}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* No celular: o dia com setas, o resumo numa linha e os filtros guardados */}
+        <div className="flex items-center justify-between gap-2 md:hidden">
+          <Button variant="outline" size="icon" className="h-11 w-11" aria-label="Dia anterior" onClick={() => mudarDia(-1)}><ChevronLeft className="h-5 w-5" /></Button>
+          <div className="text-center">
+            <p className="font-semibold">{nomeDoDia(parseISO(selectedDate), new Date()).titulo}</p>
+            <p className="text-sm text-muted-foreground">{nomeDoDia(parseISO(selectedDate), new Date()).data}</p>
+          </div>
+          <Button variant="outline" size="icon" className="h-11 w-11" aria-label="Próximo dia" onClick={() => mudarDia(1)}><ChevronRight className="h-5 w-5" /></Button>
+        </div>
+        <div className="flex items-center justify-between gap-2 md:hidden">
+          <p className="text-sm text-muted-foreground">{isTableLoading ? "Carregando..." : resumoDoDia(appointmentsFiltrados)}</p>
+          <Button variant="outline" className="h-10 rounded-full" aria-expanded={filtrosAbertos} onClick={() => setFiltrosAbertos(abertos => !abertos)}>
+            <Filter className="mr-1.5 h-4 w-4" />Filtros{filtrosAtivos > 0 && ` (${filtrosAtivos})`}
+          </Button>
+        </div>
+
+        <div className="hidden md:block"><BlocoDeEstatisticas agendamentos={doDia} /></div>
+        <Card className={cn(!filtrosAbertos && "hidden", "md:block")}>
           <CardHeader><CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5" />Filtros</CardTitle></CardHeader>
           <CardContent>
               <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-4 items-end">
@@ -495,13 +602,13 @@ export function AgendamentosClientPage() {
         </Card>
         
         <Tabs value={periodoAtivo} onValueChange={setPeriodoAtivo} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
+          <TabsList className="hidden w-full md:grid md:grid-cols-4">
               <TabsTrigger value="todos">Todos ({appointmentsFiltrados.length})</TabsTrigger>
               <TabsTrigger value="manha" className="gap-1"><Sun className="h-4 w-4" />Manhã ({appointmentsPorPeriodo.manha.length})</TabsTrigger>
               <TabsTrigger value="tarde" className="gap-1"><Sunset className="h-4 w-4" />Tarde ({appointmentsPorPeriodo.tarde.length})</TabsTrigger>
               <TabsTrigger value="noite" className="gap-1"><Moon className="h-4 w-4" />Noite ({appointmentsPorPeriodo.noite.length})</TabsTrigger>
           </TabsList>
-          <TabsContent value="todos" className="mt-4"><Card><CardHeader><CardTitle>Todos os Agendamentos do Dia</CardTitle></CardHeader><CardContent><TabelaDeAgendamentos agendamentos={appointmentsFiltrados} loading={isTableLoading} /></CardContent></Card></TabsContent>
+          <TabsContent value="todos" className="mt-0 md:mt-4"><Card className="border-0 bg-transparent shadow-none md:border md:bg-card md:shadow-sm"><CardHeader className="hidden md:block"><CardTitle>Todos os Agendamentos do Dia</CardTitle></CardHeader><CardContent className="p-0 md:p-6"><TabelaDeAgendamentos agendamentos={appointmentsFiltrados} loading={isTableLoading} /></CardContent></Card></TabsContent>
           {["manha", "tarde", "noite"].map((periodo) => {
             const dataPeriodo = appointmentsPorPeriodo[periodo as keyof typeof appointmentsPorPeriodo];
             return (
@@ -515,6 +622,12 @@ export function AgendamentosClientPage() {
             )
           })}
         </Tabs>
+
+        {ehTerapeuta && (
+          <Button asChild variant="outline" className="h-12 w-full md:hidden">
+            <Link href="/agendamentos/terapeuta"><LayoutGrid className="mr-2 h-4 w-4" />Ver minha semana na grade</Link>
+          </Button>
+        )}
       </div>
 
       <ReportModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} onGenerate={handleGenerateReport} patients={patients} professionals={professionals} />

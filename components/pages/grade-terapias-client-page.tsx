@@ -14,6 +14,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandInput, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { QuickAppointmentModal } from "@/components/modals/quick-appointment-modal";
+import { SemanaNoCelular } from "@/components/agenda/semana-no-celular";
+import { statusDoAtendimento } from "@/lib/statusDoAtendimento";
+import type { ItemDaSemana } from "@/lib/semanaNoCelular";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 
@@ -190,6 +193,20 @@ export function GradeTerapiasClientPage() {
         return colorMap;
     }, [professionals]);
 
+    // No celular, um dia por vez (components/agenda/semana-no-celular)
+    const sessoesDoDia = (dia: Date): ItemDaSemana[] =>
+        appointments
+            .filter(app => format(app.start.toDate(), 'yyyy-MM-dd') === format(dia, 'yyyy-MM-dd'))
+            .map(app => ({
+                id: app.id,
+                hora: format(app.start.toDate(), 'HH:mm'),
+                fim: format(app.end.toDate(), 'HH:mm'),
+                titulo: app.patientName,
+                detalhe: [app.professionalName, app.sala ? roomNameMap.get(app.sala) : undefined].filter(Boolean).join(' · '),
+                status: statusDoAtendimento(app.status),
+                marca: app.status === 'cancelado' ? 'cancelada' : undefined,
+            }));
+
     const visibleProfessionals = useMemo(() => {
         if (!selectedTherapyGroup) return [];
         const visibleIds = new Set(appointments.map(a => a.professionalId));
@@ -224,12 +241,19 @@ export function GradeTerapiasClientPage() {
 
             <div className="overflow-x-auto">
                 {!selectedTherapyGroup && <p className="text-center text-muted-foreground p-8">Selecione uma terapia para ver a grade.</p>}
-                {canCreate && selectedTherapyGroup && !loadingInitial && !loadingWeek && !weekError && <p className="pb-2 text-xs text-muted-foreground">Clique ou toque em um espaço da grade para agendar.</p>}
+                {canCreate && selectedTherapyGroup && !loadingInitial && !loadingWeek && !weekError && <p className="hidden pb-2 text-xs text-muted-foreground md:block">Clique ou toque em um espaço da grade para agendar.</p>}
                 {(loadingInitial || loadingWeek) && selectedTherapyGroup && <Skeleton className="h-[calc(13*6rem)] w-full"/>}
                 {!loadingInitial && !loadingWeek && weekError && selectedTherapyGroup && <p role="alert" className="text-center text-destructive p-8">Não foi possível carregar a grade. Tente mudar de semana e voltar.</p>}
                 {!loadingInitial && !loadingWeek && !weekError && selectedTherapyGroup && appointments.length === 0 && <p className="text-center text-muted-foreground p-4">Nenhum agendamento nesta semana.{canCreate ? ' Você pode adicionar um pelo horário desejado.' : ''}</p>}
-                {!loadingInitial && !loadingWeek && !weekError && selectedTherapyGroup && (
-                    <table className="w-full min-w-[900px] border-collapse">
+                {!loadingInitial && !loadingWeek && !weekError && selectedTherapyGroup && (<>
+                    <SemanaNoCelular
+                        className="md:hidden"
+                        dias={weekDays}
+                        horarios={timeSlots}
+                        itensDoDia={sessoesDoDia}
+                        aoAgendar={canCreate ? (dia, hora) => openSlot(dia, hora) : undefined}
+                    />
+                    <table className="hidden w-full min-w-[900px] border-collapse md:table">
                         <thead><tr className="bg-muted"><th className="p-2 border w-24">Horário</th>{weekDays.map(day => (<th key={day.toISOString()} className="p-2 border text-center capitalize">{format(day, 'EEEE', { locale: ptBR })} <br/><span className="font-normal text-sm">{format(day, 'dd/MM')}</span></th>))}</tr></thead>
                         <tbody>
                             {timeSlots.map(time => {
@@ -272,7 +296,7 @@ export function GradeTerapiasClientPage() {
                             })}
                         </tbody>
                     </table>
-                )}
+                </>)}
             </div>
             {canCreate && (
                     <QuickAppointmentModal

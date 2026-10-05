@@ -16,6 +16,9 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QuickAppointmentModal } from "@/components/modals/quick-appointment-modal";
 import { EditAppointmentModal } from "@/components/modals/edit-appointment-modal";
+import { SemanaNoCelular } from "@/components/agenda/semana-no-celular";
+import { statusDoAtendimento } from "@/lib/statusDoAtendimento";
+import type { ItemDaSemana } from "@/lib/semanaNoCelular";
 import { formatSpecialtyName } from "@/lib/formatters";
 import { ehGestao } from "@/lib/permissoes";
 import { useAuth } from "@/context/AuthContext";
@@ -230,6 +233,37 @@ export function GradeAgendamentosClientPage() {
     const totalPending = Array.from(pendingAppointments.values()).flat().length;
     const weekLabel = `${format(weekDays[0], 'd MMM', { locale: ptBR })} - ${format(weekDays[6], 'd MMM yyyy', { locale: ptBR })}`;
 
+    // No celular, um dia por vez (components/agenda/semana-no-celular): as sessões salvas e as que a
+    // recepção montou na grade e ainda não salvou (pendentes)
+    const nomeDaSala = (id?: string) => (id ? rooms.find(r => r.id === id)?.name : undefined);
+    const nomeDoProfissional = (id: string) => professionals.find(p => p.id === id)?.fullName ?? "";
+    const terapiasDoDia = (dia: Date): ItemDaSemana[] => {
+        const diaKey = format(dia, 'yyyy-MM-dd');
+        const salvas: ItemDaSemana[] = appointments
+            .filter(a => format(a.start.toDate(), 'yyyy-MM-dd') === diaKey)
+            .map(a => ({
+                id: a.id,
+                hora: format(a.start.toDate(), 'HH:mm'),
+                fim: format(a.end.toDate(), 'HH:mm'),
+                titulo: formatSpecialtyName(a.tipo),
+                detalhe: [nomeDoProfissional(a.professionalId), nomeDaSala(a.sala)].filter(Boolean).join(' · '),
+                status: statusDoAtendimento(a.status),
+                marca: a.status === 'cancelado' ? 'cancelada' : undefined,
+                aoTocar: podeAgendar ? () => handleOpenEditModal(a) : undefined,
+            }));
+        const pendentes: ItemDaSemana[] = Array.from(pendingAppointments.entries())
+            .filter(([slotKey]) => slotKey.startsWith(`${diaKey}-`))
+            .flatMap(([slotKey, lista]) => lista.map((app, indice) => ({
+                id: `${slotKey}-${indice}`,
+                hora: slotKey.slice(diaKey.length + 1).replace('-', ':'),
+                fim: format(app.end, 'HH:mm'),
+                titulo: formatSpecialtyName(app.specialty),
+                detalhe: [nomeDoProfissional(app.professionalId), nomeDaSala(app.roomId)].filter(Boolean).join(' · '),
+                marca: 'pendente' as const,
+            })));
+        return [...salvas, ...pendentes];
+    };
+
     return (
         <div className="space-y-4">
             <Card>
@@ -261,8 +295,15 @@ export function GradeAgendamentosClientPage() {
             <div className="overflow-x-auto">
                 {loading && !selectedPatientId ? <p className="text-center text-muted-foreground p-8">Selecione um paciente para ver a grade.</p> : null}
                 {loading && selectedPatientId ? <Skeleton className="h-96 w-full"/> : (
-                    selectedPatientId &&
-                    <table className="w-full border-collapse">
+                    selectedPatientId && <>
+                    <SemanaNoCelular
+                        className="md:hidden"
+                        dias={weekDays}
+                        horarios={HORARIOS_CLINICA}
+                        itensDoDia={terapiasDoDia}
+                        aoAgendar={podeAgendar ? (dia, hora) => handleOpenQuickModal(dia, hora) : undefined}
+                    />
+                    <table className="hidden w-full border-collapse md:table">
                         <thead>
                             <tr className="bg-muted">
                                 <th className="p-2 border w-32">Horário</th>
@@ -320,6 +361,7 @@ export function GradeAgendamentosClientPage() {
                             ))}
                         </tbody>
                     </table>
+                    </>
                 )}
             </div>
             
