@@ -2,13 +2,14 @@
 
 import {
   Calendar, DollarSign, FileText, Home, MessageSquare, Users, UserCheck,
-  CheckCircle, UserPlus, Megaphone, MapPin, BadgeDollarSign, TrendingUp, MessagesSquare
+  CheckCircle, UserPlus, Megaphone, MapPin, BadgeDollarSign, TrendingUp, MessagesSquare, NotebookPen
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import Image from "next/image"
 import { useAuth } from "@/context/AuthContext"
 import { useConversas } from "@/hooks/use-conversas"
+import { useEvolucoes } from "@/context/EvolucoesContext"
 import { PAPEIS_POR_TELA } from "@/lib/permissoes"
 
 import {
@@ -22,6 +23,7 @@ const menuItems = [
   { title: "Agendamentos", url: "/agendamentos", icon: Calendar, roles: PAPEIS_POR_TELA["/agendamentos"] },
   { title: "Mapeamento de Salas", url: "/mapeamento-salas", icon: MapPin, roles: PAPEIS_POR_TELA["/mapeamento-salas"] },
   { title: "Pacientes", url: "/pacientes", icon: Users, roles: PAPEIS_POR_TELA["/pacientes"] },
+  { title: "Evoluções", url: "/evolucoes", icon: NotebookPen, roles: PAPEIS_POR_TELA["/evolucoes"] },
   { title: "Profissionais", url: "/profissionais", icon: UserCheck, roles: PAPEIS_POR_TELA["/profissionais"] },
   { title: "Especialidades", url: "/especialidades", icon: BadgeDollarSign, roles: PAPEIS_POR_TELA["/especialidades"] },
   { title: "Financeiro", url: "/financeiro", icon: DollarSign, roles: PAPEIS_POR_TELA["/financeiro"] },
@@ -41,6 +43,9 @@ export function AppSidebar() {
   const { setOpenMobile } = useSidebar(); // <-- USE O HOOK AQUI
   // Só as conversas de que a pessoa participa: é o que o número do menu conta
   const { naoLidas: conversasNaoLidas } = useConversas({ incluirSupervisao: false })
+  // O terapeuta vê no menu quantas evoluções faltam escrever (a coordenação acompanha na página)
+  const { escopo, pendentes } = useEvolucoes()
+  const evolucoesParaEscrever = escopo === "terapeuta" ? pendentes.length : 0
 
   const accessibleItems = menuItems.filter(item => {
     if (!firestoreUser?.profile) return false;
@@ -71,6 +76,14 @@ export function AppSidebar() {
                       {/* --- LÓGICA DA NOTIFICAÇÃO --- */}
                       {item.url === "/comunicacao" && unreadCount > 0 && (
                         <span className="h-2 w-2 rounded-full bg-red-500" />
+                      )}
+                      {item.url === "/evolucoes" && evolucoesParaEscrever > 0 && (
+                        <span
+                          aria-label={`${evolucoesParaEscrever} evoluções para escrever`}
+                          className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-xs font-bold text-white"
+                        >
+                          {evolucoesParaEscrever}
+                        </span>
                       )}
                       {item.title === "Mensagens" && conversasNaoLidas > 0 && (
                         <span

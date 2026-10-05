@@ -8,12 +8,14 @@ import { AdminDashboard } from '@/components/dashboards/AdminDashboard';
 import { useAuth } from '@/context/AuthContext';
 import { getAppointmentsByDate } from '@/services/appointmentService';
 import { getAdminDashboardStats } from '@/services/dashboardService';
+import { useEvolucoes } from '@/context/EvolucoesContext';
 
 jest.mock('@/context/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('@/services/appointmentService', () => ({ getAppointmentsByDate: jest.fn() }));
 jest.mock('@/services/roomService', () => ({ getRooms: jest.fn().mockResolvedValue([{ id: 'k2Xb9', name: 'Sala Azul' }]) }));
 jest.mock('@/services/dashboardService', () => ({ getAdminDashboardStats: jest.fn() }));
 jest.mock('@/components/dashboard/communications-widget', () => ({ CommunicationsWidget: () => null }));
+jest.mock('@/context/EvolucoesContext', () => ({ useEvolucoes: jest.fn() }));
 
 const entrarComo = (role: string) =>
   (useAuth as jest.Mock).mockReturnValue({ firestoreUser: { displayName: 'Carla Coordenadora', profile: { role } } });
@@ -35,6 +37,7 @@ const atendimento = (paciente: string, hora: number, status = 'agendado', extra:
 
 beforeEach(() => {
   jest.clearAllMocks();
+  (useEvolucoes as jest.Mock).mockReturnValue({ escopo: 'equipe', pendentes: [] });
   entrarComo('coordenador');
   (getAppointmentsByDate as jest.Mock).mockResolvedValue([]);
   (getAdminDashboardStats as jest.Mock).mockResolvedValue({ activePatients: 12, activeProfessionals: 5, pendingUsers: 2 });
@@ -103,4 +106,27 @@ it.each(['coordenador', 'funcionario'])('%s não vê pedidos de acesso, que só 
   await screen.findByRole('group', { name: 'Pacientes ativos' });
   expect(getAdminDashboardStats).toHaveBeenCalledWith({ comAprovacoes: false });
   expect(screen.queryByText(/pedido.* de acesso/)).not.toBeInTheDocument();
+});
+
+it('a coordenação vê quantas evoluções da equipe estão atrasadas, e o aviso leva à página de evoluções', async () => {
+  (useEvolucoes as jest.Mock).mockReturnValue({
+    escopo: 'equipe',
+    pendentes: [{ diasDeAtraso: 3 }, { diasDeAtraso: 1 }, { diasDeAtraso: 0 }],
+  });
+
+  render(<AdminDashboard />);
+
+  // As de hoje ainda não estão atrasadas: só contam as dos dias anteriores
+  const aviso = await screen.findByRole('link', { name: /2 evoluções atrasadas na equipe/ });
+  expect(aviso).toHaveAttribute('href', '/evolucoes');
+});
+
+it('a recepção não vê aviso de evoluções', async () => {
+  entrarComo('funcionario');
+  (useEvolucoes as jest.Mock).mockReturnValue({ escopo: null, pendentes: [] });
+
+  render(<AdminDashboard />);
+
+  await screen.findByRole('group', { name: 'Pacientes ativos' });
+  expect(screen.queryByText(/evoluç/)).not.toBeInTheDocument();
 });

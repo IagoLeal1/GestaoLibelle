@@ -49,6 +49,11 @@ describe('telas por papel', () => {
     }
   });
 
+  it('as evoluções são do admin, da coordenação e dos terapeutas; a recepção e a família não abrem', () => {
+    for (const papel of ['admin', 'coordenador', 'profissional']) expect(podeAcessar('/evolucoes', papel)).toBe(true);
+    for (const papel of ['funcionario', 'familiar']) expect(podeAcessar('/evolucoes', papel)).toBe(false);
+  });
+
   it('todos abrem o início, a comunicação, as mensagens e a própria conta', () => {
     for (const papel of ['admin', 'coordenador', 'funcionario', 'profissional', 'familiar']) {
       expect(podeAcessar('/', papel)).toBe(true);

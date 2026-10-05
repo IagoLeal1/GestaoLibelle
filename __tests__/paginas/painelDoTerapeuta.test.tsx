@@ -8,12 +8,14 @@ import { ProfessionalDashboard } from '@/components/dashboards/ProfessionalDashb
 import { useAuth } from '@/context/AuthContext';
 import { getAppointmentsByProfessional } from '@/services/appointmentService';
 import { getProfessionals } from '@/services/professionalService';
+import { useEvolucoes } from '@/context/EvolucoesContext';
 
 jest.mock('@/context/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('@/services/appointmentService', () => ({ getAppointmentsByProfessional: jest.fn() }));
 jest.mock('@/services/professionalService', () => ({ getProfessionals: jest.fn() }));
 jest.mock('@/services/roomService', () => ({ getRooms: jest.fn().mockResolvedValue([]) }));
 jest.mock('@/components/dashboard/communications-widget', () => ({ CommunicationsWidget: () => null }));
+jest.mock('@/context/EvolucoesContext', () => ({ useEvolucoes: jest.fn() }));
 
 const entrarComo = (uid: string, profile: Record<string, unknown>) =>
   (useAuth as jest.Mock).mockReturnValue({ firestoreUser: { uid, displayName: 'Paula Fonoaudióloga', profile: { role: 'profissional', ...profile } } });
@@ -36,6 +38,7 @@ const agendaBuscada = () => (getAppointmentsByProfessional as jest.Mock).mock.ca
 
 beforeEach(() => {
   jest.clearAllMocks();
+  (useEvolucoes as jest.Mock).mockReturnValue({ pendentes: [] });
   entrarComo('paula-uid', { professionalId: 'prof-paula' });
   (getAppointmentsByProfessional as jest.Mock).mockResolvedValue([]);
   (getProfessionals as jest.Mock).mockResolvedValue([
@@ -82,4 +85,22 @@ it('sem cadastro de profissional, avisa em vez de dizer que não há atendimento
 
   expect(await screen.findByText(/não encontramos seu cadastro de profissional/i)).toBeInTheDocument();
   expect(getAppointmentsByProfessional).not.toHaveBeenCalled();
+});
+
+it('com evoluções para escrever, o aviso leva à página de evoluções e diz a mais antiga', async () => {
+  const sessao = (dia: number) => ({ sessao: { id: `s${dia}`, start: new Date(2026, 9, dia, 9) }, diasDeAtraso: 12 - dia });
+  (useEvolucoes as jest.Mock).mockReturnValue({ pendentes: [sessao(8), sessao(12)] });
+
+  render(<ProfessionalDashboard />);
+
+  const aviso = await screen.findByRole('link', { name: /2 evoluções para escrever/ });
+  expect(aviso).toHaveAttribute('href', '/evolucoes');
+  expect(aviso).toHaveTextContent('a mais antiga é de qui, 08/10');
+});
+
+it('sem pendências, não aparece aviso de evoluções', async () => {
+  render(<ProfessionalDashboard />);
+
+  await waitFor(() => expect(getAppointmentsByProfessional).toHaveBeenCalled());
+  expect(screen.queryByText(/evoluç/)).not.toBeInTheDocument();
 });

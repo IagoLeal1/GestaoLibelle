@@ -6,6 +6,7 @@ import { AuthGuard } from "@/components/auth/auth-guard";
 import { RoleGuard } from "@/components/auth/role-guard";
 import { Toaster } from "sonner";
 import { Toaster as ToasterShadcn } from "@/components/ui/toaster";
+import { EvolucoesProvider } from "@/context/EvolucoesContext";
 
 export default function DashboardLayout({
   children,
@@ -14,17 +15,20 @@ export default function DashboardLayout({
 }) {
   return (
     <AuthGuard>
-      <SidebarProvider>
-        <AppSidebar />
-        {/* min-w-0: conteúdo largo (texto longo que só corta com "…") não alarga a página no celular */}
-        <SidebarInset className="min-w-0">
-          <Header />
-          {/* Altura da tela menos o cabeçalho (h-16): sem rolagem sobrando nas telas curtas */}
-          <main className="p-4 sm:p-6 bg-support-light-gray min-h-[calc(100dvh-4rem)]">
-            <RoleGuard>{children}</RoleGuard>
-          </main>
-        </SidebarInset>
-      </SidebarProvider>
+      {/* As evoluções por escrever: o menu, as telas iniciais e a página de evoluções leem daqui */}
+      <EvolucoesProvider>
+        <SidebarProvider>
+          <AppSidebar />
+          {/* min-w-0: conteúdo largo (texto longo que só corta com "…") não alarga a página no celular */}
+          <SidebarInset className="min-w-0">
+            <Header />
+            {/* Altura da tela menos o cabeçalho (h-16): sem rolagem sobrando nas telas curtas */}
+            <main className="p-4 sm:p-6 bg-support-light-gray min-h-[calc(100dvh-4rem)]">
+              <RoleGuard>{children}</RoleGuard>
+            </main>
+          </SidebarInset>
+        </SidebarProvider>
+      </EvolucoesProvider>
       {/* Avisos (toast) de todas as telas do painel: sonner e o do shadcn (Minha conta, Gerenciar usuários) */}
       <Toaster richColors />
       <ToasterShadcn />

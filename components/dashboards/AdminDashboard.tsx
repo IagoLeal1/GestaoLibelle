@@ -1,14 +1,14 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { Calendar, ChevronRight, UserCheck, UserPlus, Users } from "lucide-react";
+import { useEvolucoes } from "@/context/EvolucoesContext";
+import { Calendar, NotebookPen, UserCheck, UserPlus, Users } from "lucide-react";
 import { getAppointmentsByDate, Appointment } from "@/services/appointmentService";
 import { getRooms, Room } from "@/services/roomService";
 import { AdminDashboardStats, getAdminDashboardStats } from "@/services/dashboardService";
 import { CommunicationsWidget } from "@/components/dashboard/communications-widget";
-import { AgoraEASeguir, Numero, useAgora } from "@/components/dashboards/comum";
+import { AgoraEASeguir, AvisoDeAtencao, Numero, useAgora } from "@/components/dashboards/comum";
 import { agendaDeHoje, numerosDoDia } from "@/lib/telaInicial";
 import { format } from "date-fns";
 
@@ -18,19 +18,18 @@ const PROXIMOS = 6;
 /** Só para o admin, e só quando há alguém esperando: leva direto à tela de aprovação. */
 function PedidosDeAcesso({ quantos }: { quantos: number }) {
   return (
-    <Link
-      href="/admin/usuarios"
-      className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200 dark:hover:bg-amber-950/50"
-    >
-      <UserPlus className="h-4 w-4 shrink-0" />
-      <span className="min-w-0 flex-1">
-        {quantos === 1 ? "1 pedido de acesso esperando sua aprovação" : `${quantos} pedidos de acesso esperando sua aprovação`}
-      </span>
-      <span className="flex shrink-0 items-center font-medium">
-        Ver
-        <ChevronRight className="h-4 w-4" />
-      </span>
-    </Link>
+    <AvisoDeAtencao href="/admin/usuarios" icone={UserPlus}>
+      {quantos === 1 ? "1 pedido de acesso esperando sua aprovação" : `${quantos} pedidos de acesso esperando sua aprovação`}
+    </AvisoDeAtencao>
+  );
+}
+
+/** Para o admin e a coordenação: as evoluções da equipe que ficaram de dias anteriores. */
+function EvolucoesAtrasadas({ quantas }: { quantas: number }) {
+  return (
+    <AvisoDeAtencao href="/evolucoes" icone={NotebookPen}>
+      {quantas === 1 ? "1 evolução atrasada na equipe" : `${quantas} evoluções atrasadas na equipe`}
+    </AvisoDeAtencao>
   );
 }
 
@@ -39,6 +38,9 @@ export function AdminDashboard() {
   // Só o admin aprova pedidos de acesso: para a coordenação e a recepção, nem buscamos
   const ehAdmin = firestoreUser?.profile.role === 'admin';
   const agora = useAgora();
+  // As de hoje ainda podem ser escritas no fim do dia: o aviso conta só as dos dias anteriores
+  const { escopo, pendentes } = useEvolucoes();
+  const evolucoesAtrasadas = escopo === "equipe" ? pendentes.filter((p) => p.diasDeAtraso > 0).length : 0;
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [stats, setStats] = useState<AdminDashboardStats>({ activePatients: 0, activeProfessionals: 0, pendingUsers: 0 });
@@ -80,6 +82,7 @@ export function AdminDashboard() {
       </div>
 
       {ehAdmin && stats.pendingUsers > 0 && <PedidosDeAcesso quantos={stats.pendingUsers} />}
+      {evolucoesAtrasadas > 0 && <EvolucoesAtrasadas quantas={evolucoesAtrasadas} />}
 
       <div className="grid grid-cols-3 gap-2 sm:gap-4">
         <Numero titulo="Pacientes ativos" valor={stats.activePatients} icone={Users} carregando={loading} />

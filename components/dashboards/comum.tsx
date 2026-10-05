@@ -3,6 +3,7 @@
 // Peças das telas iniciais da gestão e do terapeuta: os números do dia e a lista "Agora e a seguir".
 import { useEffect, useId, useState } from "react";
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,8 +21,25 @@ export function useAgora() {
   return agora;
 }
 
+/** Um aviso que pede uma ação, com o caminho para resolver (só aparece quando há algo a fazer). */
+export function AvisoDeAtencao({ href, icone: Icone, acao = "Ver", children }: { href: string; icone: React.ElementType; acao?: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200 dark:hover:bg-amber-950/50"
+    >
+      <Icone className="h-4 w-4 shrink-0" />
+      <span className="min-w-0 flex-1">{children}</span>
+      <span className="flex shrink-0 items-center font-medium">
+        {acao}
+        <ChevronRight className="h-4 w-4" />
+      </span>
+    </Link>
+  )
+}
+
 /** Número compacto: três cabem numa linha no celular. */
-export function Numero({ titulo, valor, icone: Icone, carregando }: { titulo: string; valor: number; icone: React.ElementType; carregando: boolean }) {
+export function Numero({ titulo, valor, icone: Icone, carregando }: { titulo: string; valor: number | string; icone: React.ElementType; carregando: boolean }) {
   return (
     <Card role="group" aria-label={titulo}>
       <CardContent className="flex h-full flex-col justify-between gap-1 p-3 sm:p-5">

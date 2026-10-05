@@ -2,18 +2,37 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { Calendar, CheckCircle, XCircle } from "lucide-react";
+import { useEvolucoes } from "@/context/EvolucoesContext";
+import { Calendar, CheckCircle, NotebookPen, XCircle } from "lucide-react";
 import { getAppointmentsByProfessional, Appointment } from "@/services/appointmentService";
 import { getProfessionals } from "@/services/professionalService";
 import { getRooms, Room } from "@/services/roomService";
 import { CommunicationsWidget } from "@/components/dashboard/communications-widget";
-import { AgoraEASeguir, Numero, useAgora } from "@/components/dashboards/comum";
+import { AgoraEASeguir, AvisoDeAtencao, Numero, useAgora } from "@/components/dashboards/comum";
 import { agendaDeHoje, numerosDoDia } from "@/lib/telaInicial";
+import type { Pendencia } from "@/lib/evolucoes";
+
+const diaDaSessao = (data: Date) =>
+  `${new Intl.DateTimeFormat("pt-BR", { weekday: "short" }).format(data).replace(/\.$/, "")}, ${new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(data)}`;
+
+/** Lembra o terapeuta das evoluções que faltam, toda vez que ele entra, até escrever. */
+function EvolucoesParaEscrever({ pendentes }: { pendentes: Pendencia[] }) {
+  const [maisAntiga] = pendentes;
+  const quando = maisAntiga.diasDeAtraso === 0 ? "hoje" : diaDaSessao(maisAntiga.sessao.start);
+  return (
+    <AvisoDeAtencao href="/evolucoes" icone={NotebookPen} acao="Escrever">
+      {pendentes.length === 1
+        ? `1 evolução para escrever, da sessão de ${quando}`
+        : `${pendentes.length} evoluções para escrever · a mais antiga é de ${quando}`}
+    </AvisoDeAtencao>
+  );
+}
 import { format } from "date-fns";
 
 export function ProfessionalDashboard() {
   const { firestoreUser } = useAuth();
   const agora = useAgora();
+  const { pendentes } = useEvolucoes();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [semCadastro, setSemCadastro] = useState(false);
@@ -62,6 +81,8 @@ export function ProfessionalDashboard() {
             Aqui está um resumo dos seus atendimentos de hoje.
         </p>
       </div>
+
+      {pendentes.length > 0 && <EvolucoesParaEscrever pendentes={pendentes} />}
 
       <div className="grid grid-cols-3 gap-2 sm:gap-4">
         <Numero titulo="Atendimentos hoje" valor={numeros.hoje} icone={Calendar} carregando={loading} />

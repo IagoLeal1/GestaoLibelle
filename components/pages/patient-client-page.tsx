@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 // Adicione Dispatch e SetStateAction aqui
 import { Dispatch, SetStateAction } from "react" 
-import { Search, Filter, MoreHorizontal, User, Phone, MapPin, MessageSquareText } from "lucide-react"
+import { Search, Filter, MoreHorizontal, User, Phone, MapPin, MessageSquareText, NotebookPen } from "lucide-react"
 import { Timestamp } from "firebase/firestore"
 import { Patient, updatePatientStatus } from "@/services/patientService"
 import { Button } from "@/components/ui/button"
@@ -18,7 +18,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { PatientObservations } from "@/components/patients/patient-observations"
 import { useAuth } from "@/context/AuthContext";
-import { ehGestao } from "@/lib/permissoes";
+import { ehGestao, podeAcessar } from "@/lib/permissoes";
 
 // --- 1. DEFINIÇÃO DA INTERFACE DAS PROPS ---
 interface PatientClientPageProps {
@@ -118,6 +118,8 @@ const formatDate = (date?: Timestamp) => {
 export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: PatientClientPageProps) {
   const { firestoreUser } = useAuth();
   const podeEditar = ehGestao(firestoreUser?.profile?.role);
+  // As evoluções são dados de saúde: a recepção não lê (lib/permissoes)
+  const podeLerEvolucoes = podeAcessar("/evolucoes", firestoreUser?.profile?.role);
   const [searchTerm, setSearchTerm] = useState("");
   const [sexoFilter, setSexoFilter] = useState("todos");
   const [statusFilter, setStatusFilter] = useState("todos");
@@ -343,6 +345,16 @@ export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: 
                         <div><Label className="text-sm font-medium text-gray-500">CEP</Label><p>{pacienteSelecionado.cep || "Não informado"}</p></div>
                     </div></CardContent>
                 </Card>
+                {podeLerEvolucoes && (
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+                      <CardTitle className="flex items-center gap-2"><NotebookPen /> Evoluções</CardTitle>
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={`/evolucoes?crianca=${encodeURIComponent(pacienteSelecionado.id)}`}>Ver evoluções</Link>
+                      </Button>
+                    </CardHeader>
+                  </Card>
+                )}
                 <Card>
                     <CardHeader><CardTitle className="flex items-center gap-2"><MessageSquareText /> Observações Adicionais</CardTitle></CardHeader>
                     <CardContent>
