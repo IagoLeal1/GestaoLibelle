@@ -16,7 +16,7 @@ jest.mock('@/services/appointmentService', () => ({
 }));
 jest.mock('@/services/patientService', () => ({ getPatients: jest.fn() }));
 jest.mock('@/services/specialtyService', () => ({ getSpecialties: jest.fn() }));
-jest.mock('@/services/roomService', () => ({ getRooms: jest.fn() }));
+jest.mock('@/services/roomService', () => ({ getRooms: jest.fn().mockResolvedValue([]) }));
 jest.mock('@/components/modals/quick-appointment-modal', () => ({ QuickAppointmentModal: () => null }));
 
 const entrarComo = (uid: string, profile: Record<string, unknown>) =>

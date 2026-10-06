@@ -67,7 +67,8 @@ export function SemanaNoCelular({ dias, horarios, itensDoDia, aoAgendar, classNa
     <div className={cn("space-y-3", className)}>
       <div role="group" aria-label="Dia da semana" className="grid grid-cols-7 gap-1.5">
         {dias.map((d, i) => {
-          const semana = format(d, "EEE", { locale: ptBR }).replace(".", "");
+          // As três primeiras letras ("seg", "sáb"): o nome inteiro não cabe no botão do celular
+          const semana = format(d, "EEEE", { locale: ptBR }).slice(0, 3);
           const numero = format(d, "dd");
           return (
             <button

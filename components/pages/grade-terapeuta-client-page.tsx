@@ -67,6 +67,10 @@ export function GradeTerapeutaClientPage({ initialProfessionalId }: Props) {
     }).finally(() => {
       if (active) setLoadingProfessionals(false);
     });
+    // As salas aparecem em cada sessão (no celular, "Fonoaudiologia · Sala Azul") para todo mundo
+    getRooms().then(data => {
+      if (active) setRooms(data);
+    }).catch(error => console.error("Erro ao carregar salas:", error));
     return () => { active = false; };
   }, []);
 

@@ -28,6 +28,14 @@ it('abre no dia de hoje e troca de dia pelos botões', () => {
   expect(screen.queryByText('Bia Lima')).not.toBeInTheDocument();
 });
 
+it('os botões dos dias mostram o nome curto, que cabe no celular', () => {
+  jest.useFakeTimers({ now: new Date(2026, 9, 5, 10, 0) });
+  render(<SemanaNoCelular dias={SEMANA} horarios={HORARIOS} itensDoDia={itensDoDia} />);
+
+  const dias = screen.getAllByRole('button', { pressed: undefined }).filter((b) => b.closest('[aria-label="Dia da semana"]'));
+  expect(dias.map((b) => b.textContent)).toEqual(['seg05', 'ter06', 'qua07', 'qui08', 'sex09', 'sáb10', 'dom11']);
+});
+
 it('dia sem sessões avisa', () => {
   jest.useFakeTimers({ now: new Date(2026, 9, 7, 10, 0) });
   render(<SemanaNoCelular dias={SEMANA} horarios={HORARIOS} itensDoDia={itensDoDia} />);
