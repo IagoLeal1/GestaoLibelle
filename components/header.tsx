@@ -12,6 +12,7 @@ import Link from "next/link"
 import { useAuth } from "@/context/AuthContext"
 import { auth } from "@/lib/firebaseConfig"
 import { useRouter } from "next/navigation"
+import { BotaoInstalarApp } from "@/components/instalar-app"
 
 
 const getInitials = (name: string | null | undefined = "") => {
@@ -40,7 +41,9 @@ export function Header() {
         <SidebarTrigger />
         <h1 className="text-lg font-semibold hidden md:block"></h1>
       </div>
-      <div className="flex items-center gap-4">
+      {/* gap-2 no celular: o "Instalar app" cabe ao lado do sino até nas telas estreitas */}
+      <div className="flex items-center gap-2 md:gap-4">
+        <BotaoInstalarApp />
         <Button variant="ghost" size="icon" className="relative">
           <Link href="/comunicacao">
             <Bell className="h-4 w-4" />
