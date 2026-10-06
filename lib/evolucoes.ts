@@ -10,9 +10,9 @@ import { differenceInCalendarDays, max, startOfDay, subDays } from "date-fns";
 
 /**
  * O dia em que as evoluções começam a valer: sessões de antes não são cobradas.
- * Ao publicar, trocar pelo dia da publicação (até lá, vale para os testes no emulador).
+ * 06/10/2026, o dia seguinte à publicação: até ali, as evoluções foram escritas no papel.
  */
-export const EVOLUCOES_DESDE = new Date(2026, 9, 1);
+export const EVOLUCOES_DESDE = new Date(2026, 9, 6);
 
 /** Quantos dias para trás a cobrança olha (contando hoje). */
 export const JANELA_EM_DIAS = 14;
