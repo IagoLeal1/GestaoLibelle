@@ -2,7 +2,7 @@
 
 import {
   Calendar, DollarSign, FileText, Home, MessageSquare, Users, UserCheck,
-  CheckCircle, UserPlus, Megaphone, MapPin, BadgeDollarSign, TrendingUp, MessagesSquare, NotebookPen
+  CheckCircle, UserPlus, Megaphone, MapPin, BadgeDollarSign, TrendingUp, MessagesSquare, NotebookPen, CircleHelp
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -14,7 +14,7 @@ import { PAPEIS_POR_TELA } from "@/lib/permissoes"
 
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
-  SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, useSidebar // <-- IMPORTE O HOOK
+  SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter, useSidebar // <-- IMPORTE O HOOK
 } from "@/components/ui/sidebar"
 
 // Os papéis de cada item vêm de lib/permissoes, a mesma lista que trava o endereço digitado
@@ -101,6 +101,25 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      {/* A Ajuda fica no pé do menu, para todos: os guias de cada papel (lib/ajuda) */}
+      {firestoreUser?.profile && (
+        <SidebarFooter className="border-t p-3">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname === "/ajuda" || pathname.startsWith("/ajuda/")}
+                className="bg-[#e3f4f4] font-semibold text-[#0d5c5f] hover:bg-[#d3eeee] hover:text-[#0d5c5f] data-[active=true]:bg-[#cdeaea] data-[active=true]:text-[#0d5c5f]"
+              >
+                <Link href="/ajuda" onClick={() => setOpenMobile(false)}>
+                  <CircleHelp className="h-4 w-4" />
+                  <span>Ajuda: como usar</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+      )}
     </Sidebar>
   )
 }

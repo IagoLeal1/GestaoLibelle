@@ -38,6 +38,8 @@ export const PAPEIS_POR_TELA: Record<string, Papel[]> = {
   "/evolucoes": ["admin", "coordenador", "profissional"],
   "/comunicacao": TODOS,
   "/mensagens": TODOS,
+  // Cada papel vê só os guias dele (lib/ajuda)
+  "/ajuda": TODOS,
 };
 
 // A tela mais específica que contém o endereço decide. Endereço fora da lista (a própria conta,
