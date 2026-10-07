@@ -1,19 +1,19 @@
 "use client"
 
 // A página de evoluções do terapeuta: as sessões que faltam escrever (as atrasadas primeiro), as
-// escritas nos últimos 14 dias e a história das crianças que ele atende.
+// escritas nos últimos 14 dias e os prontuários das crianças que ele atende.
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useEvolucoes } from "@/context/EvolucoesContext";
 import { cn } from "@/lib/utils";
 import { incompatibilidade, textoDoAtraso, type SessaoDaAgenda } from "@/lib/evolucoes";
+import { criancasDoTerapeuta } from "@/lib/prontuario";
 import { getEvolucao } from "@/services/evolucaoService";
 import { FolhaDaEvolucao, type AlvoDaFolha } from "./folha-da-evolucao";
-import { HistoriaDaCrianca } from "./historia-da-crianca";
 import { SeloIncompativel, SeloNaoAconteceu } from "./comum";
 
 // O começo do texto aparece só nas mais recentes: cada uma é uma leitura no banco (o projeto é gratuito)
@@ -32,11 +32,9 @@ function Quando({ data, destaque = false }: { data: Date; destaque?: boolean }) 
   );
 }
 
-export function EvolucoesDoTerapeuta({ criancaInicial }: { criancaInicial?: string }) {
+export function EvolucoesDoTerapeuta() {
   const { carregando, erro, semCadastro, sessoes, pendentes, agora } = useEvolucoes();
   const [alvo, setAlvo] = useState<AlvoDaFolha | null>(null);
-  const [crianca, setCrianca] = useState(criancaInicial ?? "");
-  const [versao, setVersao] = useState(0);
 
   const escritas = useMemo(
     () => sessoes.filter((s) => s.evolucao && s.start <= agora).sort((a, b) => b.start.getTime() - a.start.getTime()),
@@ -59,11 +57,7 @@ export function EvolucoesDoTerapeuta({ criancaInicial }: { criancaInicial?: stri
     // faltaLer muda de identidade a cada render; o que importa são os ids
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chaveDaLeitura]);
-  const criancas = useMemo(() => {
-    const porId = new Map<string, string>();
-    for (const s of sessoes) if (s.status !== "cancelado") porId.set(s.patientId, s.patientName || "Criança");
-    return [...porId].map(([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome));
-  }, [sessoes]);
+  const criancas = useMemo(() => criancasDoTerapeuta(sessoes), [sessoes]);
 
   const abrir = (sessao: SessaoDaAgenda) => setAlvo({ sessao });
 
@@ -156,34 +150,37 @@ export function EvolucoesDoTerapeuta({ criancaInicial }: { criancaInicial?: stri
           </Card>
 
           <Card className="min-w-0">
-            <CardHeader className="space-y-3">
-              <CardTitle>História das crianças</CardTitle>
-              <Label htmlFor="crianca-do-terapeuta" className="-mb-1 font-normal text-muted-foreground">Criança</Label>
-              <Select value={crianca} onValueChange={setCrianca}>
-                <SelectTrigger id="crianca-do-terapeuta">
-                  <SelectValue placeholder="Escolha a criança" />
-                </SelectTrigger>
-                <SelectContent>
-                  {criancas.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <CardHeader>
+              <CardTitle>Prontuários das minhas crianças</CardTitle>
+              <p className="text-sm text-muted-foreground">Anotações de cada terapia e a história das evoluções.</p>
             </CardHeader>
             <CardContent>
-              {crianca ? (
-                <HistoriaDaCrianca patientId={crianca} versao={versao} onAbrir={setAlvo} />
+              {criancas.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">As crianças que você atende aparecem aqui.</p>
               ) : (
-                <p className="py-4 text-center text-sm text-muted-foreground">Escolha uma criança para ver as evoluções de todas as terapias dela.</p>
+                <ul aria-label="Prontuários" className="divide-y">
+                  {criancas.map((c) => (
+                    <li key={c.id}>
+                      <Link href={`/prontuario/${encodeURIComponent(c.id)}`} className="flex items-center gap-3 py-3 hover:bg-muted/40">
+                        <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#e3f4f4] text-xs font-bold text-[#127a7e]">
+                          {c.nome.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase()}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium">{c.nome}</span>
+                          <span className="block truncate text-xs text-muted-foreground">{c.terapias.join(" · ")}</span>
+                        </span>
+                        <ChevronRight aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
               )}
             </CardContent>
           </Card>
         </>
       )}
 
-      <FolhaDaEvolucao alvo={alvo} onFechar={() => setAlvo(null)} onMudou={() => setVersao((v) => v + 1)} />
+      <FolhaDaEvolucao alvo={alvo} onFechar={() => setAlvo(null)} />
     </div>
   );
 }

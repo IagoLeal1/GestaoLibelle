@@ -80,6 +80,10 @@ service cloud.firestore {
       return dados.texto is string && dados.texto.size() <= 8000 && dados.aconteceu is bool;
     }
 
+    function textoDaAnotacao(dados) {
+      return dados.texto is string && dados.texto.size() > 0 && dados.texto.size() <= 8000 && dados.fixada is bool;
+    }
+
     // --- 2. REGRAS DE USUÁRIOS ---
     match /users/{userId} {
       // O próprio cadastro sempre nasce pendente e com um dos papéis do formulário:
@@ -282,6 +286,32 @@ service cloud.firestore {
           && textoDaEvolucao(request.resource.data);
 
         allow delete: if isAdminOrCoordinator() || (isApproved() && resource.data.autorId == request.auth.uid);
+      }
+
+      // Anotações do prontuário: o que vale para toda a terapia da criança (objetivos, o que funciona,
+      // o que evitar). Leem como as evoluções. Cada terapeuta escreve só na terapia dele, provando com
+      // uma sessão sua com a criança daquela terapia. Só quem escreveu corrige; ninguém apaga.
+      match /anotacoes/{anotacaoId} {
+        allow read: if isAdminOrCoordinator() || (
+          isApproved() && exists(/databases/$(database)/documents/patients/$(patientId)/equipe/$(request.auth.uid))
+        );
+
+        allow create: if isApproved()
+          && request.resource.data.keys().hasOnly(['terapia', 'texto', 'fixada', 'autorId', 'autorNome', 'atendimentoId', 'criadoEm'])
+          && request.resource.data.keys().hasAll(['terapia', 'texto', 'fixada', 'autorId', 'autorNome', 'atendimentoId', 'criadoEm'])
+          && request.resource.data.autorId == request.auth.uid
+          && request.resource.data.autorNome is string
+          && request.resource.data.criadoEm == request.time
+          && textoDaAnotacao(request.resource.data)
+          && ehSessaoMinhaCom(request.resource.data.atendimentoId, patientId)
+          && request.resource.data.terapia == get(/databases/$(database)/documents/appointments/$(request.resource.data.atendimentoId)).data.tipo;
+
+        allow update: if isApproved() && resource.data.autorId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['texto', 'fixada', 'editadoEm'])
+          && request.resource.data.editadoEm == request.time
+          && textoDaAnotacao(request.resource.data);
+
+        allow delete: if false;
       }
     }
 

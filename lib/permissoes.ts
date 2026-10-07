@@ -36,6 +36,8 @@ export const PAPEIS_POR_TELA: Record<string, Papel[]> = {
   "/admin/gerenciar-usuarios": ["admin"],
   // Evoluções são dados de saúde: a recepção e a família não abrem
   "/evolucoes": ["admin", "coordenador", "profissional"],
+  // O prontuário também é dado de saúde: quem lê as evoluções
+  "/prontuario": ["admin", "coordenador", "profissional"],
   "/comunicacao": TODOS,
   "/mensagens": TODOS,
   // Cada papel vê só os guias dele (lib/ajuda)

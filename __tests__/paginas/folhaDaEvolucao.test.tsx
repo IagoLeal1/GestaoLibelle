@@ -2,10 +2,11 @@
 // A folha onde o terapeuta escreve a evolução: um campo só, "O que aconteceu na sessão", como no
 // papel; em cima, a última evolução da mesma terapia, para dar continuidade.
 import '@testing-library/jest-dom';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { FolhaDaEvolucao } from '@/components/evolucoes/folha-da-evolucao';
 import { useEvolucoes } from '@/context/EvolucoesContext';
 import { escreverEvolucao, getUltimaEvolucao } from '@/services/evolucaoService';
+import { getParaLembrar } from '@/services/prontuarioService';
 
 jest.mock('@/context/AuthContext', () => ({
   useAuth: () => ({ firestoreUser: { uid: 'paula-uid', displayName: 'Paula Fonoaudióloga', profile: { role: 'profissional' } } }),
@@ -19,6 +20,7 @@ jest.mock('@/services/evolucaoService', () => ({
   getUltimaEvolucao: jest.fn(),
 }));
 jest.mock('sonner', () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
+jest.mock('@/services/prontuarioService', () => ({ getParaLembrar: jest.fn().mockResolvedValue([]) }));
 
 const marcar = jest.fn();
 const SESSAO = {
@@ -80,4 +82,16 @@ it('em cima, a última evolução da mesma terapia', async () => {
   expect(await screen.findByText('Última evolução · 26/09')).toBeInTheDocument();
   expect(screen.getByText('Começamos o fonema /r/ em sílabas.')).toBeInTheDocument();
   expect(getUltimaEvolucao).toHaveBeenCalledWith('paciente-theo', { terapia: 'Fonoaudiologia', antesDe: SESSAO.start });
+});
+
+it('em cima, o "Para lembrar" do prontuário daquela terapia e o atalho para o prontuário', async () => {
+  (getParaLembrar as jest.Mock).mockResolvedValue([
+    { id: 'n1', terapia: 'Fonoaudiologia', texto: 'Começar pelo jogo de encaixe.', fixada: true, autorId: 'paula-uid', autorNome: 'Paula' },
+  ]);
+  render(<FolhaDaEvolucao alvo={{ sessao: SESSAO }} onFechar={jest.fn()} />);
+
+  const lembrar = await screen.findByRole('region', { name: 'Para lembrar' });
+  expect(within(lembrar).getByText('Começar pelo jogo de encaixe.')).toBeInTheDocument();
+  expect(getParaLembrar).toHaveBeenCalledWith('paciente-theo', 'Fonoaudiologia');
+  expect(screen.getByRole('link', { name: 'Abrir prontuário' })).toHaveAttribute('href', '/prontuario/paciente-theo?terapia=Fonoaudiologia');
 });

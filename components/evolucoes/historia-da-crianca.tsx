@@ -2,7 +2,7 @@
 
 // A história de uma criança: as evoluções de todas as terapias, das mais recentes para as mais
 // antigas, com filtro por terapia. O terapeuta só abre a das crianças que atende.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DocumentData, QueryDocumentSnapshot } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,7 +14,15 @@ import { entrarNaEquipeDaCrianca, getHistoriaDaCrianca, getSessoesPorId } from "
 import type { AlvoDaFolha } from "./folha-da-evolucao";
 import { AlertaDeIncompatibilidade, quandoFoi, SeloIncompativel, SeloNaoAconteceu, TextoDaEvolucao } from "./comum";
 
-export function HistoriaDaCrianca({ patientId, versao = 0, onAbrir }: { patientId: string; versao?: number; onAbrir: (alvo: AlvoDaFolha) => void }) {
+export function HistoriaDaCrianca({ patientId, versao = 0, onAbrir, terapia: terapiaFixa, onTerapias }: {
+  patientId: string;
+  versao?: number;
+  onAbrir: (alvo: AlvoDaFolha) => void;
+  /** Dentro do prontuário: só a terapia da aba, sem os botões de filtro. */
+  terapia?: string;
+  /** Avisa as terapias que apareceram nas evoluções carregadas (as abas do prontuário). */
+  onTerapias?: (terapias: string[]) => void;
+}) {
   const { firestoreUser } = useAuth();
   const uid = firestoreUser?.uid;
   const { escopo, professionalId } = useEvolucoes();
@@ -69,6 +77,14 @@ export function HistoriaDaCrianca({ patientId, versao = 0, onAbrir }: { patientI
     };
   }, [patientId, versao, escopo, professionalId, uid, carregar]);
 
+  const terapias = useMemo(() => [...new Set(evolucoes.map((e) => e.terapia).filter(Boolean))].sort(), [evolucoes]);
+  const chaveDasTerapias = terapias.join("|");
+  useEffect(() => {
+    if (chaveDasTerapias) onTerapias?.(chaveDasTerapias.split("|"));
+    // onTerapias vem de quem usa; o que importa é a lista mudar
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveDasTerapias]);
+
   async function carregarMais() {
     try {
       const { evolucoes: mais, ultimo: fim, temMais: aindaTem, daAgenda } = await carregar(ultimo);
@@ -93,12 +109,15 @@ export function HistoriaDaCrianca({ patientId, versao = 0, onAbrir }: { patientI
   if (erro) return <p className="py-6 text-center text-sm text-destructive">Não foi possível carregar a história. Tente de novo.</p>;
   if (evolucoes.length === 0) return <p className="py-6 text-center text-sm text-muted-foreground">Esta criança ainda não tem evoluções.</p>;
 
-  const terapias = [...new Set(evolucoes.map((e) => e.terapia).filter(Boolean))].sort();
-  const visiveis = terapia ? evolucoes.filter((e) => e.terapia === terapia) : evolucoes;
+  const filtro = terapiaFixa ?? terapia;
+  const visiveis = filtro ? evolucoes.filter((e) => e.terapia === filtro) : evolucoes;
+  if (visiveis.length === 0 && !temMais) {
+    return <p className="py-6 text-center text-sm text-muted-foreground">Nenhuma evolução nesta terapia ainda.</p>;
+  }
 
   return (
     <div className="space-y-4">
-      {terapias.length > 1 && (
+      {!terapiaFixa && terapias.length > 1 && (
         <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por terapia">
           {[null, ...terapias].map((t) => (
             <Button

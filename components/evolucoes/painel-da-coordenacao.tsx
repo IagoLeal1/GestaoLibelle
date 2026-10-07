@@ -4,6 +4,7 @@
 // coloridos que também filtram, filtros de período, terapeuta, terapia e criança, a lista por dia e a
 // leitura na própria tela, uma evolução atrás da outra. Ninguém valida nada aqui (lib/centralDeEvolucoes).
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { differenceInCalendarDays, differenceInCalendarMonths, format } from "date-fns";
 import { ChevronLeft, ChevronRight, Search, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,8 +22,6 @@ import {
 import { getAppointmentsForReport } from "@/services/appointmentService";
 import { getEvolucao, getUltimaEvolucao, sessaoDaAgenda } from "@/services/evolucaoService";
 import { getPatients } from "@/services/patientService";
-import { FolhaDaEvolucao, type AlvoDaFolha } from "./folha-da-evolucao";
-import { HistoriaDaCrianca } from "./historia-da-crianca";
 import { AlertaDeIncompatibilidade, diaEMes, quandoFoi, TextoDaEvolucao } from "./comum";
 
 // ——— Cores da clínica ———
@@ -175,6 +174,13 @@ function LeituraDaSessao({ sessao, posicao, total, agora, cache, onAnterior, onP
         </>
       )}
 
+      <Link
+        href={`/prontuario/${encodeURIComponent(sessao.patientId)}?terapia=${encodeURIComponent(sessao.tipo)}`}
+        className="self-start text-sm font-semibold text-[#127a7e] hover:underline"
+      >
+        Abrir prontuário de {primeiroNome(sessao.patientName)}
+      </Link>
+
       <div className="flex items-center justify-between gap-2 border-t pt-3">
         <Button variant="outline" size="sm" onClick={onAnterior} disabled={posicao <= 1}>
           <ChevronLeft className="mr-1 h-4 w-4" /> Anterior
@@ -190,7 +196,7 @@ function LeituraDaSessao({ sessao, posicao, total, agora, cache, onAnterior, onP
 
 // ——— A página ———
 
-export function PainelDaCoordenacao({ criancaInicial }: { criancaInicial?: string }) {
+export function PainelDaCoordenacao() {
   const { carregando, erro, sessoes, agora, desde } = useEvolucoes();
   const telaLarga = useTelaLarga();
   const [filtros, setFiltros] = useState<Filtros>({ periodo: "7dias" });
@@ -201,21 +207,15 @@ export function PainelDaCoordenacao({ criancaInicial }: { criancaInicial?: strin
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const cache = useRef(new Map<string, Lida>());
 
-  // História completa de uma criança (enquanto o prontuário não chega)
+  // O prontuário de qualquer criança, pela lista de pacientes ativos
   const [criancas, setCriancas] = useState<{ id: string; nome: string }[]>([]);
-  const [crianca, setCrianca] = useState(criancaInicial ?? "");
-  const [alvo, setAlvo] = useState<AlvoDaFolha | null>(null);
-  const [versao, setVersao] = useState(0);
-  const historiaRef = useRef<HTMLDivElement>(null);
+  const [crianca, setCrianca] = useState("");
 
   useEffect(() => {
     getPatients("ativo").then((lista) =>
       setCriancas(lista.map((p) => ({ id: p.id, nome: p.fullName })).sort((a, b) => a.nome.localeCompare(b.nome)))
     );
   }, []);
-  useEffect(() => {
-    if (criancaInicial) historiaRef.current?.scrollIntoView?.({ behavior: "smooth" });
-  }, [criancaInicial]);
 
   // "Escolher datas" pode ir além dos 14 dias que a página já tem: busca a agenda daquele período
   const deData = new Date(`${datas.de}T00:00`);
@@ -502,28 +502,24 @@ export function PainelDaCoordenacao({ criancaInicial }: { criancaInicial?: strin
         </div>
       </div>
 
-      {/* A história inteira de uma criança, de todas as terapias */}
-      <div ref={historiaRef}>
-        <Card className="min-w-0">
-          <CardHeader className="space-y-3">
-            <CardTitle>História de uma criança</CardTitle>
-            <Label htmlFor="crianca-da-coordenacao" className="-mb-1 font-normal text-muted-foreground">Criança</Label>
+      {/* O prontuário de qualquer criança: anotações e evoluções de todas as terapias */}
+      <Card className="min-w-0">
+        <CardHeader className="space-y-3">
+          <CardTitle>Prontuário de uma criança</CardTitle>
+          <Label htmlFor="crianca-da-coordenacao" className="-mb-1 font-normal text-muted-foreground">Criança</Label>
+          <div className="flex flex-col gap-2 sm:flex-row">
             <Select value={crianca} onValueChange={setCrianca}>
-              <SelectTrigger id="crianca-da-coordenacao"><SelectValue placeholder="Escolha a criança" /></SelectTrigger>
+              <SelectTrigger id="crianca-da-coordenacao" className="sm:flex-1"><SelectValue placeholder="Escolha a criança" /></SelectTrigger>
               <SelectContent>
                 {criancas.map((c) => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
               </SelectContent>
             </Select>
-          </CardHeader>
-          <CardContent>
-            {crianca ? (
-              <HistoriaDaCrianca patientId={crianca} versao={versao} onAbrir={setAlvo} />
-            ) : (
-              <p className="py-4 text-center text-sm text-muted-foreground">Escolha uma criança para ver todas as evoluções dela, desde o começo.</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+            <Button asChild={!!crianca} disabled={!crianca} className="bg-[#127a7e] hover:bg-[#0d5c5f]">
+              {crianca ? <Link href={`/prontuario/${encodeURIComponent(crianca)}`}>Abrir prontuário</Link> : <span>Abrir prontuário</span>}
+            </Button>
+          </div>
+        </CardHeader>
+      </Card>
 
       {/* Celular: a leitura abre numa folha por cima da lista */}
       {!telaLarga && (
@@ -547,7 +543,6 @@ export function PainelDaCoordenacao({ criancaInicial }: { criancaInicial?: strin
         </SheetContent>
       </Sheet>
 
-      <FolhaDaEvolucao alvo={alvo} onFechar={() => setAlvo(null)} onMudou={() => setVersao((v) => v + 1)} />
     </div>
   );
 }

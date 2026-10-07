@@ -385,6 +385,23 @@ for (const [sessaoId, pacienteId, autorUid, texto] of [
   batch.update(db.doc(`appointments/${sessaoId}`), { evolucao: 'escrita' });
 }
 
+// Prontuário (lib/prontuario.ts): anotações da Paula sobre o Lucas, duas em "Para lembrar"
+for (const [id, texto, fixada, diasAtras] of [
+  ['lucas-objetivo', 'Objetivo do semestre: frases de 3 palavras.', true, 20],
+  ['lucas-encaixe', 'Começar a sessão pelo jogo de encaixe: ele se organiza melhor.', true, 12],
+  ['lucas-cores', 'Mãe contou que ele começou a nomear as cores em casa. Reforçar com o livro de figuras.', false, 1],
+]) {
+  batch.set(db.doc(`patients/paciente-lucas/anotacoes/${id}`), {
+    terapia: TERAPIAS['terapeuta1-teste'],
+    texto,
+    fixada,
+    autorId: 'terapeuta1-teste',
+    autorNome: porUid['terapeuta1-teste'].displayName,
+    atendimentoId: 'ontem-paula-lucas',
+    criadoEm: Timestamp.fromMillis(agora.toMillis() - diasAtras * DIA),
+  });
+}
+
 // Financeiro: conta padrão (recebe os repasses) e o repasse já pago da sessão da semana passada
 batch.set(db.doc('bankAccounts/conta-principal'), { name: 'Conta principal', agency: '0001', account: '12345-6', type: 'Conta Corrente', initialBalance: 0, currentBalance: 0, isDefault: true });
 batch.set(db.doc('bankAccounts/conta-reserva'), { name: 'Reserva', agency: '0001', account: '65432-1', type: 'Conta Poupança', initialBalance: 0, currentBalance: 0, isDefault: false });

@@ -3,6 +3,8 @@
 // A folha lateral de uma sessão: o terapeuta da sessão escreve a evolução (ou informa que a sessão
 // não aconteceu) e corrige a dele; a coordenação e os outros terapeutas da criança só leem.
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Pin } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -13,6 +15,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useEvolucoes } from "@/context/EvolucoesContext";
 import { incompatibilidade, type Evolucao, type SessaoDaAgenda } from "@/lib/evolucoes";
 import { apagarEvolucao, corrigirEvolucao, escreverEvolucao, getEvolucao, getUltimaEvolucao } from "@/services/evolucaoService";
+import { getParaLembrar } from "@/services/prontuarioService";
+import type { Anotacao } from "@/lib/prontuario";
 import { AlertaDeIncompatibilidade, Confirmar, diaEMes, quandoFoi, SeloNaoAconteceu, TextoDaEvolucao } from "./comum";
 
 /** A sessão aberta: da agenda (para escrever) e/ou a evolução já gravada (para ler ou corrigir). */
@@ -28,6 +32,7 @@ export function FolhaDaEvolucao({ alvo, onFechar, onMudou }: { alvo: AlvoDaFolha
   const { escopo, professionalId, marcar } = useEvolucoes();
   const [evolucao, setEvolucao] = useState<Evolucao | null>(null);
   const [ultima, setUltima] = useState<Evolucao | null>(null);
+  const [lembrar, setLembrar] = useState<Anotacao[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [texto, setTexto] = useState("");
   const [editando, setEditando] = useState(false);
@@ -47,6 +52,7 @@ export function FolhaDaEvolucao({ alvo, onFechar, onMudou }: { alvo: AlvoDaFolha
   useEffect(() => {
     setEvolucao(alvo?.evolucao ?? null);
     setUltima(null);
+    setLembrar([]);
     setTexto("");
     setEditando(false);
     setFalta(false);
@@ -60,6 +66,12 @@ export function FolhaDaEvolucao({ alvo, onFechar, onMudou }: { alvo: AlvoDaFolha
       tarefas.push(
         getUltimaEvolucao(alvo.sessao.patientId, { terapia: alvo.sessao.tipo, antesDe: alvo.sessao.start })
           .then((e) => ativo && setUltima(e))
+          .catch(() => undefined)
+      );
+      // O "Para lembrar" do prontuário daquela terapia, para ter à mão na hora de escrever
+      tarefas.push(
+        getParaLembrar(alvo.sessao.patientId, alvo.sessao.tipo)
+          .then((lidas) => ativo && setLembrar(lidas))
           .catch(() => undefined)
       );
     }
@@ -156,6 +168,14 @@ export function FolhaDaEvolucao({ alvo, onFechar, onMudou }: { alvo: AlvoDaFolha
                 .join(" · ")}
             </SheetDescription>
           </SheetHeader>
+          {patientId && (
+            <Link
+              href={`/prontuario/${encodeURIComponent(patientId)}${terapia ? `?terapia=${encodeURIComponent(terapia)}` : ""}`}
+              className="mt-2 inline-block text-sm font-semibold text-primary-teal hover:underline"
+            >
+              Abrir prontuário
+            </Link>
+          )}
 
           <div className="mt-6 space-y-5">
             {motivo && <AlertaDeIncompatibilidade motivo={motivo} />}
@@ -167,6 +187,14 @@ export function FolhaDaEvolucao({ alvo, onFechar, onMudou }: { alvo: AlvoDaFolha
               </div>
             ) : escrevendo ? (
               <>
+                {lembrar.length > 0 && !editando && (
+                  <section aria-label="Para lembrar" className="rounded-lg border border-[#f0d48a] bg-[#fff8e1] p-3 text-[#5c4300]">
+                    <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide"><Pin aria-hidden className="h-3.5 w-3.5" /> Para lembrar</p>
+                    <ul className="mt-1.5 list-disc space-y-1 pl-5 text-sm text-foreground">
+                      {lembrar.map((a) => <li key={a.id} className="whitespace-pre-wrap">{a.texto}</li>)}
+                    </ul>
+                  </section>
+                )}
                 {ultima && !editando && (
                   <div className="rounded-lg bg-muted/60 p-3">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Última evolução · {diaEMes(ultima.dataDaSessao)}</p>

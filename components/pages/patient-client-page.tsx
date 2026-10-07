@@ -348,9 +348,9 @@ export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: 
                 {podeLerEvolucoes && (
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-                      <CardTitle className="flex items-center gap-2"><NotebookPen /> Evoluções</CardTitle>
+                      <CardTitle className="flex items-center gap-2"><NotebookPen /> Prontuário</CardTitle>
                       <Button asChild variant="outline" size="sm">
-                        <Link href={`/evolucoes?crianca=${encodeURIComponent(pacienteSelecionado.id)}`}>Ver evoluções</Link>
+                        <Link href={`/prontuario/${encodeURIComponent(pacienteSelecionado.id)}`}>Abrir prontuário</Link>
                       </Button>
                     </CardHeader>
                   </Card>
