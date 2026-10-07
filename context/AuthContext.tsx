@@ -69,6 +69,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             displayName: data.displayName,
             email: data.email,
             profile: data.profile,
+            // O admin definiu uma senha provisória: a pessoa precisa criar a dela antes de usar o sistema
+            trocarSenha: data.trocarSenha === true,
           };
           setFirestoreUser(fsUser);
 

@@ -20,6 +20,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         } else {
           router.push('/login');
         }
+      } else if (firestoreUser.trocarSenha) {
+        // Entrou com a senha provisória do admin: cria a senha dela antes de qualquer outra tela
+        router.replace('/trocar-senha');
       }
     }
   }, [user, firestoreUser, loading, router]);
@@ -28,7 +31,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   // Se a verificação inicial ainda não terminou, ou se o usuário não está logado, 
   // ou se não tem perfil, ou se o perfil não está aprovado, MOSTRA O LOADER.
   // Isso previne que o conteúdo seja renderizado antes da hora.
-  if (loading || !user || !firestoreUser || firestoreUser.profile.status !== 'aprovado') {
+  if (loading || !user || !firestoreUser || firestoreUser.profile.status !== 'aprovado' || firestoreUser.trocarSenha) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
         <p>Verificando acesso...</p>

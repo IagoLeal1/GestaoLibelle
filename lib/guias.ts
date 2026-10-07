@@ -626,6 +626,21 @@ export const GUIAS: Guia[] = [
     tela: { href: "/admin/usuarios", rotulo: "Ir para Aprovação de Acesso" },
   },
   {
+    id: "senha-provisoria",
+    titulo: "Dar uma senha provisória para quem esqueceu a senha",
+    assunto: "acessos",
+    papeis: ["admin"],
+    resumo: "Para quando o e-mail de recuperação não chega: você define uma senha, passa para a pessoa e ela cria a dela ao entrar.",
+    passos: [
+      { texto: "Em **Gerenciar Usuários**, ache a pessoa e toque na **chave**, ao lado da lixeira.", mini: { tipo: "botao", texto: "Chave: Senha provisória", variante: "contorno" } },
+      { texto: "O sistema já sugere uma senha fácil de ditar. Se quiser outra, toque em **Gerar outra**. Depois, toque em **Definir senha**." },
+      { texto: "Toque em **Copiar** e mande a senha para a pessoa, por WhatsApp por exemplo.", mini: { tipo: "campo", rotulo: "Senha definida", exemplo: "libelle-482193" } },
+      { texto: "Quando a pessoa entrar com essa senha, o sistema pede para ela criar uma senha nova antes de qualquer outra tela." },
+    ],
+    dica: "A senha não fica guardada no sistema: copie na hora. Se perder, é só definir outra.",
+    tela: { href: "/admin/gerenciar-usuarios", rotulo: "Ir para Gerenciar Usuários" },
+  },
+  {
     id: "mudar-papel",
     titulo: "Mudar o perfil de alguém",
     assunto: "acessos",

@@ -18,6 +18,8 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 const auth = getAuth(app);
+// Os e-mails do Firebase ("Esqueceu a senha?") e a página de trocar a senha em português
+auth.languageCode = 'pt-BR';
 const db = getFirestore(app);
 
 // Emulador local (npm run dev:emulator e npm run test:firebase).

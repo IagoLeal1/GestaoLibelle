@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { BotaoSenhaProvisoria } from "@/components/admin/senha-provisoria";
 import {
   getAllApprovedUsers,
   updateUserRole,
@@ -219,7 +220,9 @@ export default function GerenciarUsuariosPage() {
                           ))}
                         </SelectContent>
                       </Select>
-                      
+
+                      <BotaoSenhaProvisoria pessoa={{ uid: user.id, nome: user.displayName, email: user.email }} />
+
                       <Button 
                         variant="outline" 
                         size="icon" 
