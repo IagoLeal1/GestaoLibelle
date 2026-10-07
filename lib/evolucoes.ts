@@ -64,7 +64,7 @@ export const inicioDaJanela = (agora: Date, desde: Date = EVOLUCOES_DESDE) =>
   max([startOfDay(subDays(agora, JANELA_EM_DIAS - 1)), desde]);
 
 /** A sessão já terminou e não foi falta nem cancelamento. */
-const pedeEvolucao = (sessao: SessaoDaAgenda, { agora, desde }: { agora: Date; desde: Date }) =>
+export const pedeEvolucao = (sessao: SessaoDaAgenda, { agora, desde }: { agora: Date; desde: Date }) =>
   !NAO_PEDEM_EVOLUCAO.includes(sessao.status) && sessao.start >= desde && (sessao.end ?? sessao.start) <= agora;
 
 /** As sessões sem evolução, das mais antigas para as de hoje. */
