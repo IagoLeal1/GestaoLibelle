@@ -147,3 +147,15 @@ it('a aba Evoluções mostra a história daquela terapia', async () => {
 
   expect(screen.getByText('história de Fonoaudiologia')).toBeVisible();
 });
+
+it('quando não abre (internet fraca), deixa tentar de novo', async () => {
+  comoTerapeuta();
+  jest.spyOn(console, 'error').mockImplementation(() => {});
+  (getAnotacoes as jest.Mock).mockRejectedValueOnce(new Error('sem internet')).mockResolvedValueOnce(NOTAS);
+  render(<ProntuarioDaCrianca patientId="lucas" />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Tentar de novo' }));
+
+  expect(await screen.findByRole('heading', { name: 'Lucas Souza' })).toBeInTheDocument();
+  expect(getAnotacoes).toHaveBeenCalledTimes(2);
+});

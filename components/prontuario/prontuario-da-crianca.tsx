@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/context/AuthContext";
 import { useEvolucoes } from "@/context/EvolucoesContext";
 import { cn } from "@/lib/utils";
+import { useDemorando } from "@/hooks/use-demorando";
 import { daTerapia, idade, minhaSessaoCom, paraLembrar, terapiasDoProntuario, type Anotacao } from "@/lib/prontuario";
 import { corrigirAnotacao, escreverAnotacao, getAnotacoes } from "@/services/prontuarioService";
 import { entrarNaEquipeDaCrianca } from "@/services/evolucaoService";
@@ -55,6 +56,8 @@ export function ProntuarioDaCrianca({ patientId, terapiaInicial }: { patientId: 
   const [salvando, setSalvando] = useState(false);
   const [alvo, setAlvo] = useState<AlvoDaFolha | null>(null);
   const [versao, setVersao] = useState(0);
+  const [tentativa, setTentativa] = useState(0);
+  const demorando = useDemorando(carregando);
 
   useEffect(() => {
     if (!uid) return;
@@ -86,7 +89,7 @@ export function ProntuarioDaCrianca({ patientId, terapiaInicial }: { patientId: 
     return () => {
       ativo = false;
     };
-  }, [uid, patientId, ehTerapeuta, professionalId]);
+  }, [uid, patientId, ehTerapeuta, professionalId, tentativa]);
 
   const minhas = useMemo(
     () => (ehTerapeuta ? [...new Set(sessoes.filter((s) => s.patientId === patientId && s.status !== "cancelado").map((s) => s.tipo))] : []),
@@ -151,9 +154,10 @@ export function ProntuarioDaCrianca({ patientId, terapiaInicial }: { patientId: 
     return (
       <div className="mx-auto flex max-w-3xl flex-col gap-4">
         {voltar}
-        <p className="rounded-xl border border-dashed bg-card p-4 text-[15px] text-muted-foreground">
-          {semAcesso ? "Você só vê o prontuário das crianças que atende." : "Não foi possível abrir o prontuário. Recarregue a página."}
-        </p>
+        <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed bg-card p-4 text-[15px] text-muted-foreground">
+          {semAcesso ? "Você só vê o prontuário das crianças que atende." : "Não foi possível abrir o prontuário. Confira a internet e tente de novo."}
+          {erro && <Button variant="outline" size="sm" onClick={() => setTentativa((n) => n + 1)}>Tentar de novo</Button>}
+        </div>
       </div>
     );
   }
@@ -164,6 +168,12 @@ export function ProntuarioDaCrianca({ patientId, terapiaInicial }: { patientId: 
 
       {carregando || !crianca ? (
         <div className="space-y-3">
+          {demorando && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+              <span>Está demorando… Confira a internet do aparelho.</span>
+              <Button variant="outline" size="sm" onClick={() => setTentativa((n) => n + 1)}>Tentar de novo</Button>
+            </div>
+          )}
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />
@@ -268,7 +278,7 @@ export function ProntuarioDaCrianca({ patientId, terapiaInicial }: { patientId: 
 
           {/* Uma história só, sempre montada: ela também descobre as terapias que só têm evolução (as abas) */}
           <div hidden={parte !== "evolucoes" || terapias.length === 0}>
-            <HistoriaDaCrianca patientId={patientId} versao={versao} onAbrir={setAlvo} terapia={terapia} onTerapias={guardarTerapias} />
+            <HistoriaDaCrianca patientId={patientId} versao={versao} onAbrir={setAlvo} terapia={terapia} onTerapias={guardarTerapias} equipeConferida />
           </div>
         </>
       )}

@@ -9,12 +9,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/context/AuthContext";
 import { useEvolucoes } from "@/context/EvolucoesContext";
 import { cn } from "@/lib/utils";
+import { useDemorando } from "@/hooks/use-demorando";
 import { incompatibilidade, type Evolucao, type SessaoDaAgenda } from "@/lib/evolucoes";
 import { entrarNaEquipeDaCrianca, getHistoriaDaCrianca, getSessoesPorId } from "@/services/evolucaoService";
 import type { AlvoDaFolha } from "./folha-da-evolucao";
 import { AlertaDeIncompatibilidade, quandoFoi, SeloIncompativel, SeloNaoAconteceu, TextoDaEvolucao } from "./comum";
 
-export function HistoriaDaCrianca({ patientId, versao = 0, onAbrir, terapia: terapiaFixa, onTerapias }: {
+export function HistoriaDaCrianca({ patientId, versao = 0, onAbrir, terapia: terapiaFixa, onTerapias, equipeConferida = false }: {
   patientId: string;
   versao?: number;
   onAbrir: (alvo: AlvoDaFolha) => void;
@@ -22,6 +23,8 @@ export function HistoriaDaCrianca({ patientId, versao = 0, onAbrir, terapia: ter
   terapia?: string;
   /** Avisa as terapias que apareceram nas evoluções carregadas (as abas do prontuário). */
   onTerapias?: (terapias: string[]) => void;
+  /** O prontuário já conferiu que o terapeuta atende a criança: não precisa conferir de novo. */
+  equipeConferida?: boolean;
 }) {
   const { firestoreUser } = useAuth();
   const uid = firestoreUser?.uid;
@@ -34,6 +37,9 @@ export function HistoriaDaCrianca({ patientId, versao = 0, onAbrir, terapia: ter
   const [semAcesso, setSemAcesso] = useState(false);
   const [erro, setErro] = useState(false);
   const [terapia, setTerapia] = useState<string | null>(null);
+  // "Tentar de novo" busca outra vez; depois de alguns segundos carregando, a tela avisa que está demorando
+  const [tentativa, setTentativa] = useState(0);
+  const demorando = useDemorando(carregando);
 
   const carregar = useCallback(
     async (depoisDe: QueryDocumentSnapshot<DocumentData> | null) => {
@@ -52,7 +58,7 @@ export function HistoriaDaCrianca({ patientId, versao = 0, onAbrir, terapia: ter
     setTerapia(null);
     (async () => {
       try {
-        if (escopo === "terapeuta") {
+        if (escopo === "terapeuta" && !equipeConferida) {
           const atende = !!uid && !!professionalId && (await entrarNaEquipeDaCrianca(uid, patientId, professionalId));
           if (!atende) {
             if (ativo) setSemAcesso(true);
@@ -75,7 +81,7 @@ export function HistoriaDaCrianca({ patientId, versao = 0, onAbrir, terapia: ter
     return () => {
       ativo = false;
     };
-  }, [patientId, versao, escopo, professionalId, uid, carregar]);
+  }, [patientId, versao, escopo, professionalId, uid, carregar, equipeConferida, tentativa]);
 
   const terapias = useMemo(() => [...new Set(evolucoes.map((e) => e.terapia).filter(Boolean))].sort(), [evolucoes]);
   const chaveDasTerapias = terapias.join("|");
@@ -97,16 +103,32 @@ export function HistoriaDaCrianca({ patientId, versao = 0, onAbrir, terapia: ter
     }
   }
 
+  const tentarDeNovo = (
+    <Button variant="outline" size="sm" onClick={() => setTentativa((n) => n + 1)}>Tentar de novo</Button>
+  );
   if (carregando) {
     return (
       <div className="space-y-3">
+        {demorando && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+            <span>Está demorando… Confira a internet do aparelho.</span>
+            {tentarDeNovo}
+          </div>
+        )}
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-24 w-full" />
       </div>
     );
   }
   if (semAcesso) return <p className="py-6 text-center text-sm text-muted-foreground">Você não atende esta criança, então não vê a história dela.</p>;
-  if (erro) return <p className="py-6 text-center text-sm text-destructive">Não foi possível carregar a história. Tente de novo.</p>;
+  if (erro) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-6 text-center">
+        <p className="text-sm text-destructive">Não foi possível carregar a história. Confira a internet e tente de novo.</p>
+        {tentarDeNovo}
+      </div>
+    );
+  }
   if (evolucoes.length === 0) return <p className="py-6 text-center text-sm text-muted-foreground">Esta criança ainda não tem evoluções.</p>;
 
   const filtro = terapiaFixa ?? terapia;
