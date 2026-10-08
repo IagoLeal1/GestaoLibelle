@@ -1,7 +1,8 @@
 "use client"
 
 // O prontuário da criança (/prontuario/<criança>), seguindo o desenho aprovado: uma aba por terapia,
-// o "Para lembrar" no topo, as anotações com data e a história das evoluções daquela terapia.
+// o "Para lembrar" no topo, as anotações com data e a história das evoluções daquela terapia. Na faixa
+// do alto, o diagnóstico (da ficha) e a equipe (da agenda), para todos que veem o prontuário.
 // Leem a equipe da criança, a coordenação e o admin; cada terapeuta escreve só na terapia dele, pode
 // corrigir o que escreveu e ninguém apaga (lib/prontuario, firestore.rules).
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -25,6 +26,9 @@ import { daTerapia, idade, minhaSessaoCom, paraLembrar, terapiasDoProntuario, ty
 import { corrigirAnotacao, escreverAnotacao, getAnotacoes } from "@/services/prontuarioService";
 import { entrarNaEquipeDaCrianca } from "@/services/evolucaoService";
 import { getPatientById } from "@/services/patientService";
+import { diagnosticosDaFicha, type Diagnostico } from "@/lib/diagnostico";
+import { useEquipeDaCrianca } from "@/hooks/use-equipe-da-crianca";
+import { FaixaDoDiagnostico } from "@/components/diagnostico/faixa-do-diagnostico";
 import { FolhaDaEvolucao, type AlvoDaFolha } from "@/components/evolucoes/folha-da-evolucao";
 import { HistoriaDaCrianca } from "@/components/evolucoes/historia-da-crianca";
 import { diaEMes } from "@/components/evolucoes/comum";
@@ -46,7 +50,7 @@ export function ProntuarioDaCrianca({ patientId, terapiaInicial }: { patientId: 
   const uid = firestoreUser?.uid;
   const ehTerapeuta = escopo === "terapeuta";
 
-  const [crianca, setCrianca] = useState<{ nome: string; idade: string | null; desde: string | null } | null>(null);
+  const [crianca, setCrianca] = useState<{ nome: string; idade: string | null; desde: string | null; diagnosticos: Diagnostico[] } | null>(null);
   const [anotacoes, setAnotacoes] = useState<Anotacao[]>([]);
   const [terapiasDasEvolucoes, setTerapiasDasEvolucoes] = useState<string[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -85,6 +89,7 @@ export function ProntuarioDaCrianca({ patientId, terapiaInicial }: { patientId: 
           nome: paciente?.fullName ?? "Criança",
           idade: idade(textoDaData(paciente?.dataNascimento), new Date()),
           desde: inicio && isValid(parseISO(inicio)) ? format(parseISO(inicio), "MMM/yyyy", { locale: ptBR }) : null,
+          diagnosticos: diagnosticosDaFicha(paciente?.diagnosticos),
         });
         setAnotacoes(lidas);
       } catch (e) {
@@ -98,6 +103,9 @@ export function ProntuarioDaCrianca({ patientId, terapiaInicial }: { patientId: 
       ativo = false;
     };
   }, [uid, patientId, ehTerapeuta, professionalId, tentativa]);
+
+  // A equipe só é lida depois que a criança abriu (o terapeuta já entrou na equipe dela)
+  const { equipe } = useEquipeDaCrianca(crianca ? patientId : undefined, ehTerapeuta ? professionalId : undefined);
 
   const minhas = useMemo(
     () => (ehTerapeuta ? [...new Set(sessoes.filter((s) => s.patientId === patientId && s.status !== "cancelado").map((s) => s.tipo))] : []),
@@ -190,15 +198,18 @@ export function ProntuarioDaCrianca({ patientId, terapiaInicial }: { patientId: 
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
             {/* A criança com a mesma cor da lista de Prontuários */}
-            <div className="flex min-w-0 flex-1 basis-64 items-center gap-3 rounded-2xl p-3.5 text-white" style={{ background: corDaCrianca(patientId) }}>
-              <span aria-hidden className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/20 text-base font-bold">
-                {crianca.nome.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("")}
-              </span>
-              <div className="min-w-0">
-                <h2 className="text-xl font-bold leading-tight">{crianca.nome}</h2>
-                <p className="text-sm opacity-90">{[crianca.idade, crianca.desde && `na clínica desde ${crianca.desde}`].filter(Boolean).join(" · ") || "Prontuário"}</p>
+            <section aria-label="Sobre a criança" className="flex min-w-0 flex-1 basis-64 flex-col gap-3.5 rounded-2xl p-4 text-white" style={{ background: corDaCrianca(patientId) }}>
+              <div className="flex items-center gap-3">
+                <span aria-hidden className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/20 text-base font-bold">
+                  {crianca.nome.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("")}
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-xl font-bold leading-tight">{crianca.nome}</h2>
+                  <p className="text-sm opacity-90">{[crianca.idade, crianca.desde && `na clínica desde ${crianca.desde}`].filter(Boolean).join(" · ") || "Prontuário"}</p>
+                </div>
               </div>
-            </div>
+              <FaixaDoDiagnostico diagnosticos={crianca.diagnosticos} equipe={equipe} />
+            </section>
             {podeEscrever && (
               <Button
                 onClick={() => abrirEdicao(null)}

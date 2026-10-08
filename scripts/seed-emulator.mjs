@@ -191,6 +191,13 @@ batch.set(db.doc('patients/paciente-theo'), {
   dataCadastro: agora,
   emailCadastro: 'renata.martins@libelle.test',
   responsavel: { nome: 'Renata Martins', email: 'renata.martins@libelle.test' },
+  // Diagnóstico (lib/diagnostico): aparece em Pacientes › Detalhes › Diagnóstico e no topo do prontuário
+  diagnosticos: [
+    { nome: 'TEA · nível 1 de suporte', cid: 'F84.0', situacao: 'confirmado' },
+    { nome: 'TDAH', situacao: 'investigacao' },
+  ],
+  diagnosticoAtualizadoEm: agora,
+  diagnosticoAtualizadoPor: 'Rafa Recepção',
 });
 
 // Especialidades: aparecem como terapias no assistente de agendamento (mesmos nomes dos profissionais)

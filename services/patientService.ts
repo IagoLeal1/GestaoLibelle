@@ -1,4 +1,5 @@
 import { db } from "@/lib/firebaseConfig";
+import type { Diagnostico } from "@/lib/diagnostico";
 import { 
   collection, 
   addDoc, 
@@ -60,6 +61,10 @@ export interface Patient {
   status: 'ativo' | 'inativo' | 'suspenso';
   dataCadastro: Timestamp;
   responsibleUserIds?: string[];
+  // Diagnóstico (lib/diagnostico): escrito pela gestão e pela recepção em Pacientes › Detalhes
+  diagnosticos?: Diagnostico[];
+  diagnosticoAtualizadoEm?: Timestamp;
+  diagnosticoAtualizadoPor?: string;
 }
 
 // --- INTERFACES PARA O FORMULÁRIO ---

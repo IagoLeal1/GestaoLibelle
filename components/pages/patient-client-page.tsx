@@ -17,6 +17,8 @@ import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { PatientObservations } from "@/components/patients/patient-observations"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { AbaDoDiagnostico, type DiagnosticoSalvo } from "@/components/diagnostico/aba-do-diagnostico"
 import { useAuth } from "@/context/AuthContext";
 import { ehGestao, podeAcessar } from "@/lib/permissoes";
 
@@ -131,6 +133,14 @@ export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: 
   const abrirDetalhes = (paciente: Patient) => {
     setPacienteSelecionado(paciente);
     setModalAberto(true);
+  };
+
+  // O diagnóstico salvo na aba aparece na hora, na ficha aberta e na lista
+  const aoSalvarDiagnostico = (id: string, salvo: DiagnosticoSalvo) => {
+    const comDiagnostico = (p: Patient): Patient =>
+      p.id === id ? { ...p, ...salvo, diagnosticoAtualizadoEm: Timestamp.fromDate(salvo.diagnosticoAtualizadoEm) } : p;
+    setPacienteSelecionado((atual) => (atual ? comDiagnostico(atual) : atual));
+    setPacientes((lista) => lista.map(comDiagnostico));
   };
 
   const handleToggleStatus = async (paciente: Patient) => {
@@ -313,54 +323,81 @@ export function PatientClientPage({ data: pacientes, isLoading, setPacientes }: 
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle className="flex items-center gap-2"><User /> Detalhes do Paciente</DialogTitle></DialogHeader>
             {pacienteSelecionado && (
-              <div className="space-y-6 py-4">
-                <Card>
-                    <CardHeader><CardTitle>Informações Pessoais</CardTitle></CardHeader>
-                    <CardContent><div className="grid gap-4 md:grid-cols-3">
-                        <div className="md:col-span-2"><Label className="text-sm font-medium text-gray-500">Nome Completo</Label><p>{pacienteSelecionado.fullName}</p></div>
-                        <div><Label className="text-sm font-medium text-gray-500">Convênio</Label><div className="mt-1">{getConvenioBadge(pacienteSelecionado.convenio)}</div></div>
-                        <div><Label className="text-sm font-medium text-gray-500">Data de Nascimento</Label><p>{formatDate(pacienteSelecionado.dataNascimento)} ({calcularIdade(pacienteSelecionado.dataNascimento)} anos)</p></div>
-                        <div><Label className="text-sm font-medium text-gray-500">Sexo</Label><div className="mt-1">{getSexoBadge(pacienteSelecionado.sexo)}</div></div>
-                        <div><Label className="text-sm font-medium text-gray-500">CPF</Label><p>{pacienteSelecionado.cpf}</p></div>
-                        <div><Label className="text-sm font-medium text-gray-500">Status</Label><div className="mt-1">{getStatusBadge(pacienteSelecionado.status)}</div></div>
-                        <div><Label className="text-sm font-medium text-gray-500">Data de Início</Label><p>{formatDate(pacienteSelecionado.dataInicio)}</p></div>
-                        <div><Label className="text-sm font-medium text-gray-500">Data de Término</Label><p>{formatDate(pacienteSelecionado.dataTermino)}</p></div>
-                    </div></CardContent>
-                </Card>
-                <Card>
-                    <CardHeader><CardTitle className="flex items-center gap-2"><Phone /> Contato do Responsável</CardTitle></CardHeader>
-                    <CardContent><div className="grid gap-4 md:grid-cols-3">
-                        <div className="md:col-span-2"><Label className="text-sm font-medium text-gray-500">Nome</Label><p>{pacienteSelecionado.responsavel?.nome || "Não informado"}</p></div>
-                        <div><Label className="text-sm font-medium text-gray-500">CPF do Responsável</Label><p>{pacienteSelecionado.responsavel?.cpf || "Não informado"}</p></div>
-                        <div><Label className="text-sm font-medium text-gray-500">Celular</Label><p>{pacienteSelecionado.responsavel?.celular || "Não informado"}</p></div>
-                        <div><Label className="text-sm font-medium text-gray-500">Email</Label><p>{pacienteSelecionado.responsavel?.email || "Não informado"}</p></div>
-                    </div></CardContent>
-                </Card>
-                <Card>
-                    <CardHeader><CardTitle className="flex items-center gap-2"><MapPin /> Endereço</CardTitle></CardHeader>
-                    <CardContent><div className="grid gap-4 md:grid-cols-2">
-                        <div><Label className="text-sm font-medium text-gray-500">Logradouro</Label><p>{`${pacienteSelecionado.endereco || 'Não informado'}, ${pacienteSelecionado.numero || 'S/N'}`}</p></div>
-                        <div><Label className="text-sm font-medium text-gray-500">Bairro</Label><p>{pacienteSelecionado.bairro || "Não informado"}</p></div>
-                        <div><Label className="text-sm font-medium text-gray-500">Cidade / Estado</Label><p>{`${pacienteSelecionado.cidade || 'Não informado'} - ${pacienteSelecionado.estado || 'N/A'}`}</p></div>
-                        <div><Label className="text-sm font-medium text-gray-500">CEP</Label><p>{pacienteSelecionado.cep || "Não informado"}</p></div>
-                    </div></CardContent>
-                </Card>
-                {podeLerEvolucoes && (
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-                      <CardTitle className="flex items-center gap-2"><NotebookPen /> Prontuário</CardTitle>
-                      <Button asChild variant="outline" size="sm">
-                        <Link href={`/prontuario/${encodeURIComponent(pacienteSelecionado.id)}`}>Abrir prontuário</Link>
-                      </Button>
-                    </CardHeader>
-                  </Card>
-                )}
-                <Card>
-                    <CardHeader><CardTitle className="flex items-center gap-2"><MessageSquareText /> Observações Adicionais</CardTitle></CardHeader>
-                    <CardContent>
-                      <PatientObservations patientId={pacienteSelecionado.id} legacyObservation={pacienteSelecionado.observacoes} />
-                    </CardContent>
-                </Card>
+              <div className="space-y-4 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-base font-bold">{pacienteSelecionado.fullName}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {[getDataNascimento(pacienteSelecionado.dataNascimento) && `${calcularIdade(pacienteSelecionado.dataNascimento)} anos`, pacienteSelecionado.responsavel?.nome && `Resp.: ${pacienteSelecionado.responsavel.nome}`].filter(Boolean).join(" · ")}
+                    </p>
+                  </div>
+                  {podeLerEvolucoes && (
+                    <Button asChild variant="outline" className="border-[#1da7ac] text-[#127a7e]">
+                      <Link href={`/prontuario/${encodeURIComponent(pacienteSelecionado.id)}`}><NotebookPen className="mr-2 h-4 w-4" /> Abrir prontuário</Link>
+                    </Button>
+                  )}
+                </div>
+
+                {/* Abas da ficha, seguindo o desenho aprovado; uma ficha nova sempre abre em Dados */}
+                <Tabs key={pacienteSelecionado.id} defaultValue="dados">
+                  <TabsList className="grid h-auto w-full grid-cols-3">
+                    <TabsTrigger value="dados" className="py-2">Dados</TabsTrigger>
+                    <TabsTrigger value="diagnostico" className="py-2">Diagnóstico</TabsTrigger>
+                    <TabsTrigger value="observacoes" className="py-2">Observações</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="dados" className="space-y-6">
+                    <Card>
+                        <CardHeader><CardTitle>Informações Pessoais</CardTitle></CardHeader>
+                        <CardContent><div className="grid gap-4 md:grid-cols-3">
+                            <div className="md:col-span-2"><Label className="text-sm font-medium text-gray-500">Nome Completo</Label><p>{pacienteSelecionado.fullName}</p></div>
+                            <div><Label className="text-sm font-medium text-gray-500">Convênio</Label><div className="mt-1">{getConvenioBadge(pacienteSelecionado.convenio)}</div></div>
+                            <div><Label className="text-sm font-medium text-gray-500">Data de Nascimento</Label><p>{formatDate(pacienteSelecionado.dataNascimento)} ({calcularIdade(pacienteSelecionado.dataNascimento)} anos)</p></div>
+                            <div><Label className="text-sm font-medium text-gray-500">Sexo</Label><div className="mt-1">{getSexoBadge(pacienteSelecionado.sexo)}</div></div>
+                            <div><Label className="text-sm font-medium text-gray-500">CPF</Label><p>{pacienteSelecionado.cpf}</p></div>
+                            <div><Label className="text-sm font-medium text-gray-500">Status</Label><div className="mt-1">{getStatusBadge(pacienteSelecionado.status)}</div></div>
+                            <div><Label className="text-sm font-medium text-gray-500">Data de Início</Label><p>{formatDate(pacienteSelecionado.dataInicio)}</p></div>
+                            <div><Label className="text-sm font-medium text-gray-500">Data de Término</Label><p>{formatDate(pacienteSelecionado.dataTermino)}</p></div>
+                        </div></CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader><CardTitle className="flex items-center gap-2"><Phone /> Contato do Responsável</CardTitle></CardHeader>
+                        <CardContent><div className="grid gap-4 md:grid-cols-3">
+                            <div className="md:col-span-2"><Label className="text-sm font-medium text-gray-500">Nome</Label><p>{pacienteSelecionado.responsavel?.nome || "Não informado"}</p></div>
+                            <div><Label className="text-sm font-medium text-gray-500">CPF do Responsável</Label><p>{pacienteSelecionado.responsavel?.cpf || "Não informado"}</p></div>
+                            <div><Label className="text-sm font-medium text-gray-500">Celular</Label><p>{pacienteSelecionado.responsavel?.celular || "Não informado"}</p></div>
+                            <div><Label className="text-sm font-medium text-gray-500">Email</Label><p>{pacienteSelecionado.responsavel?.email || "Não informado"}</p></div>
+                        </div></CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader><CardTitle className="flex items-center gap-2"><MapPin /> Endereço</CardTitle></CardHeader>
+                        <CardContent><div className="grid gap-4 md:grid-cols-2">
+                            <div><Label className="text-sm font-medium text-gray-500">Logradouro</Label><p>{`${pacienteSelecionado.endereco || 'Não informado'}, ${pacienteSelecionado.numero || 'S/N'}`}</p></div>
+                            <div><Label className="text-sm font-medium text-gray-500">Bairro</Label><p>{pacienteSelecionado.bairro || "Não informado"}</p></div>
+                            <div><Label className="text-sm font-medium text-gray-500">Cidade / Estado</Label><p>{`${pacienteSelecionado.cidade || 'Não informado'} - ${pacienteSelecionado.estado || 'N/A'}`}</p></div>
+                            <div><Label className="text-sm font-medium text-gray-500">CEP</Label><p>{pacienteSelecionado.cep || "Não informado"}</p></div>
+                        </div></CardContent>
+                    </Card>
+                  </TabsContent>
+
+                  <TabsContent value="diagnostico">
+                    <AbaDoDiagnostico
+                      paciente={pacienteSelecionado}
+                      podeEditar={podeEditar}
+                      autorNome={firestoreUser?.displayName ?? ""}
+                      onSalvo={(salvo) => aoSalvarDiagnostico(pacienteSelecionado.id, salvo)}
+                    />
+                  </TabsContent>
+
+                  <TabsContent value="observacoes">
+                    <Card>
+                      <CardHeader><CardTitle className="flex items-center gap-2"><MessageSquareText /> Observações Adicionais</CardTitle></CardHeader>
+                      <CardContent>
+                        <PatientObservations patientId={pacienteSelecionado.id} legacyObservation={pacienteSelecionado.observacoes} />
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                </Tabs>
               </div>
             )}
           </DialogContent>

@@ -9,6 +9,7 @@ import { useEvolucoes } from '@/context/EvolucoesContext';
 import { corrigirAnotacao, escreverAnotacao, getAnotacoes } from '@/services/prontuarioService';
 import { entrarNaEquipeDaCrianca } from '@/services/evolucaoService';
 import { getPatientById } from '@/services/patientService';
+import { getSessoesDaEquipe } from '@/services/diagnosticoService';
 import { ProntuarioDaCrianca } from '@/components/prontuario/prontuario-da-crianca';
 import type { Anotacao } from '@/lib/prontuario';
 
@@ -17,6 +18,7 @@ jest.mock('@/context/EvolucoesContext', () => ({ useEvolucoes: jest.fn() }));
 jest.mock('@/services/prontuarioService', () => ({ getAnotacoes: jest.fn(), escreverAnotacao: jest.fn(), corrigirAnotacao: jest.fn() }));
 jest.mock('@/services/evolucaoService', () => ({ entrarNaEquipeDaCrianca: jest.fn() }));
 jest.mock('@/services/patientService', () => ({ getPatientById: jest.fn() }));
+jest.mock('@/services/diagnosticoService', () => ({ getSessoesDaEquipe: jest.fn() }));
 jest.mock('@/components/evolucoes/folha-da-evolucao', () => ({ FolhaDaEvolucao: () => null }));
 // A história de verdade lê o banco: aqui ela só conta as terapias que achou e mostra qual está filtrando
 jest.mock('@/components/evolucoes/historia-da-crianca', () => ({
@@ -53,6 +55,7 @@ beforeEach(() => {
   (getPatientById as jest.Mock).mockResolvedValue({ id: 'lucas', fullName: 'Lucas Souza', dataNascimento: '2020-03-15' });
   (getAnotacoes as jest.Mock).mockResolvedValue(NOTAS);
   (entrarNaEquipeDaCrianca as jest.Mock).mockResolvedValue(true);
+  (getSessoesDaEquipe as jest.Mock).mockResolvedValue([]);
 });
 
 const abrir = async () => {
@@ -158,4 +161,32 @@ it('quando não abre (internet fraca), deixa tentar de novo', async () => {
 
   expect(await screen.findByRole('heading', { name: 'Lucas Souza' })).toBeInTheDocument();
   expect(getAnotacoes).toHaveBeenCalledTimes(2);
+});
+
+// ——— Topo do prontuário: diagnóstico (da ficha) e equipe (da agenda), para todos que veem o prontuário ———
+it('no topo, o diagnóstico da ficha e a equipe da agenda, com a terapia de quem olha marcada "você"', async () => {
+  comoTerapeuta();
+  (getPatientById as jest.Mock).mockResolvedValue({
+    id: 'lucas', fullName: 'Lucas Souza', dataNascimento: '2020-03-15',
+    diagnosticos: [{ nome: 'TEA · nível 1', cid: 'F84.0', situacao: 'confirmado' }, { nome: 'TDAH', situacao: 'investigacao' }],
+  });
+  (getSessoesDaEquipe as jest.Mock).mockResolvedValue([
+    { tipo: 'Fonoaudiologia', professionalId: 'prof-paula', professionalName: 'Paula Fonoaudióloga', status: 'agendado', start: new Date(2026, 9, 6, 9) },
+    { tipo: 'Terapia Ocupacional', professionalId: 'prof-lia', professionalName: 'Lia Moreira', status: 'agendado', start: new Date(2026, 9, 7, 9) },
+  ]);
+  await abrir();
+
+  const diagnostico = within(screen.getByRole('list', { name: 'Diagnóstico' })).getAllByRole('listitem');
+  expect(diagnostico[0]).toHaveTextContent('TEA · nível 1F84.0');
+  expect(diagnostico[1]).toHaveTextContent('TDAH · em investigação');
+  const equipe = within(await screen.findByRole('list', { name: 'Equipe' })).getAllByRole('listitem');
+  expect(equipe.map((li) => li.textContent)).toEqual(['Fonoaudiologia · você', 'Terapia Ocupacional · Lia']);
+  expect(getSessoesDaEquipe).toHaveBeenCalledWith('lucas');
+});
+
+it('sem diagnóstico na ficha, avisa quem preenche', async () => {
+  comoAdmin();
+  await abrir();
+
+  expect(screen.getByText(/Ainda não preenchido\. A recepção ou a coordenação preenchem na ficha da criança\./)).toBeInTheDocument();
 });
