@@ -11,6 +11,7 @@ import {
   QueryDocumentSnapshot,
   DocumentData,
   writeBatch,
+  deleteField,
 } from "firebase/firestore";
 import { db } from "@/lib/firebaseConfig";
 
@@ -309,6 +310,30 @@ export const ligarContaAoProfissional = async (
   } catch (error) {
     console.error("Erro ao ligar a conta ao cadastro de profissional:", error);
     return { success: false, error: "Não foi possível ligar a conta ao cadastro de profissional." };
+  }
+};
+
+/**
+ * Liga a conta ao cadastro escolhido na mão (botão em Gerenciar Usuários) e desfaz as ligações antigas
+ * de cada lado (ver trocaDeCadastro em lib/ligarProfissional), para a ligação continuar de um para um.
+ */
+export const trocarCadastroDoProfissional = async (
+  userId: string,
+  professionalId: string,
+  { soltarCadastros, soltarContas }: { soltarCadastros: string[]; soltarContas: string[] }
+) => {
+  try {
+    const batch = writeBatch(db);
+    const agora = Timestamp.now();
+    batch.update(doc(db, "professionals", professionalId), { userId, updatedAt: agora });
+    batch.update(doc(db, "users", userId), { "profile.professionalId": professionalId });
+    for (const id of soltarCadastros) batch.update(doc(db, "professionals", id), { userId: deleteField(), updatedAt: agora });
+    for (const uid of soltarContas) batch.update(doc(db, "users", uid), { "profile.professionalId": deleteField() });
+    await batch.commit();
+    return { success: true };
+  } catch (error) {
+    console.error("Erro ao trocar o cadastro de profissional da conta:", error);
+    return { success: false, error: "Não foi possível ligar a conta a este cadastro." };
   }
 };
 

@@ -12,6 +12,7 @@ export interface ContaDoProfissional {
 
 export interface CadastroDoProfissional {
   id: string;
+  fullName?: string;
   userId?: string;
   cpf?: string;
   email?: string;
@@ -50,4 +51,48 @@ export function ligacaoDoProfissional(conta: ContaDoProfissional, cadastros: Cad
   if (peloCpf.length === 0 && peloEmail.length === 1) return ligar(peloEmail[0]);
 
   return { tipo: "sem_cadastro" };
+}
+
+export interface ContaListada {
+  uid: string;
+  nome: string;
+  professionalId?: string | null;
+}
+
+export interface TrocaDeCadastro {
+  /** Quem usa hoje o cadastro escolhido: deixa de ver as sessões dele. */
+  outraConta?: { uid: string; nome: string };
+  /** O cadastro que a conta usava antes: ela deixa de ver as sessões dele. */
+  cadastroAnterior?: { id: string; nome: string };
+  /** Cadastros que perdem o userId desta conta. */
+  soltarCadastros: string[];
+  /** Outras contas que perdem o professionalId do cadastro escolhido. */
+  soltarContas: string[];
+}
+
+/**
+ * Ligar na mão (quando o cadastro foi feito com outro e-mail e outro CPF): o que muda além da ligação
+ * nova. A ligação é sempre de um para um, então a antiga de cada lado é desfeita, com aviso.
+ */
+export function trocaDeCadastro(
+  conta: ContaDoProfissional,
+  escolhidoId: string,
+  cadastros: CadastroDoProfissional[],
+  contas: ContaListada[]
+): TrocaDeCadastro {
+  const troca: TrocaDeCadastro = { soltarCadastros: [], soltarContas: [] };
+  const escolhido = cadastros.find((c) => c.id === escolhidoId);
+
+  if (escolhido?.userId && escolhido.userId !== conta.uid) {
+    const dona = contas.find((c) => c.uid === escolhido.userId);
+    troca.outraConta = { uid: escolhido.userId, nome: dona?.nome ?? "uma conta que não está mais na lista" };
+  }
+  troca.soltarContas = contas.filter((c) => c.uid !== conta.uid && c.professionalId === escolhidoId).map((c) => c.uid);
+
+  const antigos = cadastros.filter((c) => c.id !== escolhidoId && c.userId === conta.uid);
+  troca.soltarCadastros = antigos.map((c) => c.id);
+  const anterior = antigos[0] ?? cadastros.find((c) => c.id !== escolhidoId && c.id === conta.professionalId);
+  if (anterior) troca.cadastroAnterior = { id: anterior.id, nome: anterior.fullName ?? "sem nome" };
+
+  return troca;
 }

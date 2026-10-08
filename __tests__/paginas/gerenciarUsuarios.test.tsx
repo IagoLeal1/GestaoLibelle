@@ -2,8 +2,8 @@
 // Gerenciar Usuários liga a conta de cada profissional ao cadastro dela em Profissionais: sozinho ao
 // abrir a tela (conserta quem já virou profissional sem a ligação) e ao trocar o papel para profissional.
 import '@testing-library/jest-dom';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { getAllApprovedUsers, ligarContaAoProfissional, updateUserRole } from '@/services/adminService';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { getAllApprovedUsers, ligarContaAoProfissional, trocarCadastroDoProfissional, updateUserRole } from '@/services/adminService';
 import { getProfessionals } from '@/services/professionalService';
 import { useToast } from '@/hooks/use-toast';
 import GerenciarUsuariosPage from '@/app/(dashboard)/admin/gerenciar-usuarios/page';
@@ -13,6 +13,7 @@ jest.mock('@/services/adminService', () => ({
   updateUserRole: jest.fn(),
   deleteActiveUser: jest.fn(),
   ligarContaAoProfissional: jest.fn(),
+  trocarCadastroDoProfissional: jest.fn(),
 }));
 jest.mock('@/services/professionalService', () => ({ getProfessionals: jest.fn() }));
 jest.mock('@/hooks/use-toast', () => ({ useToast: jest.fn() }));
@@ -39,6 +40,7 @@ beforeEach(() => {
   (useToast as jest.Mock).mockReturnValue({ toast });
   (ligarContaAoProfissional as jest.Mock).mockResolvedValue({ success: true });
   (updateUserRole as jest.Mock).mockResolvedValue({ success: true });
+  (trocarCadastroDoProfissional as jest.Mock).mockResolvedValue({ success: true });
 });
 
 it('ao abrir, liga sozinha a profissional que estava sem ligação e avisa', async () => {
@@ -91,4 +93,75 @@ it('trocar para profissional sem cadastro explica o que fazer', async () => {
     expect(toast).toHaveBeenCalledWith(expect.objectContaining({ description: expect.stringContaining('Novo Profissional') }))
   );
   expect(ligarContaAoProfissional).not.toHaveBeenCalled();
+});
+
+// ——— Ligar na mão: o cadastro foi feito com um e-mail e a conta com outro ———
+const contasComThays = () => {
+  (getAllApprovedUsers as jest.Mock).mockResolvedValue([
+    usuario('thays', 'Thays Rocha', 'profissional'),
+    usuario('rui', 'Rui Psicólogo', 'profissional', { professionalId: 'prof-rui' }),
+  ]);
+  (getProfessionals as jest.Mock).mockResolvedValue([
+    { id: 'prof-rui', fullName: 'Rui Psicólogo', especialidade: 'Psicologia', email: '', cpf: '', userId: 'rui' },
+    { id: 'prof-thays', fullName: 'Thays Rocha', especialidade: 'Fonoaudiologia', email: 'thays.rocha@outro.test', cpf: '' },
+  ]);
+};
+
+const abrirOCadastroDaThays = async () => {
+  fireEvent.click(await screen.findByRole('button', { name: 'Cadastro de profissional de Thays Rocha' }));
+  return screen.findByRole('dialog');
+};
+
+it('o admin liga na mão a conta ao cadastro feito com outro e-mail', async () => {
+  contasComThays();
+  render(<GerenciarUsuariosPage />);
+
+  const janela = await abrirOCadastroDaThays();
+  expect(within(janela).getByText(/sem cadastro ligado/)).toBeInTheDocument();
+  fireEvent.change(within(janela).getByRole('searchbox', { name: 'Buscar profissional' }), { target: { value: 'fono' } });
+  expect(within(janela).getAllByRole('radio')).toHaveLength(1);
+  fireEvent.click(within(janela).getByRole('radio', { name: /Thays Rocha/ }));
+  fireEvent.click(within(janela).getByRole('button', { name: 'Ligar' }));
+
+  await waitFor(() =>
+    expect(trocarCadastroDoProfissional).toHaveBeenCalledWith('thays', 'prof-thays', expect.objectContaining({ soltarCadastros: [], soltarContas: [] }))
+  );
+  expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Cadastro ligado' }));
+  expect(ligarContaAoProfissional).not.toHaveBeenCalled(); // e-mails diferentes: a ligação automática não acha
+});
+
+it('avisa quando o cadastro escolhido já é de outra conta, e só liga com "Ligar mesmo assim"', async () => {
+  contasComThays();
+  render(<GerenciarUsuariosPage />);
+
+  const janela = await abrirOCadastroDaThays();
+  expect(within(janela).getByRole('radio', { name: /Rui Psicólogo/ })).toHaveAccessibleName(/Ligado a Rui Psicólogo/);
+  fireEvent.click(within(janela).getByRole('radio', { name: /Rui Psicólogo/ }));
+
+  expect(within(janela).getByRole('alert')).toHaveTextContent('já está ligado à conta de Rui Psicólogo');
+  expect(within(janela).queryByRole('button', { name: 'Ligar' })).not.toBeInTheDocument();
+  fireEvent.click(within(janela).getByRole('button', { name: 'Ligar mesmo assim' }));
+
+  await waitFor(() =>
+    expect(trocarCadastroDoProfissional).toHaveBeenCalledWith('thays', 'prof-rui', expect.objectContaining({ soltarContas: ['rui'] }))
+  );
+});
+
+it('avisa quando a conta já usa outro cadastro', async () => {
+  (getAllApprovedUsers as jest.Mock).mockResolvedValue([usuario('thays', 'Thays Rocha', 'profissional', { professionalId: 'prof-velho' })]);
+  (getProfessionals as jest.Mock).mockResolvedValue([
+    { id: 'prof-thays', fullName: 'Thays Rocha', especialidade: 'Fonoaudiologia', email: 'thays.rocha@outro.test', cpf: '' },
+    { id: 'prof-velho', fullName: 'Thays R.', especialidade: '', email: '', cpf: '', userId: 'thays' },
+  ]);
+  render(<GerenciarUsuariosPage />);
+
+  const janela = await abrirOCadastroDaThays();
+  expect(within(janela).getByText('Thays R.', { selector: 'strong' })).toBeInTheDocument();
+  fireEvent.click(within(janela).getByRole('radio', { name: /Thays Rocha/ }));
+
+  expect(within(janela).getByRole('alert')).toHaveTextContent('Thays Rocha já usa o cadastro Thays R.');
+  fireEvent.click(within(janela).getByRole('button', { name: 'Ligar mesmo assim' }));
+  await waitFor(() =>
+    expect(trocarCadastroDoProfissional).toHaveBeenCalledWith('thays', 'prof-thays', expect.objectContaining({ soltarCadastros: ['prof-velho'] }))
+  );
 });

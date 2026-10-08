@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { BotaoSenhaProvisoria } from "@/components/admin/senha-provisoria";
+import { BotaoLigarCadastro } from "@/components/admin/ligar-cadastro";
 import {
   getAllApprovedUsers,
   updateUserRole,
@@ -10,7 +11,7 @@ import {
   UserForApproval,
 } from "@/services/adminService";
 import { getProfessionals, type Professional } from "@/services/professionalService";
-import { ligacaoDoProfissional } from "@/lib/ligarProfissional";
+import { ligacaoDoProfissional, type TrocaDeCadastro } from "@/lib/ligarProfissional";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -78,6 +79,7 @@ export default function GerenciarUsuariosPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [userToDelete, setUserToDelete] = useState<UserForApproval | null>(null);
   const [semCadastro, setSemCadastro] = useState<Set<string>>(new Set());
+  const [cadastros, setCadastros] = useState<Professional[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -105,6 +107,7 @@ export default function GerenciarUsuariosPage() {
       atuais = atuais.map((c) => (c.id === ligacao.professionalId ? { ...c, userId: conta.id } : c));
       ligadas.push({ ...conta, profile: { ...conta.profile, professionalId: ligacao.professionalId } });
     }
+    setCadastros(atuais);
     const ids = new Set(contas.map((c) => c.id));
     setSemCadastro((antes) => new Set([...[...antes].filter((id) => !ids.has(id)), ...semCadastroAgora]));
     if (ligadas.length > 0) {
@@ -127,6 +130,30 @@ export default function GerenciarUsuariosPage() {
     }
   };
 
+  /** Depois de ligar na mão: a tabela e a lista de cadastros passam a mostrar a ligação nova. */
+  const aoLigarNaMao = (uid: string, professionalId: string, troca: TrocaDeCadastro) => {
+    setCadastros((antes) =>
+      antes.map((c) =>
+        c.id === professionalId ? { ...c, userId: uid } : troca.soltarCadastros.includes(c.id) ? { ...c, userId: undefined } : c
+      )
+    );
+    setUsers((antes) =>
+      antes.map((u) =>
+        u.id === uid
+          ? { ...u, profile: { ...u.profile, professionalId } }
+          : troca.soltarContas.includes(u.id)
+            ? { ...u, profile: { ...u.profile, professionalId: undefined } }
+            : u
+      )
+    );
+    setSemCadastro((antes) => new Set([...antes].filter((id) => id !== uid)));
+  };
+
+  const contas = useMemo(
+    () => users.map((u) => ({ uid: u.id, nome: u.displayName, professionalId: u.profile?.professionalId })),
+    [users]
+  );
+
   const handleRoleChange = async (userId: string, newRole: string) => {
     setUpdatingId(userId);
     const result = await updateUserRole(userId, newRole);
@@ -146,7 +173,7 @@ export default function GerenciarUsuariosPage() {
           faltando.length > 0
             ? {
                 title: "Permissão atualizada, mas falta o cadastro de profissional",
-                description: `Não achei o cadastro de ${conta.displayName} em Profissionais (nem pelo CPF, nem pelo e-mail). Crie em Profissionais → Novo Profissional, com o mesmo CPF ou e-mail, e abra esta tela de novo: a ligação é feita sozinha.`,
+                description: `Não achei o cadastro de ${conta.displayName} em Profissionais (nem pelo CPF, nem pelo e-mail). Se o cadastro existe com outro e-mail, use o botão do elo na linha da pessoa. Se não existe, crie em Profissionais → Novo Profissional e abra esta tela de novo.`,
               }
             : {
                 title: "Permissão atualizada",
@@ -266,7 +293,7 @@ export default function GerenciarUsuariosPage() {
                     {user.profile.role === "profissional" && semCadastro.has(user.id) && (
                       <div
                         className="mt-1.5 flex items-center gap-1 text-xs font-medium text-amber-700"
-                        title="Sem o cadastro em Profissionais, a agenda e as evoluções não acham as sessões. Crie com o mesmo CPF ou e-mail e abra esta tela de novo."
+                        title="Sem o cadastro em Profissionais, a agenda e as evoluções não acham as sessões. Ligue pelo botão do elo ou crie o cadastro em Profissionais."
                       >
                         <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> Sem cadastro em Profissionais
                       </div>
@@ -293,6 +320,15 @@ export default function GerenciarUsuariosPage() {
                           ))}
                         </SelectContent>
                       </Select>
+
+                      {user.profile.role === "profissional" && (
+                        <BotaoLigarCadastro
+                          pessoa={{ ...contaDoProfissional(user), nome: user.displayName, email: user.email }}
+                          cadastros={cadastros}
+                          contas={contas}
+                          onLigada={(professionalId, troca) => aoLigarNaMao(user.id, professionalId, troca)}
+                        />
+                      )}
 
                       <BotaoSenhaProvisoria pessoa={{ uid: user.id, nome: user.displayName, email: user.email }} />
 

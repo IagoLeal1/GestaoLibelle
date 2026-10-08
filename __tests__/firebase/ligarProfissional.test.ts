@@ -6,7 +6,7 @@ import { RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebaseConfig';
 import { ligacaoDoProfissional } from '@/lib/ligarProfissional';
-import { ligarContaAoProfissional, updateUserRole } from '@/services/adminService';
+import { ligarContaAoProfissional, trocarCadastroDoProfissional, updateUserRole } from '@/services/adminService';
 import { getProfessionals } from '@/services/professionalService';
 import { criarUsuario, encerrarAmbiente, entrarComo, iniciarAmbiente, limparDados, type UsuarioDeTeste } from './helpers';
 
@@ -55,4 +55,25 @@ it('quem não é admin não consegue ligar', async () => {
   expect(resultado.success).toBe(false);
   await entrarComo(admin);
   expect((await getDoc(doc(db, 'professionals', 'prof-karla'))).data()?.userId).toBeUndefined();
+});
+
+it('ligar na mão a outro cadastro desfaz as ligações antigas dos dois lados', async () => {
+  const rui = await criarUsuario('Rui Psicólogo', { role: 'profissional' });
+  await testEnv.withSecurityRulesDisabled(async (contexto) => {
+    const banco = contexto.firestore();
+    // Karla ligada ao cadastro errado; o cadastro certo (feito com outro e-mail) estava com a conta do Rui
+    await updateDoc(doc(banco, 'users', karla.uid), { 'profile.role': 'profissional', 'profile.professionalId': 'prof-errado' });
+    await setDoc(doc(banco, 'professionals', 'prof-errado'), { fullName: 'Outra Pessoa', status: 'ativo', userId: karla.uid });
+    await updateDoc(doc(banco, 'professionals', 'prof-karla'), { userId: rui.uid });
+    await updateDoc(doc(banco, 'users', rui.uid), { 'profile.professionalId': 'prof-karla' });
+  });
+  await entrarComo(admin); // criar a conta do Rui saiu da conta do admin
+
+  const resultado = await trocarCadastroDoProfissional(karla.uid, 'prof-karla', { soltarCadastros: ['prof-errado'], soltarContas: [rui.uid] });
+
+  expect(resultado).toEqual({ success: true });
+  expect((await getDoc(doc(db, 'professionals', 'prof-karla'))).data()?.userId).toBe(karla.uid);
+  expect((await getDoc(doc(db, 'users', karla.uid))).data()?.profile.professionalId).toBe('prof-karla');
+  expect((await getDoc(doc(db, 'professionals', 'prof-errado'))).data()).not.toHaveProperty('userId');
+  expect((await getDoc(doc(db, 'users', rui.uid))).data()?.profile).not.toHaveProperty('professionalId');
 });
