@@ -666,7 +666,9 @@ export const GUIAS: Guia[] = [
       { texto: "No menu, toque em **Gerenciar Usuários**." },
       { texto: "Ache a pessoa na lista. As abas do alto separam por perfil." },
       { texto: "Na coluna **Ação**, abra a caixinha ao lado da lixeira e escolha o novo perfil. A mudança vale na hora.", mini: { tipo: "opcoes", itens: ["Profissional", "Funcionário", "Coordenador"], escolhida: "Coordenador" } },
+      { texto: "Ao escolher **Profissional**, o sistema liga a conta ao cadastro da pessoa em **Profissionais** (pelo CPF ou pelo e-mail). É assim que aparecem as sessões dela e dá para escrever as evoluções." },
     ],
+    dica: "Se aparecer \"Sem cadastro em Profissionais\", crie o cadastro em Novo Profissional com o mesmo CPF ou e-mail e abra Gerenciar Usuários de novo: a ligação é feita sozinha.",
     tela: { href: "/admin/gerenciar-usuarios", rotulo: "Ir para Gerenciar Usuários" },
   },
   {
@@ -762,6 +764,7 @@ export const GUIAS: Guia[] = [
       { texto: "Toda conta nova começa **pendente** e só entra depois que o admin **aprova**." },
       { texto: "A família vê só as crianças cujo **E-mail para Login (Vínculo)**, na ficha, é o mesmo e-mail da conta dela." },
       { texto: "O **perfil** decide o que cada pessoa vê no menu: Familiar, Profissional, Funcionário (recepção), Coordenador ou Admin." },
+      { texto: "O terapeuta só vê as sessões dele quando a conta está ligada ao cadastro em **Profissionais**. A aprovação e a troca para Profissional fazem essa ligação sozinhas, pelo CPF ou pelo e-mail." },
       { texto: "Quem tem o **acesso tirado** não entra mais no sistema. O que a pessoa registrou continua guardado." },
     ],
     relacionados: ["aprovar-acesso", "mudar-papel", "senha-provisoria"],

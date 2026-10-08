@@ -293,6 +293,26 @@ export const updateUserRole = async (userId: string, newRole: string) => {
 };
 
 /**
+ * Liga a conta ao cadastro dela em Profissionais, nos lados que faltam (ver lib/ligarProfissional):
+ * o userId no cadastro, que as regras conferem, e o professionalId no perfil. Tudo de uma vez.
+ */
+export const ligarContaAoProfissional = async (
+  userId: string,
+  { professionalId, noPerfil, noCadastro }: { professionalId: string; noPerfil: boolean; noCadastro: boolean }
+) => {
+  try {
+    const batch = writeBatch(db);
+    if (noCadastro) batch.update(doc(db, "professionals", professionalId), { userId, updatedAt: Timestamp.now() });
+    if (noPerfil) batch.update(doc(db, "users", userId), { "profile.professionalId": professionalId });
+    await batch.commit();
+    return { success: true };
+  } catch (error) {
+    console.error("Erro ao ligar a conta ao cadastro de profissional:", error);
+    return { success: false, error: "Não foi possível ligar a conta ao cadastro de profissional." };
+  }
+};
+
+/**
  * Exclui (Remove) um usuário da coleção 'users'.
  * Usado para remover o acesso do sistema de alguém já aprovado.
  */

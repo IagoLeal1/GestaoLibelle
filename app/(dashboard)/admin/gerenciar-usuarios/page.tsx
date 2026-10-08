@@ -6,8 +6,11 @@ import {
   getAllApprovedUsers,
   updateUserRole,
   deleteActiveUser,
+  ligarContaAoProfissional,
   UserForApproval,
 } from "@/services/adminService";
+import { getProfessionals, type Professional } from "@/services/professionalService";
+import { ligacaoDoProfissional } from "@/lib/ligarProfissional";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -41,6 +44,13 @@ const ROLE_OPTIONS = [
   { value: "admin", label: "Admin" },
 ];
 
+const contaDoProfissional = (user: UserForApproval) => ({
+  uid: user.id,
+  email: user.email,
+  cpf: user.cpf ?? user.profile?.cpf,
+  professionalId: user.profile?.professionalId,
+});
+
 const RoleBadge = ({ role }: { role: string }) => {
   const getBadgeVariant = (roleName: string) => {
     switch (roleName) {
@@ -67,17 +77,54 @@ export default function GerenciarUsuariosPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [userToDelete, setUserToDelete] = useState<UserForApproval | null>(null);
+  const [semCadastro, setSemCadastro] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   useEffect(() => {
     fetchUsers();
   }, []);
 
+  /**
+   * Liga cada conta de profissional ao cadastro dela em Profissionais (pelo CPF ou e-mail), como a
+   * aprovação faz. Sem isso a agenda e as evoluções não acham as sessões da pessoa.
+   */
+  const ligarProfissionais = async (contas: UserForApproval[], cadastros: Professional[]) => {
+    const ligadas: UserForApproval[] = [];
+    const semCadastroAgora: string[] = [];
+    let atuais = cadastros;
+    for (const conta of contas) {
+      const ligacao = ligacaoDoProfissional(contaDoProfissional(conta), atuais);
+      if (ligacao.tipo === "sem_cadastro") semCadastroAgora.push(conta.id);
+      if (ligacao.tipo !== "ligar") continue;
+      const resultado = await ligarContaAoProfissional(conta.id, ligacao);
+      if (!resultado.success) {
+        toast({ title: "Falha ao ligar a conta", description: `${conta.displayName}: ${resultado.error}`, variant: "destructive" });
+        continue;
+      }
+      // O mesmo cadastro não pode ir para duas contas na mesma passada
+      atuais = atuais.map((c) => (c.id === ligacao.professionalId ? { ...c, userId: conta.id } : c));
+      ligadas.push({ ...conta, profile: { ...conta.profile, professionalId: ligacao.professionalId } });
+    }
+    const ids = new Set(contas.map((c) => c.id));
+    setSemCadastro((antes) => new Set([...[...antes].filter((id) => !ids.has(id)), ...semCadastroAgora]));
+    if (ligadas.length > 0) {
+      setUsers((antes) => antes.map((u) => ligadas.find((l) => l.id === u.id) ?? u));
+    }
+    return { ligadas, semCadastro: semCadastroAgora };
+  };
+
   const fetchUsers = async () => {
     setLoading(true);
-    const data = await getAllApprovedUsers();
+    const [data, cadastros] = await Promise.all([getAllApprovedUsers(), getProfessionals()]);
     setUsers(data);
     setLoading(false);
+    const { ligadas } = await ligarProfissionais(data.filter((u) => u.profile.role === "profissional"), cadastros);
+    if (ligadas.length > 0) {
+      toast({
+        title: "Contas ligadas ao cadastro de profissional",
+        description: `${ligadas.map((u) => u.displayName).join(", ")}: já aparecem as sessões e dá para escrever as evoluções.`,
+      });
+    }
   };
 
   const handleRoleChange = async (userId: string, newRole: string) => {
@@ -85,10 +132,7 @@ export default function GerenciarUsuariosPage() {
     const result = await updateUserRole(userId, newRole);
 
     if (result.success) {
-      toast({
-        title: "Permissão atualizada",
-        description: "O nível de acesso do usuário foi alterado com sucesso.",
-      });
+      const conta = users.find((u) => u.id === userId);
       setUsers((prevUsers) =>
         prevUsers.map((user) =>
           user.id === userId
@@ -96,6 +140,27 @@ export default function GerenciarUsuariosPage() {
             : user
         )
       );
+      if (newRole === "profissional" && conta) {
+        const { ligadas, semCadastro: faltando } = await ligarProfissionais([conta], await getProfessionals());
+        toast(
+          faltando.length > 0
+            ? {
+                title: "Permissão atualizada, mas falta o cadastro de profissional",
+                description: `Não achei o cadastro de ${conta.displayName} em Profissionais (nem pelo CPF, nem pelo e-mail). Crie em Profissionais → Novo Profissional, com o mesmo CPF ou e-mail, e abra esta tela de novo: a ligação é feita sozinha.`,
+              }
+            : {
+                title: "Permissão atualizada",
+                description: ligadas.length > 0
+                  ? "Conta ligada ao cadastro de profissional: já aparecem as sessões e dá para escrever as evoluções."
+                  : "O nível de acesso do usuário foi alterado com sucesso.",
+              }
+        );
+      } else {
+        toast({
+          title: "Permissão atualizada",
+          description: "O nível de acesso do usuário foi alterado com sucesso.",
+        });
+      }
     } else {
       toast({
         title: "Falha na atualização",
@@ -198,6 +263,14 @@ export default function GerenciarUsuariosPage() {
                   </td>
                   <td className="px-6 py-4">
                     <RoleBadge role={user.profile.role} />
+                    {user.profile.role === "profissional" && semCadastro.has(user.id) && (
+                      <div
+                        className="mt-1.5 flex items-center gap-1 text-xs font-medium text-amber-700"
+                        title="Sem o cadastro em Profissionais, a agenda e as evoluções não acham as sessões. Crie com o mesmo CPF ou e-mail e abra esta tela de novo."
+                      >
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> Sem cadastro em Profissionais
+                      </div>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-3">
