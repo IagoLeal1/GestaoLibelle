@@ -2,7 +2,7 @@
 // O prontuário da criança: uma aba por terapia (as do terapeuta primeiro), o "Para lembrar" de cada
 // terapia, a sessão que prova que o terapeuta atende a criança e a lista das crianças dele.
 import {
-  criancasDoTerapeuta, daTerapia, idade, minhaSessaoCom, paraLembrar, terapiasDoProntuario, type Anotacao,
+  criancasDoTerapeuta, criancasNaAgenda, daTerapia, idade, minhaSessaoCom, paraLembrar, resumoDaAgenda, terapiasDoProntuario, type Anotacao,
 } from '@/lib/prontuario';
 import type { SessaoDaAgenda } from '@/lib/evolucoes';
 
@@ -81,5 +81,28 @@ describe('idade', () => {
   it('data que não dá para ler: nada', () => {
     expect(idade('', hoje)).toBeNull();
     expect(idade('sem data', hoje)).toBeNull();
+  });
+});
+
+describe('criancasNaAgenda e resumoDaAgenda', () => {
+  const agora = new Date(2026, 9, 8, 10, 0); // quinta, 08/10, 10h
+  const sessoes = [
+    sessao('lucas-ontem', { patientId: 'lucas', patientName: 'Lucas Souza', start: new Date(2026, 9, 7, 9), end: new Date(2026, 9, 7, 9, 50) }),
+    sessao('lucas-sexta', { patientId: 'lucas', patientName: 'Lucas Souza', start: new Date(2026, 9, 9, 9), end: new Date(2026, 9, 9, 9, 50) }),
+    sessao('bia-hoje', { patientId: 'bia', patientName: 'Bia Lima', start: new Date(2026, 9, 8, 14), end: new Date(2026, 9, 8, 14, 50) }),
+    sessao('davi-cedo', { patientId: 'davi', patientName: 'Davi Rocha', start: new Date(2026, 9, 8, 8), end: new Date(2026, 9, 8, 8, 50) }),
+    sessao('theo-cancelada', { patientId: 'theo', patientName: 'Theo Martins', start: new Date(2026, 9, 8, 16), end: new Date(2026, 9, 8, 16, 50), status: 'cancelado' }),
+  ];
+
+  it('a próxima sessão de cada criança: quem tem sessão mais cedo vem primeiro; sem próxima, no fim', () => {
+    expect(criancasNaAgenda(sessoes, agora).map((c) => [c.nome, c.proxima?.getDate(), c.proxima?.getHours()])).toEqual([
+      ['Bia Lima', 8, 14],
+      ['Lucas Souza', 9, 9],
+      ['Davi Rocha', undefined, undefined],
+    ]);
+  });
+
+  it('os números do topo: sessões de hoje e dos próximos 7 dias, sem as canceladas', () => {
+    expect(resumoDaAgenda(sessoes, agora)).toEqual({ hoje: 2, proximosDias: 2 });
   });
 });

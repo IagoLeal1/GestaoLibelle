@@ -6,6 +6,8 @@
 // corrigir o que escreveu e ninguém apaga (lib/prontuario, firestore.rules).
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { format, isValid, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { ChevronLeft, Pin, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -17,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/context/AuthContext";
 import { useEvolucoes } from "@/context/EvolucoesContext";
 import { cn } from "@/lib/utils";
+import { corDaCrianca, corDaTerapia, corEscura } from "@/lib/coresDasTerapias";
 import { useDemorando } from "@/hooks/use-demorando";
 import { daTerapia, idade, minhaSessaoCom, paraLembrar, terapiasDoProntuario, type Anotacao } from "@/lib/prontuario";
 import { corrigirAnotacao, escreverAnotacao, getAnotacoes } from "@/services/prontuarioService";
@@ -43,7 +46,7 @@ export function ProntuarioDaCrianca({ patientId, terapiaInicial }: { patientId: 
   const uid = firestoreUser?.uid;
   const ehTerapeuta = escopo === "terapeuta";
 
-  const [crianca, setCrianca] = useState<{ nome: string; idade: string | null } | null>(null);
+  const [crianca, setCrianca] = useState<{ nome: string; idade: string | null; desde: string | null } | null>(null);
   const [anotacoes, setAnotacoes] = useState<Anotacao[]>([]);
   const [terapiasDasEvolucoes, setTerapiasDasEvolucoes] = useState<string[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -77,7 +80,12 @@ export function ProntuarioDaCrianca({ patientId, terapiaInicial }: { patientId: 
         }
         const [paciente, lidas] = await Promise.all([getPatientById(patientId), getAnotacoes(patientId)]);
         if (!ativo) return;
-        setCrianca({ nome: paciente?.fullName ?? "Criança", idade: idade(textoDaData(paciente?.dataNascimento), new Date()) });
+        const inicio = textoDaData(paciente?.dataInicio);
+        setCrianca({
+          nome: paciente?.fullName ?? "Criança",
+          idade: idade(textoDaData(paciente?.dataNascimento), new Date()),
+          desde: inicio && isValid(parseISO(inicio)) ? format(parseISO(inicio), "MMM/yyyy", { locale: ptBR }) : null,
+        });
         setAnotacoes(lidas);
       } catch (e) {
         console.error("Erro ao abrir o prontuário:", e);
@@ -180,10 +188,16 @@ export function ProntuarioDaCrianca({ patientId, terapiaInicial }: { patientId: 
         </div>
       ) : (
         <>
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h2 className="text-2xl font-bold tracking-tight">{crianca.nome}</h2>
-              <p className="text-sm text-muted-foreground">{crianca.idade ? `${crianca.idade} · prontuário` : "Prontuário"}</p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* A criança com a mesma cor da lista de Prontuários */}
+            <div className="flex min-w-0 flex-1 basis-64 items-center gap-3 rounded-2xl p-3.5 text-white" style={{ background: corDaCrianca(patientId) }}>
+              <span aria-hidden className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/20 text-base font-bold">
+                {crianca.nome.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("")}
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-xl font-bold leading-tight">{crianca.nome}</h2>
+                <p className="text-sm opacity-90">{[crianca.idade, crianca.desde && `na clínica desde ${crianca.desde}`].filter(Boolean).join(" · ") || "Prontuário"}</p>
+              </div>
             </div>
             {podeEscrever && (
               <Button
@@ -209,10 +223,12 @@ export function ProntuarioDaCrianca({ patientId, terapiaInicial }: { patientId: 
                     aria-pressed={t.terapia === terapia}
                     onClick={() => setEscolhida(t.terapia)}
                     className={cn(
-                      "whitespace-nowrap rounded-full border px-3.5 py-2 text-sm font-semibold",
-                      t.terapia === terapia ? "border-[#127a7e] bg-[#127a7e] text-white" : "border-input bg-background hover:bg-muted/60"
+                      "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-2 text-sm font-semibold",
+                      t.terapia !== terapia && "border-input bg-background hover:bg-muted/60"
                     )}
+                    style={t.terapia === terapia ? { background: `${corDaTerapia(t.terapia)}1f`, borderColor: corDaTerapia(t.terapia), color: corEscura(corDaTerapia(t.terapia)) } : undefined}
                   >
+                    <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: corDaTerapia(t.terapia) }} />
                     {t.terapia}
                     {t.minha && <span className="font-medium opacity-85"> · sua</span>}
                   </button>

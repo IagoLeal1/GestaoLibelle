@@ -1,21 +1,27 @@
 "use client"
 
-// "Prontuários" no menu, seguindo o desenho aprovado: uma busca e a lista das crianças. O terapeuta vê
-// as crianças da agenda dele (sem ler nada a mais do banco); a coordenação e o admin, todas as crianças
-// ativas, com idade e responsável para não confundir nomes parecidos.
+// "Prontuários" no menu, seguindo o desenho aprovado (com mais cor): uma busca e as crianças em cartões,
+// cada uma com a sua cor. O terapeuta vê as da agenda dele, com a próxima sessão e os números do topo
+// (que também filtram), sem ler nada a mais do banco; a coordenação e o admin, todas as crianças ativas,
+// separadas pela primeira letra, com idade e responsável para não confundir nomes parecidos.
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { format, isSameDay } from "date-fns";
 import { ChevronRight, Search } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEvolucoes } from "@/context/EvolucoesContext";
-import { corDaTerapia } from "@/lib/coresDasTerapias";
-import { criancasDoTerapeuta, idade } from "@/lib/prontuario";
+import { cn } from "@/lib/utils";
+import { corDaCrianca, corDaTerapia, corEscura } from "@/lib/coresDasTerapias";
+import { criancasNaAgenda, idade, resumoDaAgenda } from "@/lib/prontuario";
 import { getPatients } from "@/services/patientService";
+import { quandoFoi } from "@/components/evolucoes/comum";
 
-type Crianca = { id: string; nome: string; href: string; detalhe: React.ReactNode };
+type Crianca = { id: string; nome: string; href: string; detalhe?: React.ReactNode; quando?: string; terapias?: string[]; proxima?: Date };
+type Recorte = "todas" | "hoje" | "semana";
 
 const normalizar = (texto: string) => texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 const iniciais = (nome: string) => nome.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("");
+const letraDe = (nome: string) => normalizar(nome).charAt(0).toUpperCase() || "#";
 
 /** A data de nascimento vem como texto (ficha) ou como data do banco (cadastros antigos). */
 const textoDaData = (valor: unknown): string => {
@@ -24,12 +30,44 @@ const textoDaData = (valor: unknown): string => {
   return comoData ? comoData.toISOString().slice(0, 10) : "";
 };
 
+function CartaoDaCrianca({ crianca }: { crianca: Crianca }) {
+  return (
+    <Link
+      href={crianca.href}
+      className="grid grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border bg-card p-3 transition-colors hover:bg-muted/30"
+    >
+      <span aria-hidden className="flex h-11 w-11 items-center justify-center rounded-xl text-sm font-bold text-white" style={{ background: corDaCrianca(crianca.id) }}>
+        {iniciais(crianca.nome)}
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-[15px] font-bold">{crianca.nome}</span>
+        {crianca.terapias && crianca.terapias.length > 0 && (
+          <span className="mt-1 flex flex-wrap gap-1">
+            {crianca.terapias.map((t) => {
+              const cor = corDaTerapia(t);
+              return (
+                <span key={t} className="rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ background: `${cor}1f`, color: corEscura(cor) }}>
+                  {t}
+                </span>
+              );
+            })}
+          </span>
+        )}
+        {crianca.detalhe && <span className="mt-0.5 block truncate text-xs text-muted-foreground">{crianca.detalhe}</span>}
+        {crianca.quando && <span className="mt-1 block text-xs font-semibold text-[#127a7e]">{crianca.quando}</span>}
+      </span>
+      <ChevronRight aria-hidden className="h-4 w-4 text-muted-foreground" />
+    </Link>
+  );
+}
+
 export function ListaDeProntuarios() {
-  const { escopo, sessoes, carregando: carregandoAgenda } = useEvolucoes();
+  const { escopo, sessoes, agora, carregando: carregandoAgenda } = useEvolucoes();
   const ehTerapeuta = escopo === "terapeuta";
   const [pacientes, setPacientes] = useState<Crianca[] | null>(null);
   const [erro, setErro] = useState(false);
   const [busca, setBusca] = useState("");
+  const [recorte, setRecorte] = useState<Recorte>("todas");
 
   useEffect(() => {
     if (escopo !== "equipe") return;
@@ -57,35 +95,74 @@ export function ListaDeProntuarios() {
       });
   }, [escopo]);
 
-  const criancas: Crianca[] | null = useMemo(() => {
-    if (!ehTerapeuta) return pacientes;
-    return criancasDoTerapeuta(sessoes).map((c) => ({
+  const daAgenda: Crianca[] = useMemo(() => {
+    if (!ehTerapeuta) return [];
+    return criancasNaAgenda(sessoes, agora).map((c) => ({
       id: c.id,
       nome: c.nome,
+      terapias: c.terapias,
+      proxima: c.proxima,
       href: `/prontuario/${encodeURIComponent(c.id)}${c.terapias[0] ? `?terapia=${encodeURIComponent(c.terapias[0])}` : ""}`,
-      detalhe: (
-        <span className="flex flex-wrap gap-x-2">
-          {c.terapias.map((t) => (
-            <span key={t} className="inline-flex items-center gap-1">
-              <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: corDaTerapia(t) }} />
-              {t}
-            </span>
-          ))}
-        </span>
-      ),
+      quando: c.proxima
+        ? isSameDay(c.proxima, agora)
+          ? `Hoje às ${format(c.proxima, "HH:mm")}`
+          : `Próxima: ${quandoFoi(c.proxima)}`
+        : undefined,
     }));
-  }, [ehTerapeuta, pacientes, sessoes]);
+  }, [ehTerapeuta, sessoes, agora]);
 
+  const resumo = useMemo(() => (ehTerapeuta ? resumoDaAgenda(sessoes, agora) : null), [ehTerapeuta, sessoes, agora]);
+  const criancas = ehTerapeuta ? daAgenda : pacientes;
   const termo = normalizar(busca);
-  const visiveis = (criancas ?? []).filter((c) => !termo || normalizar(c.nome).includes(termo));
+  const semanaAte = useMemo(() => new Date(agora.getTime() + 7 * 24 * 60 * 60 * 1000), [agora]);
+  const visiveis = (criancas ?? []).filter((c) => {
+    if (termo && !normalizar(c.nome).includes(termo)) return false;
+    if (recorte === "hoje") return !!c.proxima && isSameDay(c.proxima, agora);
+    if (recorte === "semana") return !!c.proxima && c.proxima <= semanaAte;
+    return true;
+  });
   const carregando = ehTerapeuta ? carregandoAgenda : criancas === null && !erro;
+
+  // Coordenação e admin: separadas pela primeira letra do nome
+  const grupos = ehTerapeuta
+    ? [{ letra: "", criancas: visiveis }]
+    : [...visiveis.reduce((porLetra, c) => porLetra.set(letraDe(c.nome), [...(porLetra.get(letraDe(c.nome)) ?? []), c]), new Map<string, Crianca[]>())]
+        .map(([letra, lista]) => ({ letra, criancas: lista }));
+
+  const numeros: { id: Recorte; valor: number; rotulo: string; cor: string }[] = resumo
+    ? [
+        { id: "todas", valor: daAgenda.length, rotulo: "Crianças", cor: "bg-[#e3f4f4] text-[#0f6b6f]" },
+        { id: "hoje", valor: resumo.hoje, rotulo: "Sessões hoje", cor: "bg-[#e8eef9] text-[#1d3a73]" },
+        { id: "semana", valor: resumo.proximosDias, rotulo: "Próximos 7 dias", cor: "bg-[#fbf1df] text-[#7a5600]" },
+      ]
+    : [];
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4">
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Prontuários</h2>
-        <p className="text-muted-foreground">{ehTerapeuta ? "As crianças que você atende." : "Todas as crianças ativas da clínica."}</p>
+        <p className="text-muted-foreground">
+          {ehTerapeuta ? "As crianças que você atende." : pacientes ? `${pacientes.length} crianças ativas na clínica.` : "Todas as crianças ativas da clínica."}
+        </p>
       </div>
+
+      {ehTerapeuta && !carregando && (
+        <div role="group" aria-label="Mostrar" className="grid grid-cols-3 gap-2">
+          {numeros.map((n) => (
+            <button
+              key={n.id}
+              type="button"
+              aria-pressed={recorte === n.id}
+              aria-label={`${n.valor} ${n.rotulo}`}
+              onClick={() => setRecorte(recorte === n.id && n.id !== "todas" ? "todas" : n.id)}
+              className={cn("flex flex-col items-start rounded-2xl p-3 text-left", n.cor, recorte === n.id && n.id !== "todas" && "ring-2 ring-[#127a7e] ring-offset-1")}
+            >
+              <b className="text-2xl leading-tight tabular-nums">{n.valor}</b>
+              <span className="text-xs font-semibold leading-tight">{n.rotulo}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       <label className="flex h-12 items-center gap-2.5 rounded-xl border border-[#cfd9de] bg-background px-3.5 text-muted-foreground focus-within:ring-2 focus-within:ring-ring">
         <Search aria-hidden className="h-[18px] w-[18px] shrink-0" />
@@ -102,35 +179,33 @@ export function ListaDeProntuarios() {
       {erro ? (
         <p className="text-sm text-destructive">Não foi possível carregar as crianças. Recarregue a página.</p>
       ) : carregando ? (
-        <div className="space-y-2">
-          <Skeleton className="h-14 w-full" />
-          <Skeleton className="h-14 w-full" />
-          <Skeleton className="h-14 w-full" />
+        <div className="space-y-2.5">
+          <Skeleton className="h-16 w-full rounded-2xl" />
+          <Skeleton className="h-16 w-full rounded-2xl" />
+          <Skeleton className="h-16 w-full rounded-2xl" />
         </div>
       ) : visiveis.length === 0 ? (
-        <p className="rounded-xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground">
-          {termo ? "Nenhuma criança encontrada." : ehTerapeuta ? "As crianças que você atende aparecem aqui." : "Nenhuma criança ativa."}
+        <p className="rounded-2xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground">
+          {termo
+            ? "Nenhuma criança encontrada."
+            : recorte === "hoje"
+              ? "Nenhuma sessão hoje."
+              : recorte === "semana"
+                ? "Nenhuma sessão nos próximos 7 dias."
+                : ehTerapeuta
+                  ? "As crianças que você atende aparecem aqui."
+                  : "Nenhuma criança ativa."}
         </p>
       ) : (
-        <>
-          <ul aria-label="Crianças" className="overflow-hidden rounded-2xl border bg-card">
-            {visiveis.map((c) => (
-              <li key={c.id} className="border-b last:border-b-0">
-                <Link href={c.href} className="grid grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 hover:bg-muted/40">
-                  <span aria-hidden className="flex h-9 w-9 items-center justify-center rounded-full bg-[#e3f4f4] text-xs font-bold text-[#127a7e]">
-                    {iniciais(c.nome)}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-[15px] font-semibold">{c.nome}</span>
-                    {c.detalhe && <span className="block truncate text-xs text-muted-foreground">{c.detalhe}</span>}
-                  </span>
-                  <ChevronRight aria-hidden className="h-4 w-4 text-muted-foreground" />
-                </Link>
-              </li>
-            ))}
-          </ul>
+        <section aria-label="Crianças" className="flex flex-col gap-2.5">
+          {grupos.map((g) => (
+            <div key={g.letra || "todas"} className="flex flex-col gap-2.5">
+              {g.letra && <h3 className="px-1 pt-1 text-sm font-extrabold tracking-wide text-[#127a7e]">{g.letra}</h3>}
+              {g.criancas.map((c) => <CartaoDaCrianca key={c.id} crianca={c} />)}
+            </div>
+          ))}
           {termo && <p className="text-sm text-muted-foreground">{visiveis.length} de {criancas?.length ?? 0} crianças</p>}
-        </>
+        </section>
       )}
     </div>
   );
