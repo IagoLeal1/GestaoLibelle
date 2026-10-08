@@ -17,8 +17,9 @@ import { useEvolucoes } from "@/context/EvolucoesContext";
 import { cn } from "@/lib/utils";
 import { EVOLUCOES_DESDE, incompatibilidade, textoDoAtraso, type Evolucao, type SessaoDaAgenda } from "@/lib/evolucoes";
 import {
-  PERIODOS, SITUACOES, agruparPorDia, sessoesDaCentral, type Filtros, type Periodo, type SessaoNaCentral, type Situacao,
+  PERIODOS, SITUACOES, agruparPorDia, rotuloDaSituacao, sessoesDaCentral, type Filtros, type LinhaDoTerapeuta, type Periodo, type SessaoNaCentral, type Situacao,
 } from "@/lib/centralDeEvolucoes";
+import { corDaTerapia } from "@/lib/coresDasTerapias";
 import { getAppointmentsForReport } from "@/services/appointmentService";
 import { getEvolucao, getUltimaEvolucao, sessaoDaAgenda } from "@/services/evolucaoService";
 import { getPatients } from "@/services/patientService";
@@ -32,21 +33,6 @@ const COR_DA_SITUACAO: Record<Situacao, string> = {
   nao_bate: "bg-[#fbe7e1] text-[#9b3a1c]",
   nao_aconteceu: "bg-[#eceff1] text-[#4a5a61]",
 };
-
-const PALETA = ["#1da7ac", "#b7133f", "#e68b00", "#16375b", "#1dac8c", "#ff8d69"];
-const normalizado = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-const porHash = (texto: string) => PALETA[[...texto].reduce((soma, c) => soma + c.charCodeAt(0), 0) % PALETA.length];
-
-/** Cada terapia com a sua cor, das cores da Casa Libelle. */
-export function corDaTerapia(terapia: string) {
-  const t = normalizado(terapia);
-  if (t.includes("fono")) return "#1da7ac";
-  if (t.includes("psicoped")) return "#16375b";
-  if (t.includes("psico")) return "#b7133f";
-  if (t.includes("ocupacional") || t === "to") return "#e68b00";
-  if (t.includes("aba")) return "#1dac8c";
-  return porHash(t);
-}
 
 const iniciais = (nome: string) =>
   nome.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("");
@@ -65,13 +51,16 @@ function useTelaLarga() {
   return larga;
 }
 
-function SeloDaSituacao({ situacao }: { situacao: Situacao }) {
+function SeloDaSituacao({ situacao, texto }: { situacao: Situacao; texto?: string }) {
   return (
     <span className={cn("whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold", COR_DA_SITUACAO[situacao])}>
-      {SITUACOES.find((s) => s.id === situacao)?.curto}
+      {texto ?? SITUACOES.find((s) => s.id === situacao)?.curto}
     </span>
   );
 }
+
+/** A lista mostra as sessões aos poucos: com muitas pendentes, a página não vira uma rolagem sem fim. */
+const POR_PAGINA = 20;
 
 const TODOS = "todos";
 
@@ -194,6 +183,49 @@ function LeituraDaSessao({ sessao, posicao, total, agora, cache, onAnterior, onP
   );
 }
 
+/** Um terapeuta: as iniciais na cor da terapia, a barra de escritas e pendentes e o selo. */
+function CartaoDoTerapeuta({ linha: t, escolhido, grande = false, onEscolher }: {
+  linha: LinhaDoTerapeuta;
+  escolhido: boolean;
+  /** No celular, o cartão é a navegação principal: maior e com a terapia. */
+  grande?: boolean;
+  onEscolher: () => void;
+}) {
+  const total = t.feitas + t.pendentes;
+  return (
+    <button
+      type="button"
+      aria-pressed={escolhido}
+      aria-label={`${t.nome}: ${t.pendentes} ${t.pendentes === 1 ? "pendente" : "pendentes"}, ${t.feitas} em dia`}
+      onClick={onEscolher}
+      className={cn(
+        "grid w-full grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-3 text-left",
+        grande ? "rounded-2xl border bg-card p-3 hover:bg-muted/30" : "rounded-xl px-2 py-2 hover:bg-muted/40",
+        escolhido && "bg-[#f0fafa] ring-1 ring-[#127a7e]"
+      )}
+    >
+      <span aria-hidden className="flex h-9 w-9 items-center justify-center rounded-full text-[11px] font-bold text-white" style={{ background: corDaTerapia(t.terapia || t.nome) }}>
+        {iniciais(t.nome)}
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-semibold">{t.nome}</span>
+        {grande && <span className="block truncate text-xs text-muted-foreground">{t.terapia} · {t.feitas} em dia</span>}
+        <span aria-hidden className="mt-1.5 flex h-1.5 overflow-hidden rounded-full bg-muted">
+          <span className="bg-[#1dac8c]" style={{ width: `${(t.feitas / total) * 100}%` }} />
+          <span className="bg-[#e68b00]" style={{ width: `${(t.pendentes / total) * 100}%` }} />
+        </span>
+      </span>
+      {t.pendentes > 0 ? (
+        <span className={cn("whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold", COR_DA_SITUACAO.pendente)}>
+          {t.pendentes} {t.pendentes === 1 ? "pendente" : "pendentes"}
+        </span>
+      ) : (
+        <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-bold", COR_DA_SITUACAO.escrita)}>Em dia</span>
+      )}
+    </button>
+  );
+}
+
 // ——— A página ———
 
 export function PainelDaCoordenacao() {
@@ -244,8 +276,12 @@ export function PainelDaCoordenacao() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [base, filtros, datas.de, datas.ate, agora, desde]
   );
-  const dias = useMemo(() => agruparPorDia(central.lista), [central.lista]);
-  const ordem = useMemo(() => dias.flatMap((d) => d.sessoes), [dias]);
+  const ordem = useMemo(() => agruparPorDia(central.lista).flatMap((d) => d.sessoes), [central.lista]);
+  const [limite, setLimite] = useState(POR_PAGINA);
+  const chaveDosFiltros = JSON.stringify([filtros, datas]);
+  useEffect(() => setLimite(POR_PAGINA), [chaveDosFiltros]);
+  const dias = useMemo(() => agruparPorDia(ordem.slice(0, limite)), [ordem, limite]);
+  const restantes = ordem.length - limite;
   const posicao = ordem.findIndex((s) => s.id === selecionada);
   const aberta = posicao >= 0 ? ordem[posicao] : null;
   const ocupado = carregando || (usandoDatas && carregandoDatas);
@@ -253,6 +289,10 @@ export function PainelDaCoordenacao() {
   const mudar = (mudanca: Partial<Filtros>) => setFiltros((f) => ({ ...f, ...mudanca }));
   const limpar = () => setFiltros((f) => ({ periodo: f.periodo }));
   const temFiltro = !!(filtros.terapeuta || filtros.terapia || filtros.situacao || filtros.busca);
+  // No celular, sem filtro, a página abre pelos terapeutas (cartões), e não pela lista inteira
+  const celular = !telaLarga;
+  const pelosTerapeutas = celular && !temFiltro;
+  const terapeutaAberto = central.porTerapeuta.find((t) => t.professionalId === filtros.terapeuta);
 
   const leitura = aberta && (
     <LeituraDaSessao
@@ -263,7 +303,11 @@ export function PainelDaCoordenacao() {
       agora={agora}
       cache={cache}
       onAnterior={() => posicao > 0 && setSelecionada(ordem[posicao - 1].id)}
-      onProxima={() => posicao < ordem.length - 1 && setSelecionada(ordem[posicao + 1].id)}
+      onProxima={() => {
+        if (posicao >= ordem.length - 1) return;
+        if (posicao + 1 >= limite) setLimite((l) => l + POR_PAGINA);
+        setSelecionada(ordem[posicao + 1].id);
+      }}
     />
   );
 
@@ -363,144 +407,200 @@ export function PainelDaCoordenacao() {
         })}
       </div>
 
-      {/* Filtros: no computador numa linha; no celular, a busca e um botão que abre o resto */}
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card p-2.5">
-        <label className="flex h-10 min-w-0 flex-1 basis-[150px] items-center md:basis-[220px] gap-2 rounded-lg border border-input px-3 text-muted-foreground focus-within:ring-2 focus-within:ring-ring">
+      {pelosTerapeutas ? (
+        /* Celular: um cartão por terapeuta, quem tem pendência primeiro; tocar abre as sessões dele */
+        <section aria-label="Terapeutas" className="space-y-2.5">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Terapeutas · quem tem pendência primeiro</h3>
+          {ocupado ? (
+            <div className="space-y-2.5">
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          ) : central.porTerapeuta.length === 0 ? (
+            <p className="rounded-2xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground">Nenhuma sessão terminada neste período.</p>
+          ) : (
+            central.porTerapeuta.map((t) => (
+                <CartaoDoTerapeuta key={t.professionalId} linha={t} grande escolhido={filtros.terapeuta === t.professionalId}
+                  onEscolher={() => mudar({ terapeuta: filtros.terapeuta === t.professionalId ? undefined : t.professionalId })} />
+              ))
+          )}
+          <div className="flex pt-1"><label className="flex h-10 min-w-0 flex-1 basis-[150px] items-center gap-2 rounded-lg border border-input bg-background px-3 text-muted-foreground focus-within:ring-2 focus-within:ring-ring md:basis-[220px]">
           <Search aria-hidden className="h-4 w-4 shrink-0" />
           <input
             type="search"
             aria-label="Buscar criança"
-            placeholder="Buscar criança"
+            placeholder={pelosTerapeutas ? "Ou busque uma criança" : "Buscar criança"}
+            value={filtros.busca ?? ""}
+            onChange={(e) => mudar({ busca: e.target.value })}
+            className="min-w-0 flex-1 bg-transparent text-base text-foreground outline-none md:text-sm"
+          />
+        </label></div>
+        </section>
+      ) : (
+        <>
+          {celular && (
+            <button type="button" onClick={limpar} className="inline-flex min-h-9 items-center gap-1 text-sm font-semibold text-[#127a7e]">
+              <ChevronLeft aria-hidden className="h-4 w-4" /> Todos os terapeutas
+            </button>
+          )}
+
+          {celular && terapeutaAberto ? (
+            /* Celular: as sessões de um terapeuta, com a situação no alto */
+            <div className="space-y-3">
+              <div className="grid grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-3">
+                <span aria-hidden className="flex h-9 w-9 items-center justify-center rounded-full text-[11px] font-bold text-white" style={{ background: corDaTerapia(terapeutaAberto.terapia || terapeutaAberto.nome) }}>
+                  {iniciais(terapeutaAberto.nome)}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-lg font-bold">{terapeutaAberto.nome}</p>
+                  <p className="truncate text-sm text-muted-foreground">
+                    {terapeutaAberto.terapia} · {terapeutaAberto.pendentes} {terapeutaAberto.pendentes === 1 ? "pendente" : "pendentes"} · {terapeutaAberto.feitas} em dia
+                  </p>
+                </div>
+              </div>
+              <div role="group" aria-label="Situação" className="flex flex-wrap gap-1.5">
+                {[{ id: undefined, curto: "Todas" }, ...SITUACOES.map((s) => ({ id: s.id, curto: s.id === "nao_bate" ? "Não bate" : s.rotulo }))].map((s) => (
+                  <button
+                    key={s.id ?? "todas"}
+                    type="button"
+                    aria-pressed={filtros.situacao === s.id}
+                    onClick={() => mudar({ situacao: s.id as Situacao | undefined })}
+                    className={cn(
+                      "rounded-full border px-3 py-1.5 text-sm font-semibold",
+                      filtros.situacao === s.id ? "border-[#127a7e] bg-[#127a7e] text-white" : "border-input bg-background"
+                    )}
+                  >
+                    {s.curto}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            /* Filtros: no computador numa linha; no celular, a busca e um botão que abre o resto */
+            <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card p-2.5">
+              <label className="flex h-10 min-w-0 flex-1 basis-[150px] items-center gap-2 rounded-lg border border-input bg-background px-3 text-muted-foreground focus-within:ring-2 focus-within:ring-ring md:basis-[220px]">
+          <Search aria-hidden className="h-4 w-4 shrink-0" />
+          <input
+            type="search"
+            aria-label="Buscar criança"
+            placeholder={pelosTerapeutas ? "Ou busque uma criança" : "Buscar criança"}
             value={filtros.busca ?? ""}
             onChange={(e) => mudar({ busca: e.target.value })}
             className="min-w-0 flex-1 bg-transparent text-base text-foreground outline-none md:text-sm"
           />
         </label>
-        <div className="hidden flex-wrap gap-2 md:flex">{seletores}</div>
-        <Button variant="outline" className="md:hidden" onClick={() => setFiltrosAbertos(true)}>
-          <SlidersHorizontal className="mr-2 h-4 w-4" /> Filtros{temFiltro ? " •" : ""}
-        </Button>
-        {temFiltro && (
-          <Button variant="ghost" className="hidden text-[#127a7e] md:inline-flex" onClick={limpar}>Limpar filtros</Button>
-        )}
-      </div>
-
-      {erro && <p className="text-sm text-destructive">Não foi possível carregar as sessões. Recarregue a página.</p>}
-
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:items-start">
-        {/* A lista, por dia */}
-        <div className="min-w-0 overflow-hidden rounded-2xl border bg-card">
-          {ocupado ? (
-            <div className="space-y-3 p-4">
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-            </div>
-          ) : dias.length === 0 ? (
-            <p className="p-8 text-center text-sm text-muted-foreground">
-              {temFiltro ? "Nenhuma sessão com esses filtros." : "Nenhuma sessão terminada neste período."}
-            </p>
-          ) : (
-            <ul aria-label="Sessões">
-              {dias.map(({ dia, sessoes: doDia }) => {
-                const escritas = doDia.filter((s) => s.situacao !== "pendente").length;
-                const pendentes = doDia.length - escritas;
-                return (
-                  <li key={dia.toISOString()}>
-                    <p className="flex justify-between gap-2 border-b bg-muted/40 px-4 py-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                      <span>{quandoFoi(dia).split(" · ")[0]}</span>
-                      <span className="normal-case tracking-normal">
-                        {pendentes > 0 ? `${escritas} em dia · ${pendentes} ${pendentes === 1 ? "pendente" : "pendentes"}` : "todas em dia"}
-                      </span>
-                    </p>
-                    <ul>
-                      {doDia.map((s) => (
-                        <li key={s.id}>
-                          <button
-                            type="button"
-                            onClick={() => setSelecionada(s.id)}
-                            className={cn(
-                              "grid w-full grid-cols-[3rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 border-b px-4 py-3 text-left hover:bg-muted/40 sm:grid-cols-[3rem_minmax(0,1fr)_auto]",
-                              telaLarga && s.id === selecionada && "bg-[#f0fafa] shadow-[inset_3px_0_0_#127a7e]"
-                            )}
-                          >
-                            <span className="text-sm font-bold tabular-nums">{format(s.start, "HH:mm")}</span>
-                            <span className="min-w-0">
-                              <span className="block truncate text-[15px] font-semibold">{s.patientName}</span>
-                              <span className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-                                <span className="inline-flex items-center gap-1 font-semibold text-foreground">
-                                  <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: corDaTerapia(s.tipo) }} />
-                                  {s.tipo}
-                                </span>
-                                · {primeiroNome(s.professionalName)}
-                              </span>
-                            </span>
-                            <span className="col-start-2 sm:col-start-auto"><SeloDaSituacao situacao={s.situacao} /></span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-4">
-          {telaLarga && (
-            <Card>
-              <CardContent className="p-4">
-                {leitura ?? <p className="py-8 text-center text-sm text-muted-foreground">Toque numa sessão para ler a evolução.</p>}
-              </CardContent>
-            </Card>
-          )}
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Por terapeuta</CardTitle>
-              <p className="text-xs text-muted-foreground">Toque no nome para ver só as sessões dele.</p>
-            </CardHeader>
-            <CardContent className="space-y-1">
-              {central.porTerapeuta.length === 0 ? (
-                <p className="py-4 text-center text-sm text-muted-foreground">Nenhuma sessão neste período.</p>
-              ) : (
-                central.porTerapeuta.map((t) => {
-                  const total = t.feitas + t.pendentes;
-                  const escolhido = filtros.terapeuta === t.professionalId;
-                  return (
-                    <button
-                      key={t.professionalId}
-                      type="button"
-                      aria-pressed={escolhido}
-                      onClick={() => mudar({ terapeuta: escolhido ? undefined : t.professionalId })}
-                      className={cn("grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-muted/40", escolhido && "bg-[#f0fafa] ring-1 ring-[#127a7e]")}
-                    >
-                      <span aria-hidden className="flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-bold text-white" style={{ background: porHash(t.professionalId) }}>
-                        {iniciais(t.nome)}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-semibold">{t.nome}</span>
-                        <span aria-hidden className="mt-1 flex h-1.5 overflow-hidden rounded-full bg-muted">
-                          <span className="bg-[#1dac8c]" style={{ width: `${(t.feitas / total) * 100}%` }} />
-                          <span className="bg-[#e68b00]" style={{ width: `${(t.pendentes / total) * 100}%` }} />
-                        </span>
-                      </span>
-                      {t.pendentes > 0 ? (
-                        <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-bold", COR_DA_SITUACAO.pendente)}>
-                          {t.pendentes} {t.pendentes === 1 ? "pendente" : "pendentes"}
-                        </span>
-                      ) : (
-                        <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-bold", COR_DA_SITUACAO.escrita)}>Em dia</span>
-                      )}
-                    </button>
-                  );
-                })
+              <div className="hidden flex-wrap gap-2 md:flex">{seletores}</div>
+              <Button variant="outline" className="md:hidden" onClick={() => setFiltrosAbertos(true)}>
+                <SlidersHorizontal className="mr-2 h-4 w-4" /> Filtros{temFiltro ? " •" : ""}
+              </Button>
+              {temFiltro && (
+                <Button variant="ghost" className="hidden text-[#127a7e] md:inline-flex" onClick={limpar}>Limpar filtros</Button>
               )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+            </div>
+          )}
+
+          {erro && <p className="text-sm text-destructive">Não foi possível carregar as sessões. Recarregue a página.</p>}
+
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:items-start">
+            {/* A lista, por dia, 20 de cada vez */}
+            <div className="min-w-0 overflow-hidden rounded-2xl border bg-card">
+              {ocupado ? (
+                <div className="space-y-3 p-4">
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                </div>
+              ) : dias.length === 0 ? (
+                <p className="p-8 text-center text-sm text-muted-foreground">
+                  {temFiltro ? "Nenhuma sessão com esses filtros." : "Nenhuma sessão terminada neste período."}
+                </p>
+              ) : (
+                <>
+                  <ul aria-label="Sessões">
+                    {dias.map(({ dia, sessoes: doDia }) => {
+                      const escritas = doDia.filter((s) => s.situacao !== "pendente").length;
+                      const pendentes = doDia.length - escritas;
+                      return (
+                        <li key={dia.toISOString()}>
+                          <p className="flex justify-between gap-2 border-b bg-muted/40 px-4 py-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                            <span>{quandoFoi(dia).split(" · ")[0]}</span>
+                            <span className="normal-case tracking-normal">
+                              {pendentes > 0 ? `${escritas} em dia · ${pendentes} ${pendentes === 1 ? "pendente" : "pendentes"}` : "todas em dia"}
+                            </span>
+                          </p>
+                          <ul>
+                            {doDia.map((s) => (
+                              <li key={s.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelecionada(s.id)}
+                                  className={cn(
+                                    "grid w-full grid-cols-[3rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 border-b px-4 py-3 text-left hover:bg-muted/40 sm:grid-cols-[3rem_minmax(0,1fr)_auto]",
+                                    telaLarga && s.id === selecionada && "bg-[#f0fafa] shadow-[inset_3px_0_0_#127a7e]"
+                                  )}
+                                >
+                                  <span className="text-sm font-bold tabular-nums">{format(s.start, "HH:mm")}</span>
+                                  <span className="min-w-0">
+                                    <span className="block truncate text-[15px] font-semibold">{s.patientName}</span>
+                                    <span className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+                                      <span className="inline-flex items-center gap-1 font-semibold text-foreground">
+                                        <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: corDaTerapia(s.tipo) }} />
+                                        {s.tipo}
+                                      </span>
+                                      · {primeiroNome(s.professionalName)}
+                                    </span>
+                                  </span>
+                                  <span className="col-start-2 sm:col-start-auto"><SeloDaSituacao situacao={s.situacao} texto={rotuloDaSituacao(s, agora)} /></span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {restantes > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setLimite((l) => l + POR_PAGINA)}
+                      className="w-full py-3 text-sm font-semibold text-[#127a7e] hover:bg-muted/40"
+                    >
+                      {restantes > POR_PAGINA ? `Mostrar mais ${POR_PAGINA} (${restantes} restantes)` : `Mostrar mais ${restantes}`}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+
+            {telaLarga && (
+              <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-4">
+                <Card>
+                  <CardContent className="p-4">
+                    {leitura ?? <p className="py-8 text-center text-sm text-muted-foreground">Toque numa sessão para ler a evolução.</p>}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Por terapeuta</CardTitle>
+                    <p className="text-xs text-muted-foreground">Toque no nome para ver só as sessões dele.</p>
+                  </CardHeader>
+                  <CardContent className="space-y-1">
+                    {central.porTerapeuta.length === 0 ? (
+                      <p className="py-4 text-center text-sm text-muted-foreground">Nenhuma sessão neste período.</p>
+                    ) : (
+                      central.porTerapeuta.map((t) => (
+                <CartaoDoTerapeuta key={t.professionalId} linha={t} escolhido={filtros.terapeuta === t.professionalId}
+                  onEscolher={() => mudar({ terapeuta: filtros.terapeuta === t.professionalId ? undefined : t.professionalId })} />
+              ))
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* O prontuário de qualquer criança: anotações e evoluções de todas as terapias */}
       <Card className="min-w-0">

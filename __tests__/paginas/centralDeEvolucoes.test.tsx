@@ -116,13 +116,48 @@ it('sessão pendente avisa que ainda não tem evolução, sem ler o banco', asyn
   expect(getEvolucao).not.toHaveBeenCalled();
 });
 
-it('no celular, a leitura abre numa folha por cima da lista', async () => {
+it('no celular, a página abre pelos terapeutas, e tocar num deles mostra as sessões dele', () => {
   telaLarga(false);
   render(<PainelDaCoordenacao />);
 
-  expect(screen.queryByRole('region', { name: 'Leitura da evolução' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('list', { name: 'Sessões' })).not.toBeInTheDocument();
+  const terapeutas = screen.getByRole('region', { name: 'Terapeutas' });
+  // Quem tem pendência vem primeiro
+  expect(within(terapeutas).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual([
+    'Lia TO: 1 pendente, 0 em dia',
+    'Paula Fonoaudióloga: 0 pendentes, 1 em dia',
+    'Rui Psicólogo: 0 pendentes, 1 em dia',
+  ]);
+
+  fireEvent.click(within(terapeutas).getByRole('button', { name: /Paula/ }));
+
+  expect(within(lista()).getAllByRole('button')).toHaveLength(1);
+  expect(within(lista()).getByRole('button', { name: /Lucas Souza/ })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: /Todos os terapeutas/ }));
+  expect(screen.getByRole('region', { name: 'Terapeutas' })).toBeInTheDocument();
+});
+
+it('no celular, tocar num número também abre a lista, e a leitura abre numa folha', async () => {
+  telaLarga(false);
+  render(<PainelDaCoordenacao />);
+
+  fireEvent.click(screen.getByRole('button', { name: /2 Escritas/ }));
   fireEvent.click(within(lista()).getByRole('button', { name: /Lucas Souza/ }));
 
   const folha = await screen.findByRole('dialog');
   await waitFor(() => expect(within(folha).getByText('Trabalhamos frases com o livro de figuras.')).toBeInTheDocument());
+});
+
+it('a lista mostra 20 sessões de cada vez', () => {
+  const muitas = Array.from({ length: 25 }, (_, i) => sessao(`m${i}`, 9, { start: new Date(2026, 9, 14, 8, i), end: new Date(2026, 9, 14, 8, i + 1), evolucao: 'escrita' }));
+  (useEvolucoes as jest.Mock).mockReturnValue({
+    escopo: 'equipe', carregando: false, erro: false, sessoes: muitas, agora: AGORA, desde: new Date(2026, 9, 6),
+  });
+  render(<PainelDaCoordenacao />);
+
+  expect(within(lista()).getAllByRole('button')).toHaveLength(20);
+  fireEvent.click(screen.getByRole('button', { name: 'Mostrar mais 5' }));
+  expect(within(lista()).getAllByRole('button')).toHaveLength(25);
+  expect(screen.queryByRole('button', { name: /Mostrar mais/ })).not.toBeInTheDocument();
 });

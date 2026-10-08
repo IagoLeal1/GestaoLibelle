@@ -2,7 +2,7 @@
 // A página de Evoluções do admin e da coordenação: a situação de cada sessão, os números que também
 // filtram, os filtros e a lista por dia. Tudo sai da agenda, sem ler o texto das evoluções.
 import {
-  agruparPorDia, intervaloDoPeriodo, sessoesDaCentral, situacaoDaSessao, type Filtros,
+  agruparPorDia, intervaloDoPeriodo, rotuloDaSituacao, sessoesDaCentral, situacaoDaSessao, type Filtros,
 } from '@/lib/centralDeEvolucoes';
 import type { SessaoDaAgenda } from '@/lib/evolucoes';
 
@@ -106,6 +106,16 @@ describe('sessoesDaCentral', () => {
     ]);
   });
 
+  it('cada terapeuta vem com a terapia que mais atende no período', () => {
+    const { porTerapeuta } = sessoesDaCentral(sessoes, filtros(), quando);
+
+    expect(Object.fromEntries(porTerapeuta.map((t) => [t.nome, t.terapia]))).toEqual({
+      'Lia TO': 'Terapia Ocupacional',
+      'Paula Fonoaudióloga': 'Fonoaudiologia',
+      'Rui Psicólogo': 'Psicologia',
+    });
+  });
+
   it('as opções de terapeuta e de terapia saem das sessões do período', () => {
     const { terapeutas, terapias } = sessoesDaCentral(sessoes, filtros(), quando);
 
@@ -124,5 +134,18 @@ describe('agruparPorDia', () => {
     const dias = agruparPorDia(lista);
 
     expect(dias.map((d) => d.sessoes.map((s) => s.start.getHours()))).toEqual([[9, 14], [15]]);
+  });
+});
+
+describe('rotuloDaSituacao', () => {
+  it('a pendente atrasada diz há quantos dias; as outras, a situação', () => {
+    const { lista } = sessoesDaCentral(
+      [sessao(14, 9, { id: 'hoje' }), sessao(12, 9, { id: 'anteontem' }), sessao(14, 10, { id: 'escrita', evolucao: 'escrita' })],
+      { periodo: '7dias' },
+      quando
+    );
+    const rotulo = (id: string) => rotuloDaSituacao(lista.find((s) => s.id === id)!, AGORA);
+
+    expect([rotulo('hoje'), rotulo('anteontem'), rotulo('escrita')]).toEqual(['Pendente', 'Atrasada há 2 dias', 'Escrita']);
   });
 });

@@ -3,8 +3,8 @@
 // de cada sessão (escrita, pendente, não bate com a recepção, não aconteceu), com números que também
 // filtram, filtros de período, terapeuta, terapia e criança, e a lista por dia.
 // Tudo sai da agenda (a marca da evolução fica na sessão): o texto só é lido quando alguém abre.
-import { endOfDay, startOfDay, subDays } from "date-fns";
-import { incompatibilidade, pedeEvolucao, type SessaoDaAgenda } from "@/lib/evolucoes";
+import { differenceInCalendarDays, endOfDay, startOfDay, subDays } from "date-fns";
+import { incompatibilidade, pedeEvolucao, textoDoAtraso, type SessaoDaAgenda } from "@/lib/evolucoes";
 
 export type Situacao = "escrita" | "pendente" | "nao_bate" | "nao_aconteceu";
 
@@ -71,6 +71,8 @@ const porNome = (a: string, b: string) => a.localeCompare(b, "pt-BR");
 export interface LinhaDoTerapeuta {
   professionalId: string;
   nome: string;
+  /** A terapia que ele mais atende no período (o cartão do celular mostra). */
+  terapia: string;
   /** Escritas, "não aconteceu" e as que não batem: o terapeuta já fez a parte dele. */
   feitas: number;
   pendentes: number;
@@ -102,11 +104,18 @@ export function sessoesDaCentral(sessoes: SessaoDaAgenda[], filtros: Filtros, qu
   const emDia = comFiltros.length === 0 ? 100 : Math.round(((comFiltros.length - contagem.pendente) / comFiltros.length) * 100);
 
   const linhas = new Map<string, LinhaDoTerapeuta>();
+  const terapiasDe = new Map<string, Map<string, number>>();
   for (const s of semTerapeuta) {
-    const linha = linhas.get(s.professionalId) ?? { professionalId: s.professionalId, nome: s.professionalName, feitas: 0, pendentes: 0 };
+    const linha = linhas.get(s.professionalId) ?? { professionalId: s.professionalId, nome: s.professionalName, terapia: "", feitas: 0, pendentes: 0 };
     if (s.situacao === "pendente") linha.pendentes++;
     else linha.feitas++;
     linhas.set(s.professionalId, linha);
+    const contagemDasTerapias = terapiasDe.get(s.professionalId) ?? new Map<string, number>();
+    contagemDasTerapias.set(s.tipo, (contagemDasTerapias.get(s.tipo) ?? 0) + 1);
+    terapiasDe.set(s.professionalId, contagemDasTerapias);
+  }
+  for (const linha of linhas.values()) {
+    linha.terapia = [...(terapiasDe.get(linha.professionalId) ?? [])].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
   }
 
   const terapeutas = new Map(doPeriodo.map((s) => [s.professionalId, s.professionalName]));
@@ -119,6 +128,15 @@ export function sessoesDaCentral(sessoes: SessaoDaAgenda[], filtros: Filtros, qu
     terapeutas: [...terapeutas].map(([id, nome]) => ({ id, nome })).sort((a, b) => porNome(a.nome, b.nome)),
     terapias: [...new Set(doPeriodo.map((s) => s.tipo).filter(Boolean))].sort(porNome),
   };
+}
+
+/** O selo da sessão: a pendente atrasada diz há quantos dias; as outras, a situação. */
+export function rotuloDaSituacao(sessao: SessaoNaCentral, agora: Date) {
+  if (sessao.situacao === "pendente") {
+    const dias = differenceInCalendarDays(agora, sessao.start);
+    return dias > 0 ? textoDoAtraso(dias) : "Pendente";
+  }
+  return SITUACOES.find((s) => s.id === sessao.situacao)?.curto ?? "";
 }
 
 /** Os dias, do mais recente para o mais antigo; dentro do dia, na ordem dos horários. */

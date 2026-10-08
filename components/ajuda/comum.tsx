@@ -2,7 +2,7 @@
 // negrito e as miniaturas, pedacinhos desenhados da tela para a pessoa reconhecer onde tocar.
 import Link from "next/link";
 import {
-  Calendar, ChevronRight, DollarSign, Lock, Megaphone, NotebookPen, Rocket, TrendingUp, UserRound, Users,
+  Calendar, ChevronRight, DollarSign, ListChecks, Lock, Megaphone, NotebookPen, Rocket, TrendingUp, UserRound, Users,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ const ICONES: Record<IdDoAssunto, { icone: LucideIcon; cor: string }> = {
   comercial: { icone: TrendingUp, cor: "bg-[#fde9e3] text-[#9b3a1c]" },
   avisos: { icone: Megaphone, cor: "bg-[#fff3cf] text-[#7a5600]" },
   acessos: { icone: Lock, cor: "bg-[#eceff1] text-[#37474f]" },
+  regras: { icone: ListChecks, cor: "bg-[#e8eef9] text-[#16375b]" },
 };
 
 export function IconeDoAssunto({ assunto, className }: { assunto: IdDoAssunto; className?: string }) {

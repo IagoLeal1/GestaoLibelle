@@ -142,8 +142,8 @@ export function ProntuarioDaCrianca({ patientId, terapiaInicial }: { patientId: 
   }
 
   const voltar = (
-    <Link href="/evolucoes" className="inline-flex min-h-9 items-center gap-1 text-sm font-semibold text-[#127a7e] hover:underline">
-      <ChevronLeft aria-hidden className="h-4 w-4" /> Evoluções
+    <Link href="/prontuario" className="inline-flex min-h-9 items-center gap-1 text-sm font-semibold text-[#127a7e] hover:underline">
+      <ChevronLeft aria-hidden className="h-4 w-4" /> Prontuários
     </Link>
   );
 

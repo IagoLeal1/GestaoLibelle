@@ -18,7 +18,7 @@ export const NOME_DO_PAPEL: Record<Papel, string> = {
 };
 
 export type IdDoAssunto =
-  | "comecar" | "agenda" | "criancas" | "evolucoes" | "equipe" | "financeiro" | "comercial" | "avisos" | "acessos";
+  | "comecar" | "agenda" | "criancas" | "evolucoes" | "equipe" | "financeiro" | "comercial" | "avisos" | "acessos" | "regras";
 
 export interface Assunto {
   id: IdDoAssunto;
@@ -36,6 +36,8 @@ export const ASSUNTOS: Assunto[] = [
   { id: "comercial", titulo: "Comercial" },
   { id: "avisos", titulo: "Avisos e mensagens" },
   { id: "acessos", titulo: "Acessos" },
+  // As condições de cada coisa: quando aparece, quem vê, o que cada status faz
+  { id: "regras", titulo: "Regras do sistema" },
 ];
 
 /** Um pedacinho desenhado da tela, ao lado do passo, para a pessoa reconhecer onde tocar. */

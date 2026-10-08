@@ -2,7 +2,7 @@
 
 import {
   Calendar, DollarSign, FileText, Home, MessageSquare, Users, UserCheck,
-  CheckCircle, UserPlus, Megaphone, MapPin, BadgeDollarSign, TrendingUp, MessagesSquare, NotebookPen, CircleHelp
+  CheckCircle, UserPlus, Megaphone, MapPin, BadgeDollarSign, TrendingUp, MessagesSquare, NotebookPen, CircleHelp, BookHeart
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -23,6 +23,7 @@ const menuItems = [
   { title: "Agendamentos", url: "/agendamentos", icon: Calendar, roles: PAPEIS_POR_TELA["/agendamentos"] },
   { title: "Mapeamento de Salas", url: "/mapeamento-salas", icon: MapPin, roles: PAPEIS_POR_TELA["/mapeamento-salas"] },
   { title: "Pacientes", url: "/pacientes", icon: Users, roles: PAPEIS_POR_TELA["/pacientes"] },
+  { title: "Prontuários", url: "/prontuario", icon: BookHeart, roles: PAPEIS_POR_TELA["/prontuario"] },
   { title: "Evoluções", url: "/evolucoes", icon: NotebookPen, roles: PAPEIS_POR_TELA["/evolucoes"] },
   { title: "Profissionais", url: "/profissionais", icon: UserCheck, roles: PAPEIS_POR_TELA["/profissionais"] },
   { title: "Especialidades", url: "/especialidades", icon: BadgeDollarSign, roles: PAPEIS_POR_TELA["/especialidades"] },
