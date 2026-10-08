@@ -83,7 +83,8 @@ export function BotaoLigarCadastro({ pessoa, cadastros, contas, onLigada }: Prop
       </Button>
 
       <Dialog open={aberta} onOpenChange={setAberta}>
-        <DialogContent className="sm:max-w-md">
+        {/* Coluna com mínimo 0: e-mail comprido corta com reticências em vez de empurrar a janela para fora */}
+        <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Cadastro de profissional</DialogTitle>
             <DialogDescription className="break-words">{pessoa.nome} · {pessoa.email}</DialogDescription>
@@ -128,7 +129,7 @@ export function BotaoLigarCadastro({ pessoa, cadastros, contas, onLigada }: Prop
                     />
                     <span className="min-w-0 flex-1">
                       <span className="block font-semibold">{c.fullName}</span>
-                      <span className="block truncate text-xs text-muted-foreground">{[c.especialidade, c.email].filter(Boolean).join(" · ")}</span>
+                      <span className="block text-xs text-muted-foreground [overflow-wrap:anywhere]">{[c.especialidade, c.email].filter(Boolean).join(" · ")}</span>
                       {deOutra && <span className="mt-0.5 block text-xs font-medium text-amber-700">Ligado a {nomeDaConta(c.userId!)}</span>}
                       {desta && <span className="mt-0.5 block text-xs font-medium text-[#127a7e]">Ligado a esta conta hoje</span>}
                     </span>
