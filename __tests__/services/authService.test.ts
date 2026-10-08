@@ -14,7 +14,11 @@ jest.mock('@/lib/firebaseConfig', () => ({
 }));
 
 // Continuamos a simular as outras funções que usamos
-jest.mock('firebase/auth');
+// getAuth devolve um objeto, porque o firebaseConfig real põe o idioma dos e-mails nele
+jest.mock('firebase/auth', () => ({
+  ...jest.createMockFromModule<object>('firebase/auth'),
+  getAuth: jest.fn(() => ({})),
+}));
 jest.mock('firebase/firestore');
 
 // Tipos para os mocks
