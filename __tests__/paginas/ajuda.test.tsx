@@ -6,6 +6,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { useAuth } from '@/context/AuthContext';
 import { PaginaDeAjuda } from '@/components/ajuda/pagina-de-ajuda';
 import { GuiaAberto } from '@/components/ajuda/guia-aberto';
+import { GUIAS } from '@/lib/ajuda';
 
 jest.mock('@/context/AuthContext', () => ({ useAuth: jest.fn() }));
 
@@ -159,9 +160,14 @@ describe('a tela de exemplo do guia', () => {
     expect(within(andar).getByRole('link', { name: /Ir para Evoluções/ })).toHaveAttribute('href', '/evolucoes');
   });
 
-  it('guia que ainda não tem tela de exemplo continua com os passos e as miniaturas', () => {
+  it('um guia novo, ainda sem tela de exemplo, aparece com os passos e as miniaturas', () => {
     comoPapel('admin');
-    render(<GuiaAberto id="lancar-movimentacao" />);
+    GUIAS.push({
+      id: 'guia-sem-tela', titulo: 'Guia sem tela', assunto: 'comecar', papeis: ['admin'], resumo: 'Para testar.',
+      passos: [{ texto: 'Toque em **Salvar**.', mini: { tipo: 'botao', texto: 'Salvar' } }],
+    });
+    render(<GuiaAberto id="guia-sem-tela" />);
+    GUIAS.pop();
 
     expect(screen.getByRole('list', { name: 'Passos' })).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Tela de exemplo' })).not.toBeInTheDocument();

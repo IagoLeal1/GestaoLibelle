@@ -65,3 +65,28 @@ export function TelaEditarSessao({ alvo }: { alvo?: string }) {
     </Janela>
   );
 }
+
+export const ALVOS_DAS_RENOVACOES = ["opcoes", "renovar"];
+
+/** Renovações Pendentes: os pacotes acabando, com a frequência e o número de sessões de cada criança. */
+export function TelaRenovacoes({ alvo }: { alvo?: string }) {
+  return (
+    <Janela>
+      <Titulo>Renovações Pendentes</Titulo>
+      <div className="flex flex-col gap-1.5 rounded-lg border border-[#dde5e9] bg-white p-2">
+        <span className="text-[11px]"><b>Lucas Souza</b> · Fonoaudiologia · última sessão 16/10</span>
+        <div className="flex items-end gap-1.5">
+          <Aceso nome="opcoes" alvo={alvo} className="grid flex-1 grid-cols-2 gap-1.5 rounded-lg p-0.5">
+            <Campo rotulo="Frequência" valor="Semanal ▾" />
+            <Campo rotulo="Sessões" valor="10" />
+          </Aceso>
+          <Aceso nome="renovar" alvo={alvo} className="rounded-md"><Botao>Renovar</Botao></Aceso>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 rounded-lg border border-[#dde5e9] bg-white p-2 text-[11px]">
+        <span className="flex-1"><b>Bia Lima</b> · Psicologia · última sessão 17/10</span>
+        <Botao variante="contorno">Renovar</Botao>
+      </div>
+    </Janela>
+  );
+}

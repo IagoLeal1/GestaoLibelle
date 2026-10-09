@@ -52,7 +52,9 @@ export type Miniatura =
 /** As telas de exemplo da Ajuda (components/ajuda/telas): versões pequenas das telas do site. */
 export type IdDaTela =
   | "inicio" | "agenda" | "agenda-do-terapeuta" | "novo-agendamento" | "editar-sessao" | "para-escrever" | "folha-evolucao" | "prontuario"
-  | "gerenciar-usuarios";
+  | "gerenciar-usuarios" | "painel-da-familia" | "grade" | "grade-do-terapeuta" | "renovacoes" | "pacientes" | "ficha"
+  | "formulario-de-paciente" | "lista-de-prontuarios" | "central" | "profissionais" | "formulario-de-profissional" | "especialidades"
+  | "salas" | "financeiro" | "comercial" | "avisos" | "mensagens" | "aprovacao" | "minha-conta" | "entrada";
 
 /** A tela de exemplo de um passo e o lugar que acende nela (onde tocar). */
 export interface TelaDoPasso {

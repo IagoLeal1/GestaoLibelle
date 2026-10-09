@@ -35,12 +35,13 @@ const SUGESTOES: Record<Visao, string[]> = {
 };
 
 // A ilustração do alto: a tela que o papel mais usa, com o lugar de tocar aceso
-const ILUSTRACAO: Partial<Record<Visao, TelaDoPasso>> = {
+const ILUSTRACAO: Record<Visao, TelaDoPasso> = {
   tudo: { id: "agenda", alvo: "novo" },
   admin: { id: "agenda", alvo: "novo" },
   coordenador: { id: "agenda", alvo: "status" },
   funcionario: { id: "agenda", alvo: "novo" },
   profissional: { id: "para-escrever", alvo: "item" },
+  familiar: { id: "painel-da-familia", alvo: "falar" },
 };
 
 /** A primeira tela de exemplo do guia, com o lugar aceso, para o cartão. */
@@ -48,13 +49,13 @@ function telaDoCartao(guia: Guia): TelaDoPasso | null {
   return guia.passos.find((p) => p.tela?.alvo)?.tela ?? telaParaPasso(guia, 0);
 }
 
-function CartaoComTela({ guia }: { guia: Guia }) {
+function CartaoComTela({ guia, visao }: { guia: Guia; visao: Visao }) {
   const tela = telaDoCartao(guia);
   return (
     <Link href={`/ajuda/${guia.id}`} className="group flex h-full flex-col overflow-hidden rounded-[18px] border bg-card transition-shadow hover:shadow-md">
       <div className={cn("h-[136px] px-4 pt-3.5", tela ? "bg-[#eef3f6]" : CORES_DO_ASSUNTO[guia.assunto])}>
         {tela ? (
-          <MiniaturaDaTela tela={tela} escala={0.6} className="h-full rounded-t-xl shadow-sm" />
+          <MiniaturaDaTela tela={tela} papel={visao} escala={0.6} className="h-full rounded-t-xl shadow-sm" />
         ) : (
           <div className="flex h-full items-center justify-center"><IconeDoAssunto assunto={guia.assunto} className="h-14 w-14 bg-white/60" /></div>
         )}
@@ -139,7 +140,7 @@ export function PaginaDeAjuda() {
           </div>
           {ilustracao && (
             <div aria-hidden className="hidden items-center justify-center pt-8 lg:flex">
-              <MiniaturaDaTela tela={ilustracao} escala={0.85} className="h-[230px] w-[330px] -rotate-2 rounded-2xl bg-white p-2 shadow-[0_18px_40px_rgba(8,60,62,0.35)]" />
+              <MiniaturaDaTela tela={ilustracao} papel={visao} escala={0.85} className="h-[230px] w-[330px] -rotate-2 rounded-2xl bg-white p-2 shadow-[0_18px_40px_rgba(8,60,62,0.35)]" />
             </div>
           )}
         </div>
@@ -177,7 +178,7 @@ export function PaginaDeAjuda() {
             {/* No celular, os cartões passam para o lado (com a pontinha do próximo aparecendo) */}
             <ul className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-3 md:gap-4 md:overflow-visible md:px-0 [&::-webkit-scrollbar]:hidden">
               {comecePorAqui(visao === "tudo" ? "admin" : visao).map((g) => (
-                <li key={g.id} className="w-[78%] shrink-0 snap-start md:w-auto"><CartaoComTela guia={g} /></li>
+                <li key={g.id} className="w-[78%] shrink-0 snap-start md:w-auto"><CartaoComTela guia={g} visao={visao} /></li>
               ))}
             </ul>
           </section>

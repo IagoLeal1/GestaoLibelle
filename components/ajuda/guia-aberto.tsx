@@ -14,7 +14,7 @@ import {
   ASSUNTOS, duracaoDoGuia, ehPapel, guiaPorId, podeVerGuia, proximoGuia, telaParaPasso, temTelas, type Guia, type Visao,
 } from "@/lib/ajuda";
 import { CORES_DO_ASSUNTO, Miniatura, Texto } from "./comum";
-import { TELAS, TelaDeExemplo } from "./telas";
+import { TELAS, TelaAjustada } from "./telas";
 
 function Voltar({ assunto }: { assunto?: string }) {
   return (
@@ -146,8 +146,8 @@ function GuiaComTelas({ guia, visao, assunto }: { guia: Guia; visao: Visao; assu
           <div aria-hidden className="flex gap-1 px-3 pt-2.5">
             {guia.passos.map((_, i) => <span key={i} className={cn("h-1.5 flex-1 rounded-full", i <= atual ? "bg-[#127a7e]" : "bg-[#dde5e9]")} />)}
           </div>
-          <div className="h-[260px] p-2.5 md:h-[360px]">
-            {tela && <TelaDeExemplo tela={tela} />}
+          <div className="p-2.5">
+            {tela && <TelaAjustada tela={tela} papel={visao} />}
           </div>
           <div aria-live="polite" className="flex items-start gap-2.5 border-t bg-[#fffaf0] px-3.5 py-3">
             <span aria-hidden className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#ffb74d] text-xs font-extrabold text-[#5a3a00]">{atual + 1}</span>
