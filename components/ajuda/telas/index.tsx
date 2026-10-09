@@ -14,7 +14,7 @@ import {
 } from "./agendamento";
 import { TelaAprovacao, TelaEntrada, TelaMinhaConta, ALVOS_DA_APROVACAO, ALVOS_DA_ENTRADA, ALVOS_DA_MINHA_CONTA } from "./acessos";
 import { TelaCentral, ALVOS_DA_CENTRAL } from "./central";
-import { TelaAvisos, TelaMensagens, ALVOS_DE_AVISOS, ALVOS_DE_MENSAGENS } from "./comunicacao";
+import { TelaAvisos, TelaEquipeDaConversa, TelaMensagens, ALVOS_DA_EQUIPE_DA_CONVERSA, ALVOS_DE_AVISOS, ALVOS_DE_MENSAGENS } from "./comunicacao";
 import {
   TelaEspecialidades, TelaFormularioDeProfissional, TelaProfissionais, TelaSalas,
   ALVOS_DAS_SALAS, ALVOS_DE_ESPECIALIDADES, ALVOS_DE_PROFISSIONAIS, ALVOS_DO_FORMULARIO_DE_PROFISSIONAL,
@@ -59,6 +59,7 @@ export const TELAS: Record<IdDaTela, { titulo: string; alvos: string[]; Tela: (p
   comercial: { titulo: "Comercial", alvos: ALVOS_DO_COMERCIAL, Tela: TelaComercial },
   avisos: { titulo: "Avisos", alvos: ALVOS_DE_AVISOS, Tela: TelaAvisos },
   mensagens: { titulo: "Mensagens", alvos: ALVOS_DE_MENSAGENS, Tela: TelaMensagens },
+  "equipe-da-conversa": { titulo: "Mensagens", alvos: ALVOS_DA_EQUIPE_DA_CONVERSA, Tela: TelaEquipeDaConversa },
   aprovacao: { titulo: "Aprovação de Acesso", alvos: ALVOS_DA_APROVACAO, Tela: TelaAprovacao },
   "minha-conta": { titulo: "Configurações", alvos: ALVOS_DA_MINHA_CONTA, Tela: TelaMinhaConta },
   entrada: { titulo: "Entrada no sistema", alvos: ALVOS_DA_ENTRADA, Tela: TelaEntrada },

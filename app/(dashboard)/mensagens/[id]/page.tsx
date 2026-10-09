@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useLayoutEffect, useRef, use } from "react"
 import Link from "next/link"
-import { ArrowLeft, ChevronRight, Eye, Loader2, MessageCircleOff, Send } from "lucide-react"
+import { Archive, ArrowLeft, ChevronRight, Eye, Loader2, MessageCircleOff, Send } from "lucide-react"
 import { toast } from "sonner"
 import { Timestamp } from "firebase/firestore"
 import { Button } from "@/components/ui/button"
@@ -57,15 +57,18 @@ export default function ChatDetalhePage({ params }: { params: Promise<{ id: stri
     const ultimaMensagemId = useRef<string | null>(null);
     const posicaoAntesDasAnteriores = useRef<{ altura: number; topo: number } | null>(null);
     const marcarLidaTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const grupoArquivado = useRef(false);
 
     const podeGerenciar = isChatSupervisor(firestoreUser?.profile.role);
+    const ehAdmin = firestoreUser?.profile.role === "admin";
 
     // "Li até aqui": só com a conversa visível; espera um instante para juntar várias mensagens seguidas
     const marcarComoLida = () => {
         if (!uid) return;
         if (marcarLidaTimer.current) clearTimeout(marcarLidaTimer.current);
         marcarLidaTimer.current = setTimeout(() => {
-            if (document.visibilityState !== "visible") return;
+            // Conversa arquivada: só leitura, sem marcar nada
+            if (document.visibilityState !== "visible" || grupoArquivado.current) return;
             markChatAsRead(id, uid).catch(erro => console.error("Erro ao marcar a conversa como lida:", erro));
         }, 800);
     };
@@ -265,6 +268,8 @@ export default function ChatDetalhePage({ params }: { params: Promise<{ id: stri
         ? "Toque para ver a equipe"
         : `${outros.slice(0, 3).join(", ")}${outros.length > 3 ? ` e mais ${outros.length - 3}` : ""}`;
     const souMembro = grupo?.memberIds.includes(uid) ?? true;
+    const arquivado = !!grupo?.arquivado;
+    grupoArquivado.current = arquivado;
     const itens = buildTimeline(mensagens, uid, lidoAteAoAbrir);
 
     return (
@@ -294,7 +299,12 @@ export default function ChatDetalhePage({ params }: { params: Promise<{ id: stri
                 </button>
             </header>
 
-            {!souMembro && (
+            {arquivado && (
+                <p className="flex items-center gap-2 border-b bg-slate-200 px-4 py-1.5 text-xs font-medium text-slate-700">
+                    <Archive className="h-3.5 w-3.5" /> Conversa arquivada: só a administração vê, e ninguém manda mensagens
+                </p>
+            )}
+            {!souMembro && !arquivado && (
                 <p className="flex items-center gap-2 border-b bg-slate-100 px-4 py-1.5 text-xs font-medium text-slate-600">
                     <Eye className="h-3.5 w-3.5" /> Você acompanha esta conversa como supervisão
                 </p>
@@ -374,6 +384,11 @@ export default function ChatDetalhePage({ params }: { params: Promise<{ id: stri
 
             {/* --- CAIXA DE TEXTO --- */}
             {/* Letra de 16px no celular: abaixo disso, o iPhone dá zoom na tela ao tocar no campo */}
+            {arquivado ? (
+            <footer className="border-t bg-slate-50 p-4 text-center text-sm text-slate-600">
+                Esta conversa está arquivada. {ehAdmin ? "Para conversar de novo, toque no nome no alto e em Desarquivar." : "Ninguém pode mandar mensagens."}
+            </footer>
+            ) : (
             <footer className="border-t bg-white p-3">
                 <div className="mx-auto flex max-w-4xl items-end gap-2">
                     <textarea
@@ -401,6 +416,7 @@ export default function ChatDetalhePage({ params }: { params: Promise<{ id: stri
                     Enter envia · Shift+Enter quebra a linha
                 </p>
             </footer>
+            )}
 
             {grupo && (
                 <EquipeDaConversa
@@ -410,6 +426,8 @@ export default function ChatDetalhePage({ params }: { params: Promise<{ id: stri
                     membros={membros}
                     meuUid={uid}
                     podeGerenciar={podeGerenciar}
+                    ehAdmin={ehAdmin}
+                    meuNome={firestoreUser.displayName ?? ""}
                     onMudou={recarregarGrupo}
                 />
             )}

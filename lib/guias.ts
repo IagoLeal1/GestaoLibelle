@@ -726,6 +726,37 @@ export const GUIAS: Guia[] = [
     ],
     tela: { href: "/mensagens", rotulo: "Ir para Mensagens" },
   },
+  {
+    id: "vincular-conversa-antiga",
+    titulo: "Ligar uma conversa antiga à criança",
+    assunto: "avisos",
+    papeis: ["admin", "coordenador"],
+    resumo: "As conversas criadas antes dos grupos por criança aparecem com o nome do responsável e a etiqueta “Sem criança vinculada”. Ligue cada uma à criança.",
+    passos: [
+      { texto: "Em **Mensagens**, ache a conversa com a etiqueta **Sem criança vinculada** e abra.", tela: { id: "equipe-da-conversa", alvo: "sem-crianca" } },
+      { texto: "Toque no **nome no alto** da conversa para ver a equipe.", tela: { id: "equipe-da-conversa", alvo: "abrir" } },
+      { texto: "Toque em **Vincular à criança** e escolha a criança. A conversa passa a ter o nome dela.", tela: { id: "equipe-da-conversa", alvo: "vincular" } },
+    ],
+    dica: "Ligar é importante: sem isso, ao criar o grupo da criança, ela fica com duas conversas. Se a criança já tiver um grupo, o sistema avisa e não liga; a família com duas crianças liga a conversa antiga a uma delas.",
+    tela: { href: "/mensagens", rotulo: "Ir para Mensagens" },
+  },
+  {
+    id: "arquivar-conversa",
+    titulo: "Arquivar ou excluir uma conversa",
+    assunto: "avisos",
+    papeis: ["admin"],
+    resumo: "Arquivar tira a conversa da lista de todos e guarda as mensagens. Excluir de vez apaga tudo, sem volta. Só o admin faz.",
+    passos: [
+      { texto: "Abra a conversa e toque no **nome no alto** para ver a equipe.", tela: { id: "equipe-da-conversa", alvo: "abrir-conversa" } },
+      { texto: "Toque em **Arquivar conversa** e confirme. Ela some da lista de todos e ninguém manda mais mensagens.", tela: { id: "equipe-da-conversa", alvo: "arquivar" } },
+      { texto: "As arquivadas ficam no fim da lista, em **Arquivadas**, que só o admin vê.", tela: { id: "equipe-da-conversa", alvo: "arquivadas" } },
+      { texto: "Para voltar a conversar, abra a arquivada, toque no nome e em **Desarquivar**: as mesmas pessoas voltam, com as mensagens de antes.", tela: { id: "equipe-da-conversa", alvo: "desarquivar" } },
+      { texto: "Para apagar de vez, a conversa precisa estar arquivada: toque em **Excluir de vez**.", tela: { id: "equipe-da-conversa", alvo: "excluir" } },
+      { texto: "Escreva o **nome da criança** para confirmar e toque em **Excluir de vez**. Todas as mensagens são apagadas e não dá para recuperar.", tela: { id: "equipe-da-conversa", alvo: "confirmar" } },
+    ],
+    dica: "Na dúvida, só arquive: as conversas guardam o histórico da criança com a clínica.",
+    tela: { href: "/mensagens", rotulo: "Ir para Mensagens" },
+  },
 
   // ——— Acessos ———
   {

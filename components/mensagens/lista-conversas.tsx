@@ -4,7 +4,8 @@
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Eye, Loader2, MessageCircleOff, Search } from "lucide-react"
+import { Archive, ChevronDown, Eye, Loader2, MessageCircleOff, Search } from "lucide-react"
+import { useAuth } from "@/context/AuthContext"
 import { useContagemDeNaoLidas, useConversas } from "@/hooks/use-conversas"
 import { ChatGroup, hasUnread, isLegacyGroup } from "@/services/chatService"
 import { getIniciais, quandoCurto } from "@/lib/formatters"
@@ -13,11 +14,16 @@ import { CreateChatGroupModal } from "@/components/modals/create-chat-group-moda
 type Filtro = "todas" | "naoLidas" | "minhas" | "supervisao"
 
 export function ListaDeConversas() {
-  const { grupos, carregando, erro, uid, coordenacao } = useConversas()
+  const { grupos: todosOsGrupos, carregando, erro, uid, coordenacao } = useConversas()
+  const { firestoreUser } = useAuth()
+  // Arquivadas saem da lista; o admin as vê embaixo, em "Arquivadas", para desarquivar ou excluir
+  const grupos = todosOsGrupos.filter(g => !g.arquivado)
+  const arquivadas = firestoreUser?.profile.role === "admin" ? todosOsGrupos.filter(g => g.arquivado) : []
   const contagens = useContagemDeNaoLidas(grupos, uid)
   const pathname = usePathname()
   const [busca, setBusca] = useState("")
   const [filtro, setFiltro] = useState<Filtro>("todas")
+  const [verArquivadas, setVerArquivadas] = useState(false)
 
   const participa = (g: ChatGroup) => !!uid && g.memberIds.includes(uid)
   const naoLida = (g: ChatGroup) => !!uid && hasUnread(g, uid)
@@ -136,6 +142,37 @@ export function ListaDeConversas() {
               </li>
             )
           })
+        )}
+        {arquivadas.length > 0 && !carregando && (
+          <li className="border-t bg-slate-50">
+            <button
+              onClick={() => setVerArquivadas(v => !v)}
+              aria-expanded={verArquivadas}
+              className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-semibold text-slate-600 hover:bg-slate-100"
+            >
+              <Archive className="h-4 w-4" /> Arquivadas ({arquivadas.length})
+              <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${verArquivadas ? "rotate-180" : ""}`} />
+            </button>
+            {verArquivadas && (
+              <ul>
+                {arquivadas
+                  .filter(g => g.pacienteNome.toLowerCase().includes(busca.toLowerCase()))
+                  .map(grupo => (
+                    <li key={grupo.id}>
+                      <Link
+                        href={`/mensagens/${grupo.id}`}
+                        className={`flex items-center gap-3 border-t px-4 py-2.5 text-slate-600 hover:bg-slate-100 ${pathname === `/mensagens/${grupo.id}` ? "bg-slate-200" : ""}`}
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-300 text-xs font-semibold text-slate-700">
+                          {getIniciais(grupo.pacienteNome)}
+                        </span>
+                        <span className="truncate text-sm font-medium">{grupo.pacienteNome}</span>
+                      </Link>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </li>
         )}
       </ul>
     </>

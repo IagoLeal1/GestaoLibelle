@@ -136,6 +136,13 @@ service cloud.firestore {
           .hasOnly(['memberIds', 'membros', 'pacienteId', 'pacienteNome']);
       }
 
+      // Arquivar e desarquivar: só o admin, e só estes campos (memberIds esvazia ao arquivar)
+      function isArchiving() {
+        return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['arquivado', 'arquivadoEm', 'arquivadoPor', 'membrosAntesDeArquivar', 'memberIds'])
+          && request.resource.data.arquivado is bool;
+      }
+
       // Só quem tem cadastro aprovado: pendentes e usuários removidos perdem o acesso
       allow read: if isApproved() && (
         request.auth.uid in resource.data.memberIds || isAdminOrCoordinator()
@@ -144,12 +151,15 @@ service cloud.firestore {
       // Quem acessa a conversa (membro ou supervisão) grava só a prévia da própria mensagem
       // ou a própria leitura; a coordenação também muda participantes e a criança do grupo.
       allow update: if isApproved() && (
-        (isAdminOrCoordinator() && isGroupManagement())
+        (isAdminOrCoordinator() && isGroupManagement() && !resource.data.get('arquivado', false))
+        || (isAdmin() && isArchiving())
         || (
           (request.auth.uid in resource.data.memberIds || isAdminOrCoordinator())
           && (isOwnPreview() || isOwnReadMark())
         )
       );
+      // Excluir de vez: só o admin, e só a conversa já arquivada (as mensagens são apagadas antes)
+      allow delete: if isAdmin() && resource.data.get('arquivado', false) == true;
     }
 
     match /chat_groups/{groupId}/messages/{messageId} {
@@ -160,9 +170,14 @@ service cloud.firestore {
         );
       }
 
+      function grupoArquivado() {
+        return get(/databases/$(database)/documents/chat_groups/$(groupId)).data.get('arquivado', false) == true;
+      }
+
       allow read: if canAccessChat();
 
-      allow create: if canAccessChat()
+      // Conversa arquivada não recebe mensagem
+      allow create: if canAccessChat() && !grupoArquivado()
         && request.resource.data.keys().hasAll([
           'senderId', 'senderName', 'senderRole', 'content', 'type', 'createdAt'
         ])
@@ -179,8 +194,10 @@ service cloud.firestore {
         && request.resource.data.type == 'text'
         && request.resource.data.createdAt == request.time;
 
-      // Mensagens não podem ser editadas nem apagadas.
-      allow update, delete: if false;
+      // Mensagens não podem ser editadas nem apagadas. A exceção é o "excluir de vez" do admin, que
+      // apaga tudo de uma conversa já arquivada.
+      allow update: if false;
+      allow delete: if isAdmin() && grupoArquivado();
     }
 
     // --- 4. OUTRAS REGRAS DO SISTEMA ---
@@ -390,8 +407,6 @@ service cloud.firestore {
     match /covenants/{docId} { allow read, write: if isAdmin(); }
     match /budgets/{docId} { allow read, write: if isAdmin(); }
 
-    // Avisos (lib/avisos.ts): a gestão vê todos; terapeutas, os da equipe e os dos terapeutas
-    // ("profissional" são os avisos internos antigos); famílias, os das famílias.
     // Assistente de agendamento: a coordenação escolhe ou recusa opções de encaixe, a recepção agenda.
     // Só a gestão. Quem cria assina em seu nome; depois, só se marca o que foi agendado.
     match /encaixes/{encaixeId} {
@@ -405,6 +420,8 @@ service cloud.firestore {
         && request.resource.data.status in ['para_agendar', 'agendado'];
     }
 
+    // Avisos (lib/avisos.ts): a gestão vê todos; terapeutas, os da equipe e os dos terapeutas
+    // ("profissional" são os avisos internos antigos); famílias, os das famílias.
     match /communications/{communicationId} {
       function podeLerAviso(aviso) {
         return canManage()

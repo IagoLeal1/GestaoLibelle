@@ -13,6 +13,7 @@ import {
   onSnapshot,
   doc,
   updateDoc,
+  deleteDoc,
   getDoc,
   getDocs,
   Timestamp,
@@ -58,6 +59,12 @@ export interface ChatGroup {
   // Nome e papel de cada participante, guardados no grupo: famílias e terapeutas não leem os
   // cadastros dos outros (users). Ausente nos grupos criados antes dessa mudança.
   membros?: Record<string, { nome: string; papel: Papel }>;
+  // Arquivado pelo admin: sai da lista de todos (memberIds fica vazio, quem estava fica guardado) e
+  // ninguém manda mensagem. Desarquivar devolve as pessoas. Só arquivado pode ser excluído de vez.
+  arquivado?: boolean;
+  arquivadoEm?: Timestamp;
+  arquivadoPor?: string;
+  membrosAntesDeArquivar?: string[];
 }
 
 // Conversa sem registro de leitura conta como lida até esta data: assim, ao publicar,
@@ -161,9 +168,11 @@ const lerCadastros = async (uids: string[]): Promise<Map<string, ChatMember>> =>
 // Nos grupos antigos, sem esse registro, lê do cadastro (só a gestão consegue).
 export const getGroupMembers = async (group: ChatGroup): Promise<ChatMember[]> => {
   const guardados = group.membros ?? {};
-  const faltando = group.memberIds.filter(uid => !guardados[uid]);
+  // Arquivado: quem estava na conversa até ela ser arquivada
+  const ids = group.arquivado ? group.membrosAntesDeArquivar ?? [] : group.memberIds;
+  const faltando = ids.filter(uid => !guardados[uid]);
   const lidos = faltando.length > 0 ? await lerCadastros(faltando) : new Map<string, ChatMember>();
-  return group.memberIds.flatMap(uid =>
+  return ids.flatMap(uid =>
     guardados[uid] ? [{ uid, ...guardados[uid] }] : lidos.get(uid) ?? []
   );
 };
@@ -205,6 +214,46 @@ export const linkGroupToPatient = async (
     pacienteNome: paciente.nome,
   });
   return { success: true };
+};
+
+// Arquivar (só o admin): a conversa some da lista de todos e ninguém manda mais mensagem.
+// As mensagens ficam guardadas, e quem estava no grupo fica anotado para desarquivar.
+export const arquivarGrupo = async (group: ChatGroup, admin: { nome: string }) => {
+  await updateDoc(doc(db, "chat_groups", group.id), {
+    arquivado: true,
+    arquivadoEm: serverTimestamp(),
+    arquivadoPor: admin.nome,
+    membrosAntesDeArquivar: group.memberIds,
+    memberIds: [],
+  });
+};
+
+// Desarquivar: as mesmas pessoas voltam para a conversa, com as mensagens de antes
+export const desarquivarGrupo = async (group: ChatGroup) => {
+  await updateDoc(doc(db, "chat_groups", group.id), {
+    arquivado: false,
+    memberIds: group.membrosAntesDeArquivar ?? [],
+    membrosAntesDeArquivar: deleteField(),
+    arquivadoEm: deleteField(),
+    arquivadoPor: deleteField(),
+  });
+};
+
+const MENSAGENS_POR_LOTE = 100;
+
+// Excluir de vez (só o admin, só conversa arquivada): apaga as mensagens e depois o grupo. O
+// Firebase não apaga as mensagens junto com o grupo; se sobrassem, voltariam quando a criança
+// ganhasse um grupo novo (o id é o mesmo). Se cair no meio, o grupo continua arquivado e dá para repetir.
+export const excluirGrupoDeVez = async (groupId: string) => {
+  const mensagens = collection(db, "chat_groups", groupId, "messages");
+  for (;;) {
+    const lote = await getDocs(query(mensagens, limit(MENSAGENS_POR_LOTE)));
+    if (lote.empty) break;
+    const apagar = writeBatch(db);
+    lote.docs.forEach(mensagem => apagar.delete(mensagem.ref));
+    await apagar.commit();
+  }
+  await deleteDoc(doc(db, "chat_groups", groupId));
 };
 
 // Cria o grupo de conversa de um paciente. Se ele já existir, não sobrescreve e avisa.

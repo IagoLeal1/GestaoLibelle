@@ -95,3 +95,84 @@ export function TelaMensagens({ alvo }: { alvo?: string }) {
     </Janela>
   );
 }
+
+export const ALVOS_DA_EQUIPE_DA_CONVERSA = ["sem-crianca", "abrir", "abrir-conversa", "vincular", "arquivar", "desarquivar", "excluir", "confirmar", "arquivadas"];
+
+/**
+ * A equipe da conversa (tocando no nome no alto): o "Vincular à criança" dos grupos antigos e, só para
+ * o admin, arquivar, desarquivar e excluir de vez (com o nome da criança para confirmar). Na lista,
+ * os grupos antigos aparecem com "Sem criança vinculada" e as arquivadas ficam em "Arquivadas".
+ */
+export function TelaEquipeDaConversa({ alvo }: { alvo?: string }) {
+  const naLista = alvo === "sem-crianca" || alvo === "arquivadas";
+  const antigo = alvo === "abrir" || alvo === "vincular";
+  const fechada = alvo === "abrir" || alvo === "abrir-conversa";
+  const arquivada = alvo === "desarquivar" || alvo === "excluir" || alvo === "confirmar";
+  if (naLista) {
+    return (
+      <Janela>
+        <Titulo>Mensagens</Titulo>
+        <div className="flex flex-col gap-1.5">
+          <Linha className="min-h-8"><b className="flex-1">Theo Martins</b><span className="text-[9px] text-[#52646d]">ontem</span></Linha>
+          <Aceso nome="sem-crianca" alvo={alvo} className="rounded-lg">
+            <Linha className="min-h-8 flex-wrap"><b className="flex-1">Maria Souza</b><span className="rounded bg-amber-100 px-1.5 text-[9px] font-semibold text-amber-800">Sem criança vinculada</span></Linha>
+          </Aceso>
+          <Linha className="min-h-8"><span className="flex-1">Davi Rocha</span></Linha>
+        </div>
+        <Aceso nome="arquivadas" alvo={alvo} className="mt-auto flex flex-col gap-1 rounded-lg border border-[#dde5e9] bg-[#f3f6f8] p-1.5 text-[10.5px]">
+          <b className="text-[#52646d]">▸ Arquivadas (1)</b>
+          <span className="pl-3 text-[#52646d]">Bia Lima</span>
+        </Aceso>
+      </Janela>
+    );
+  }
+  return (
+    <Janela>
+      <Aceso nome={antigo ? "abrir" : "abrir-conversa"} alvo={alvo} className="flex items-center gap-1.5 rounded-lg bg-white p-1">
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#16375b] text-[9px] font-bold text-white">{antigo ? "MS" : "BL"}</span>
+        <span className="flex flex-col"><b className="text-[11px]">{antigo ? "Maria Souza" : "Bia Lima"}</b><span className="text-[9px] text-[#52646d]">João, Rui ›</span></span>
+      </Aceso>
+      {fechada && (
+        <div className="flex flex-1 flex-col gap-1 rounded-lg border border-[#dde5e9] bg-white p-1.5">
+          <span className="self-start rounded-lg bg-[#f3f6f8] px-2 py-1 text-[9.5px]">Ela vai na terça?</span>
+          <span className="self-end rounded-lg bg-[#e3f4f4] px-2 py-1 text-[9.5px]">Vai sim, às 14h10.</span>
+          <span className="mt-auto flex h-6 items-center rounded-full border border-[#cfd9de] px-2 text-[9px] text-[#8a9aa3]">Escreva uma mensagem</span>
+        </div>
+      )}
+      {!fechada && <div className="absolute inset-y-0 right-0 flex w-[62%] flex-col gap-1.5 border-l border-[#dde5e9] bg-white p-2 shadow-xl">
+        <b className="text-[11.5px]">Equipe de {antigo ? "Maria" : "Bia"}</b>
+        {antigo ? (
+          <Aceso nome="vincular" alvo={alvo} className="flex flex-col gap-1 rounded-md border border-amber-200 bg-amber-50 p-1.5 text-[9.5px] text-amber-900">
+            Este grupo foi criado antes e ainda não está ligado a uma criança.
+            <Botao variante="contorno" className="h-6 self-start">Vincular à criança</Botao>
+          </Aceso>
+        ) : arquivada ? (
+          <span className="rounded-md border border-slate-300 bg-slate-100 p-1.5 text-[9.5px] text-slate-700">Conversa arquivada em 09/10 por Ana Admin.</span>
+        ) : null}
+        <span className="text-[9px] font-bold uppercase text-[#52646d]">Família</span>
+        <span className="text-[10.5px]">João Lima</span>
+        <span className="text-[9px] font-bold uppercase text-[#52646d]">Terapeutas</span>
+        <span className="text-[10.5px]">Rui Psicólogo</span>
+        {!antigo && (
+          <div className="mt-auto flex flex-col gap-1 border-t border-[#e5ecef] pt-1.5">
+            {arquivada ? (
+              <>
+                <Aceso nome="desarquivar" alvo={alvo} className="rounded-md"><Botao variante="contorno" className="w-full justify-center">Desarquivar</Botao></Aceso>
+                <Aceso nome="excluir" alvo={alvo} className="rounded-md"><Botao variante="perigo" className="w-full justify-center">Excluir de vez</Botao></Aceso>
+              </>
+            ) : (
+              <Aceso nome="arquivar" alvo={alvo} className="rounded-md"><Botao variante="contorno" className="w-full justify-center">Arquivar conversa</Botao></Aceso>
+            )}
+          </div>
+        )}
+      </div>}
+      {alvo === "confirmar" && (
+        <Caixa titulo="Excluir de vez a conversa de Bia?">
+          <span className="text-[9.5px] text-[#52646d]">Todas as mensagens são apagadas e não dá para recuperar.</span>
+          <Aceso nome="confirmar" alvo={alvo} className="rounded-lg p-0.5"><Campo rotulo="Para confirmar, escreva Bia" valor="Bia" /></Aceso>
+          <div className="flex justify-end gap-1.5"><Botao variante="contorno">Cancelar</Botao><Botao className="bg-red-700">Excluir de vez</Botao></div>
+        </Caixa>
+      )}
+    </Janela>
+  );
+}
