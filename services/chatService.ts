@@ -297,8 +297,9 @@ export const subscribeToAllGroups = (
 const groupsFromSnapshot = (snapshot: QuerySnapshot) =>
   snapshot.docs.map(doc => ({ id: doc.id, ...doc.data({ serverTimestamps: 'estimate' }) } as ChatGroup));
 
-// Quantas mensagens recentes a conversa acompanha ao vivo; as anteriores vêm por loadOlderMessages
-export const LIVE_WINDOW_SIZE = 100;
+// Quantas mensagens recentes a conversa acompanha ao vivo; as anteriores vêm por loadOlderMessages.
+// 40 cobre a conversa do dia e gasta menos leituras do que abrir com 100 (as antigas carregam ao rolar)
+export const LIVE_WINDOW_SIZE = 40;
 
 export const subscribeToChatMessages = (
   groupId: string,

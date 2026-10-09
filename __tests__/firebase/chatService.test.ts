@@ -41,7 +41,8 @@ describe('chatService', () => {
   });
 
   describe('conversa', () => {
-    it('mostra as 100 mensagens mais recentes quando o grupo tem mais de 100', async () => {
+    // A conversa abre com as 40 mais recentes (menos leituras); as anteriores carregam ao rolar
+    it('mostra as 40 mensagens mais recentes quando o grupo tem mais de 40', async () => {
       const grupoId = await criarGrupo([familia, terapeuta, coordenacao], coordenacao);
       await criarMensagens(grupoId, [familia, terapeuta], 150);
       await entrarComo(familia);
@@ -49,11 +50,11 @@ describe('chatService', () => {
       const mensagens = await aguardarLeitura(grupoId);
 
       expect(mensagens.map((m) => m.content)).toEqual(
-        Array.from({ length: 100 }, (_, i) => `Mensagem ${51 + i}`)
+        Array.from({ length: 40 }, (_, i) => `Mensagem ${111 + i}`)
       );
     });
 
-    it('mostra a mensagem recém-enviada mesmo com mais de 100 no grupo', async () => {
+    it('mostra a mensagem recém-enviada mesmo com mais de 40 no grupo', async () => {
       const grupoId = await criarGrupo([familia, terapeuta, coordenacao], coordenacao);
       await criarMensagens(grupoId, [familia, terapeuta], 150);
       await entrarComo(familia);
@@ -61,7 +62,7 @@ describe('chatService', () => {
       // Espera a conversa completa: o Firestore mostra a mensagem enviada antes de o servidor devolver o resto
       const leitura = aguardarLeitura(
         grupoId,
-        (m) => m.length === 100 && m.at(-1)?.content === 'Oi, tudo bem?'
+        (m) => m.length === 40 && m.at(-1)?.content === 'Oi, tudo bem?'
       );
       await sendMessage(grupoId, {
         content: 'Oi, tudo bem?',
@@ -72,7 +73,7 @@ describe('chatService', () => {
 
       const mensagens = await leitura;
       expect(mensagens.map((m) => m.content)).toEqual([
-        ...Array.from({ length: 99 }, (_, i) => `Mensagem ${52 + i}`),
+        ...Array.from({ length: 39 }, (_, i) => `Mensagem ${112 + i}`),
         'Oi, tudo bem?',
       ]);
     });
@@ -86,7 +87,7 @@ describe('chatService', () => {
       const pagina = await loadOlderMessages(grupoId, naTela[0], 20);
 
       expect(pagina.messages.map((m) => m.content)).toEqual(
-        Array.from({ length: 20 }, (_, i) => `Mensagem ${31 + i}`)
+        Array.from({ length: 20 }, (_, i) => `Mensagem ${91 + i}`)
       );
       expect(pagina.hasMore).toBe(true);
     });
@@ -97,7 +98,7 @@ describe('chatService', () => {
       await entrarComo(familia);
       const naTela = await aguardarLeitura(grupoId);
 
-      const pagina = await loadOlderMessages(grupoId, naTela[0], 50);
+      const pagina = await loadOlderMessages(grupoId, naTela[0], 110);
 
       expect(pagina.messages[0].content).toBe('Mensagem 1');
       expect(pagina.hasMore).toBe(false);
