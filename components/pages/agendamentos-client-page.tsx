@@ -132,6 +132,9 @@ export function AgendamentosClientPage() {
         setProfessionals(professionalsData);
         setPatients(patientsData);
         setRooms(roomsData);
+        // As sessões do dia vêm do efeito do dia escolhido, logo que a página termina de carregar
+        // (buscar aqui também lia o mesmo dia duas vezes)
+        return;
       }
       const appointmentsData = await getAppointmentsByDate(selectedDate);
       setAppointments(appointmentsData);
@@ -139,7 +142,7 @@ export function AgendamentosClientPage() {
       setError("Falha ao carregar dados.");
     } finally {
       if (isInitialLoad) setIsPageLoading(false);
-      setIsTableLoading(false);
+      else setIsTableLoading(false);
     }
   }, [selectedDate]);
 

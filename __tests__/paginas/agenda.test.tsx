@@ -75,6 +75,16 @@ it('à noite, abre na agenda de hoje, não na de amanhã', async () => {
   expect(await screen.findByDisplayValue('2026-10-01')).toBeInTheDocument();
 });
 
+it('ao abrir, busca as sessões do dia uma vez só (cada busca gasta leituras do banco)', async () => {
+  render(<AgendamentosClientPage />);
+
+  await waitFor(() => expect(getAppointmentsByDate).toHaveBeenCalled());
+  // Espera a tela terminar de carregar e confere que não houve uma segunda busca do mesmo dia
+  await screen.findAllByRole('heading', { name: 'Agendamentos' });
+  await new Promise((r) => setTimeout(r, 50));
+  expect(getAppointmentsByDate).toHaveBeenCalledTimes(1);
+});
+
 it('o relatório vai do primeiro ao último dia escolhidos, no relógio da clínica', async () => {
   render(<AgendamentosClientPage />);
   await waitFor(() => expect(gerarRelatorio).toBeDefined());
