@@ -68,7 +68,7 @@ function ItemParaAgendar({ encaixe, onExcluir }: { encaixe: Encaixe; onExcluir: 
                 <li>Confirmar com a família de <strong>{troca.paciente.nome}</strong> a mudança de {troca.de} para {troca.para} na {nomeDoDia(troca.dia)}.</li>
                 <li>
                   Mudar a sessão de {primeiroNome(troca.paciente.nome)} na agenda: abra a sessão das {troca.de} com {troca.profissional.nome},
-                  mude para {troca.para} e salve em &quot;esta e as próximas&quot;.{" "}
+                  mude o início para {troca.para}, ligue <strong>Aplicar a toda a série?</strong> e toque em <strong>Salvar Série Inteira</strong>.{" "}
                   {comecaEm && <Link className="font-semibold text-[#127a7e] underline-offset-2 hover:underline" href={linkDaAgenda(primeiraData(comecaEm, troca.dia))}>Abrir a agenda de {dataPorExtenso(primeiraData(comecaEm, troca.dia))}</Link>}
                 </li>
               </>

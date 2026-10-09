@@ -72,13 +72,13 @@ export function OpcaoDeEncaixeCartao({
             </div>
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-bold uppercase tracking-wide text-[#52646d]">Como fica</span>
-              <span className="rounded-lg border border-[#a8d8d9] bg-[#e3f4f4] px-2.5 py-2"><strong>{troca.de} · {primeiroNome(crianca)}</strong> (novo)</span>
-              <span className="rounded-lg border border-[#f0b45c] bg-[#fff0d6] px-2.5 py-2"><strong>{troca.para} · {primeiroNome(troca.paciente.nome)}</strong> (mudou)</span>
+              <span className="rounded-lg border border-[#a8d8d9] bg-[#e3f4f4] px-2.5 py-2"><strong>{troca.de} · {primeiroNome(crianca)}</strong> (entra)</span>
+              <span className="rounded-lg border border-[#f0b45c] bg-[#fff0d6] px-2.5 py-2"><strong>{troca.para} · {primeiroNome(troca.paciente.nome)}</strong> (muda)</span>
             </div>
           </div>
           <ul className="flex flex-col gap-1.5">
             <Conferido>{primeiroNome(troca.paciente.nome)} continua na {dia}, com a mesma terapeuta</Conferido>
-            <Conferido>Fica emendado com {troca.emendaCom.terapia || "outra terapia"} das {troca.emendaCom.horario}</Conferido>
+            <Conferido>A sessão fica emendada com {troca.emendaCom.terapia || "outra terapia"} das {troca.emendaCom.horario}</Conferido>
             {troca.sala && <Conferido>A {troca.sala.nome} está livre às {troca.para}</Conferido>}
             <Conferido ok={false}>Antes de agendar, a recepção confirma com a família de {primeiroNome(troca.paciente.nome)}</Conferido>
           </ul>

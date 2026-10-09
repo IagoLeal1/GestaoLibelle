@@ -13,7 +13,7 @@ import { ProcurarEncaixe } from "./procurar-encaixe";
 
 export type AbaDoAssistente = "procurar" | "para-agendar" | "recusados";
 
-const aba = "rounded-none border-b-[3px] border-transparent px-3.5 py-2.5 text-[15px] font-semibold text-[#52646d] shadow-none data-[state=active]:border-[#127a7e] data-[state=active]:bg-transparent data-[state=active]:font-bold data-[state=active]:text-[#127a7e] data-[state=active]:shadow-none";
+const aba = "rounded-none border-b-[3px] border-transparent px-2 py-2.5 text-[15px] sm:px-3.5 font-semibold text-[#52646d] shadow-none data-[state=active]:border-[#127a7e] data-[state=active]:bg-transparent data-[state=active]:font-bold data-[state=active]:text-[#127a7e] data-[state=active]:shadow-none";
 
 export function AssistenteDeEncaixe({ abaInicial = "procurar" }: { abaInicial?: AbaDoAssistente }) {
   const [abaAtual, setAbaAtual] = useState<AbaDoAssistente>(abaInicial);
@@ -44,7 +44,7 @@ export function AssistenteDeEncaixe({ abaInicial = "procurar" }: { abaInicial?: 
 
       <Tabs value={abaAtual} onValueChange={mudarAba} className="flex flex-col gap-4">
         <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto rounded-none border-b bg-transparent p-0">
-          <TabsTrigger value="procurar" className={aba}>Procurar encaixe</TabsTrigger>
+          <TabsTrigger value="procurar" className={aba}>Procurar<span className="hidden sm:inline">&nbsp;encaixe</span></TabsTrigger>
           <TabsTrigger value="para-agendar" className={`${aba} gap-2`}>
             Para agendar
             {!!faltam && (

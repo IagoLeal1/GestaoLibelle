@@ -310,3 +310,16 @@ describe('depois do "Não"', () => {
       .toEqual(buscar(p, agendaDoLucas, { bloqueios }).map((o) => o.chave));
   });
 });
+
+it('a melhor troca aparece entre as 3 primeiras, mesmo com várias opções livres antes dela', () => {
+  // Muitas livres (Carla, a semana toda) e uma troca possível com a Ana
+  const opcoes = buscar(
+    pedido({ familia: { dias: ['terca', 'quinta'], desde: '13:00', ate: '18:30' }, preferidos: ['prof-ana'] }),
+    [...agendaDoLucas, ...serie(TERCA, '13:20', '14:10', { ...bia, professionalId: 'prof-ana', tipo: 'Fonoaudiologia' })],
+    { profissionais: [ana, carla] }
+  );
+
+  expect(opcoes.length).toBeGreaterThan(3);
+  expect(opcoes.slice(0, 3).some((o) => o.troca)).toBe(true);
+  expect(opcoes[0].troca).toBeNull();
+});

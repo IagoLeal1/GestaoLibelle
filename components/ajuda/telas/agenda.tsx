@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Filter, MoreHorizontal } from "lucide-react"
 import { Aceso, Botao, Caixa, Campo, Janela, Linha, Titulo } from "./base";
 
 export const ALVOS_DA_AGENDA = [
-  "novo", "novo-unico", "ver-grade", "relatorio", "relatorio-campos", "gerar", "renovacoes", "data", "filtros", "linha", "status", "acoes",
+  "novo", "novo-unico", "assistente", "ver-grade", "relatorio", "relatorio-campos", "gerar", "renovacoes", "data", "filtros", "linha", "status", "acoes",
 ];
 export const ALVOS_DA_AGENDA_DO_TERAPEUTA = ["minhas", "data", "linha", "grade"];
 
@@ -20,11 +20,18 @@ export function TelaAgenda({ alvo, terapeuta = false }: { alvo?: string; terapeu
       {!terapeuta && (
         <div className="flex flex-wrap items-center gap-1.5">
           <div className="relative">
-            <Aceso nome="novo" alvo={alvo} className="rounded-md"><Botao>+ Novo Agendamento ▾</Botao></Aceso>
-            {(alvo === "novo" || alvo === "novo-unico") && (
+            <Aceso nome="novo" alvo={alvo} className="rounded-md">
+              <Botao>+ Novo Agendamento{alvo === "assistente" && <span className="ml-1 rounded-full bg-[#e68b00] px-1 text-[9px]">2</span>} ▾</Botao>
+            </Aceso>
+            {(alvo === "novo" || alvo === "novo-unico" || alvo === "assistente") && (
               <div className="absolute left-0 top-full z-10 mt-1 flex w-44 flex-col gap-0.5 rounded-lg border bg-white p-1 text-[10.5px] shadow-lg">
                 <Aceso nome="novo-unico" alvo={alvo} className="rounded-md bg-[#e3f4f4] px-2 py-1.5 font-semibold text-[#127a7e]">Agendamento Único/Sequencial</Aceso>
                 <span className="px-2 py-1.5 text-[#52646d]">Agendamento em Bloco</span>
+                <span className="mx-1 h-px bg-[#e5ecef]" />
+                <Aceso nome="assistente" alvo={alvo} className="flex items-center gap-1 rounded-md px-2 py-1.5 font-semibold text-[#127a7e]">
+                  Assistente de Agendamento
+                  <span className="ml-auto rounded-full bg-[#e68b00] px-1.5 text-[9px] font-bold text-white">2</span>
+                </Aceso>
               </div>
             )}
           </div>

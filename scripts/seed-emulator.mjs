@@ -497,10 +497,102 @@ for (const [id, targetRole, autorUid, dias, isImportant, leram, title, message] 
 
 await batch.commit();
 
+// Assistente de agendamento (encaixes): uma grade de 12 semanas às terças e quintas à tarde para a
+// Helena (nova, sem sessões) achar horário. Pedido de exemplo: Fono 2x (de preferência com a Ana) e
+// TO 1x, terças e quintas, das 14:00 às 17:30. A Ana está livre às 15:00 de terça e às 14:10 de quinta;
+// às 14:10 de terça está o Lucas, que faz TO com a Júlia às 15:50: mudar o Lucas para as 15:00 abre a
+// terça 14:10 e deixa a fono e a TO da Helena emendadas. A Paula quase não tem tarde livre.
+const encaixes = db.batch();
+for (const [id, fullName, especialidade, dias, horarioInicio, horarioFim] of [
+  ['prof-ana-costa', 'Ana Costa', 'Fonoaudiologia', ['terca', 'quinta'], '13:00', '18:30'],
+  ['prof-julia-reis', 'Júlia Reis', 'Terapia Ocupacional', ['segunda', 'terca', 'quarta', 'quinta', 'sexta'], '13:00', '18:30'],
+]) {
+  encaixes.set(db.doc(`professionals/${id}`), {
+    fullName, email: '', status: 'ativo', especialidade, conselho: '', numeroConselho: '', cpf: '', telefone: '', celular: '',
+    diasAtendimento: dias, horarioInicio, horarioFim, dataContratacao: agora, financeiro: { tipoPagamento: 'repasse', percentualRepasse: 50 },
+  });
+}
+encaixes.set(db.doc('specialties/to'), { name: 'Terapia Ocupacional', value: 150, description: '' });
+encaixes.set(db.doc('rooms/sala-3'), { name: 'Sala Amarela', number: '103', floor: 1, type: 'Terapia', capacity: 2, equipment: [], status: 'ativa', createdAt: agora });
+for (const [id, fullName] of [['paciente-helena', 'Helena Prado'], ['paciente-miguel', 'Miguel Andrade'], ['paciente-sofia', 'Sofia Ramos']]) {
+  encaixes.set(db.doc(`patients/${id}`), {
+    fullName, cpf: '000.000.000-00', dataNascimento: Timestamp.fromDate(new Date('2020-03-10T00:00:00Z')), status: 'ativo',
+    dataCadastro: agora, emailCadastro: `${id}@libelle.test`, responsavel: { nome: `Família de ${fullName}`, email: `${id}@libelle.test` },
+  });
+}
+NOMES_DOS_PACIENTES['paciente-miguel'] = 'Miguel Andrade';
+NOMES_DOS_PACIENTES['paciente-sofia'] = 'Sofia Ramos';
+const PROFISSIONAIS_DA_GRADE = {
+  'prof-ana-costa': ['Ana Costa', 'Fonoaudiologia', 'sala-1'],
+  'prof-julia-reis': ['Júlia Reis', 'Terapia Ocupacional', 'sala-2'],
+  'terapeuta1-teste': [porUid['terapeuta1-teste'].displayName, 'Fonoaudiologia', 'sala-3'],
+};
+/** A primeira terça (2) ou quinta (4) a partir de amanhã, às hh:mm. */
+const primeiro = (diaDaSemana, horario) => {
+  const data = new Date();
+  data.setDate(data.getDate() + 1);
+  while (data.getDay() !== diaDaSemana) data.setDate(data.getDate() + 1);
+  const [h, m] = horario.split(':').map(Number);
+  data.setHours(h, m, 0, 0);
+  return data;
+};
+const TERCA = 2;
+const QUINTA = 4;
+for (const [diaDaSemana, horario, profissionalId, pacienteId] of [
+  [TERCA, '14:10', 'prof-ana-costa', 'paciente-lucas'],
+  [TERCA, '15:50', 'prof-ana-costa', 'paciente-miguel'],
+  [TERCA, '16:40', 'prof-ana-costa', 'paciente-sofia'],
+  [QUINTA, '15:00', 'prof-ana-costa', 'paciente-davi'],
+  [QUINTA, '15:50', 'prof-ana-costa', 'paciente-bia'],
+  [QUINTA, '16:40', 'prof-ana-costa', 'paciente-miguel'],
+  [TERCA, '14:10', 'prof-julia-reis', 'paciente-bia'],
+  [TERCA, '15:50', 'prof-julia-reis', 'paciente-lucas'],
+  [QUINTA, '14:10', 'prof-julia-reis', 'paciente-sofia'],
+  [TERCA, '14:10', 'terapeuta1-teste', 'paciente-davi'],
+  [TERCA, '15:00', 'terapeuta1-teste', 'paciente-sofia'],
+  [TERCA, '15:50', 'terapeuta1-teste', 'paciente-bia'],
+  [QUINTA, '14:10', 'terapeuta1-teste', 'paciente-miguel'],
+  [QUINTA, '15:50', 'terapeuta1-teste', 'paciente-lucas'],
+]) {
+  const [profissional, tipo, sala] = PROFISSIONAIS_DA_GRADE[profissionalId];
+  const paciente = NOMES_DOS_PACIENTES[pacienteId];
+  const inicio = primeiro(diaDaSemana, horario);
+  const serie = `grade-${profissionalId}-${pacienteId}-${diaDaSemana}`;
+  for (let semana = 0; semana < 12; semana++) {
+    const comeco = new Date(inicio);
+    comeco.setDate(comeco.getDate() + semana * 7);
+    encaixes.set(db.doc(`appointments/${serie}-${semana}`), {
+      patientId: pacienteId, patientName: paciente, professionalId: profissionalId, professionalName: profissional,
+      title: `${paciente} - ${profissional}`, start: Timestamp.fromDate(comeco), end: Timestamp.fromMillis(comeco.getTime() + 50 * 60 * 1000),
+      status: 'agendado', statusSecundario: '', tipo, convenio: 'particular', valorConsulta: 150, sala, observacoes: '',
+      blockId: serie, isLastInBlock: semana === 11,
+    });
+  }
+}
+// Um encaixe que a coordenação já mandou e a recepção ainda vai agendar (aba "Para agendar")
+const proximaQuinta = primeiro(QUINTA, '16:40');
+encaixes.set(db.doc('encaixes/exemplo-davi'), {
+  status: 'para_agendar',
+  paciente: { id: 'paciente-davi', nome: 'Davi Rocha' },
+  opcao: {
+    chave: 'exemplo-davi', troca: null, semanasLivres: 12, diasEmendados: [], faltam: [],
+    sessoes: [{
+      terapia: 'Terapia Ocupacional', profissional: { id: 'prof-julia-reis', nome: 'Júlia Reis' }, dia: 'quinta', horario: '16:40', fim: '17:30',
+      semanasLivres: 12, sala: { id: 'sala-2', nome: 'Sala Verde' }, preferida: false, comTroca: false,
+    }],
+  },
+  comecaEm: `${proximaQuinta.getFullYear()}-${String(proximaQuinta.getMonth() + 1).padStart(2, '0')}-${String(proximaQuinta.getDate()).padStart(2, '0')}`,
+  recado: 'A mãe prefere ser avisada pelo WhatsApp.',
+  agendadas: {},
+  criadoPor: { uid: 'coord-teste', nome: porUid['coord-teste'].displayName },
+  criadoEm: agora,
+});
+await encaixes.commit();
+
 console.log('Emulador populado. Logins de teste (senha em SENHA_TESTE, neste arquivo, ou no campo senha):');
 for (const usuario of USUARIOS) {
   const perfil = usuario.role ? `${usuario.role}, ${usuario.status}` : 'sem documento em users';
   console.log(`  ${usuario.email.padEnd(26)} ${usuario.displayName} (${perfil})`);
 }
-console.log('Conversas: grupo-maria-souza (150 mensagens) e grupo-joao-lima (3 mensagens). Avisos: 6, um de cada público. Evoluções: 3, uma incompatível.');
+console.log('Conversas: grupo-maria-souza (150 mensagens) e grupo-joao-lima (3 mensagens). Avisos: 6, um de cada público. Evoluções: 3, uma incompatível. Assistente: peça um encaixe para a Helena Prado (Fono 2x com a Ana, TO 1x, terça e quinta das 14:00 às 17:30).');
 process.exit(0);

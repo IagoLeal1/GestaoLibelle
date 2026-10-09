@@ -98,7 +98,7 @@ it('a coordenação procura com o que a família pode e vê a opção livre e a 
   }));
   const opcao2 = screen.getByRole('article', { name: 'Opção 2' });
   expect(opcao2).toHaveTextContent('A troca: Lucas Souza muda de horário na mesma terça');
-  expect(opcao2).toHaveTextContent('Fica emendado com Terapia Ocupacional das 15:50');
+  expect(opcao2).toHaveTextContent('A sessão fica emendada com Terapia Ocupacional das 15:50');
   expect(opcao2).toHaveTextContent('A Sala Azul está livre às 15:00');
   expect(screen.getByRole('article', { name: 'Opção 1' })).toHaveTextContent('Não mexe em nenhuma outra criança');
 });

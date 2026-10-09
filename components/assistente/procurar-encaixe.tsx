@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/context/AuthContext";
 import { auth } from "@/lib/firebaseConfig";
 import { cn } from "@/lib/utils";
-import { bloqueiosDoNao, filtrarPorBloqueios, OpcaoDeEncaixe } from "@/lib/encaixes";
+import { bloqueiosDoNao, filtrarPorBloqueios, OpcaoDeEncaixe, OPCOES_EM_DESTAQUE } from "@/lib/encaixes";
 import { ORDEM_DOS_DIAS, SEMANAS_ANALISADAS } from "@/lib/horariosRecorrentes";
 import { getPatients, Patient } from "@/services/patientService";
 import { getProfessionals, Professional } from "@/services/professionalService";
@@ -24,7 +24,6 @@ import { DizerNao, MandarParaRecepcao } from "./janelas";
 import { OpcaoDeEncaixeCartao } from "./opcao-de-encaixe";
 
 const CONVENIOS = ["unimed", "bradesco", "amil", "sulamerica"];
-const OPCOES_A_MOSTRAR = 3;
 
 /** As terapias que valem para a criança: as dos convênios dela e, se for particular, as sem convênio no nome. */
 export function terapiasDaCrianca(especialidades: Specialty[], convenio?: string) {
@@ -147,7 +146,7 @@ export function ProcurarEncaixe({ onMandou }: { onMandou: () => void }) {
     }
   };
 
-  const visiveis = opcoes ? (mostrarTodas ? opcoes : opcoes.slice(0, OPCOES_A_MOSTRAR)) : [];
+  const visiveis = opcoes ? (mostrarTodas ? opcoes : opcoes.slice(0, OPCOES_EM_DESTAQUE)) : [];
 
   return (
     <div className="flex flex-wrap items-start gap-5">
@@ -240,8 +239,9 @@ export function ProcurarEncaixe({ onMandou }: { onMandou: () => void }) {
             <span>Emendar as terapias no mesmo dia <span className="text-muted-foreground">(a família vem uma vez só)</span></span>
           </label>
           <div className="flex flex-col gap-1">
-            <span className="text-[13px] text-muted-foreground">Terapeutas de preferência (opcional)</span>
+            <Label htmlFor="preferidas" className="text-[13px] font-normal text-muted-foreground">Terapeutas de preferência (opcional)</Label>
             <MultiSelectFilter
+              id="preferidas"
               options={profissionais.map((p) => ({ value: p.id, label: p.fullName }))}
               selectedValues={preferidos}
               onSelectionChange={setPreferidos}
@@ -288,9 +288,9 @@ export function ProcurarEncaixe({ onMandou }: { onMandou: () => void }) {
                 onNao={() => setParaRecusar(opcao)}
               />
             ))}
-            {!mostrarTodas && opcoes.length > OPCOES_A_MOSTRAR && (
+            {!mostrarTodas && opcoes.length > OPCOES_EM_DESTAQUE && (
               <Button variant="outline" className="h-11 text-[15px] text-[#127a7e]" onClick={() => setMostrarTodas(true)}>
-                Mostrar mais {opcoes.length - OPCOES_A_MOSTRAR} {opcoes.length - OPCOES_A_MOSTRAR === 1 ? "opção" : "opções"}
+                Mostrar mais {opcoes.length - OPCOES_EM_DESTAQUE} {opcoes.length - OPCOES_EM_DESTAQUE === 1 ? "opção" : "opções"}
               </Button>
             )}
           </>

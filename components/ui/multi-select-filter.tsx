@@ -19,6 +19,8 @@ interface MultiSelectFilterProps {
   onSelectionChange: (selected: string[]) => void
   placeholder?: string
   className?: string
+  /** Para um <Label htmlFor> dar nome ao campo (leitor de tela). */
+  id?: string
 }
 
 export function MultiSelectFilter({
@@ -27,6 +29,7 @@ export function MultiSelectFilter({
   onSelectionChange,
   placeholder = "Selecione...",
   className,
+  id,
 }: MultiSelectFilterProps) {
   const [open, setOpen] = React.useState(false)
 
@@ -47,6 +50,7 @@ export function MultiSelectFilter({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          id={id}
           variant="outline"
           role="combobox"
           aria-expanded={open}

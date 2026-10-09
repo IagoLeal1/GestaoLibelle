@@ -54,7 +54,8 @@ export type IdDaTela =
   | "inicio" | "agenda" | "agenda-do-terapeuta" | "novo-agendamento" | "editar-sessao" | "para-escrever" | "folha-evolucao" | "prontuario"
   | "gerenciar-usuarios" | "painel-da-familia" | "grade" | "grade-do-terapeuta" | "renovacoes" | "pacientes" | "ficha"
   | "formulario-de-paciente" | "lista-de-prontuarios" | "central" | "profissionais" | "formulario-de-profissional" | "especialidades"
-  | "salas" | "financeiro" | "comercial" | "avisos" | "mensagens" | "aprovacao" | "minha-conta" | "entrada";
+  | "salas" | "financeiro" | "comercial" | "avisos" | "mensagens" | "aprovacao" | "minha-conta" | "entrada"
+  | "assistente-pedido" | "assistente-opcoes" | "mandar-para-recepcao" | "dizer-nao" | "para-agendar" | "excluir-encaixe" | "recusados";
 
 /** A tela de exemplo de um passo e o lugar que acende nela (onde tocar). */
 export interface TelaDoPasso {

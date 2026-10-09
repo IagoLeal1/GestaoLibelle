@@ -24,7 +24,10 @@ import {
 /** Livre de verdade: em pelo menos 10 das 12 semanas (uma série curta que vai ser renovada não conta). */
 export const MINIMO_DE_SEMANAS_LIVRES = 10;
 const MAXIMO_DE_OPCOES = 8;
+/** As que a tela mostra antes do "Mostrar mais": a melhor troca, se houver, sempre está entre elas. */
+export const OPCOES_EM_DESTAQUE = 3;
 const TAMANHO_DA_BUSCA = 150;
+const VAGAS_PARA_TROCA = 30;
 /** Horários guardados por dia de cada terapeuta, conforme as vezes por semana (a busca não explode). */
 const HORARIOS_POR_DIA = (frequencia: number) => (frequencia <= 1 ? 13 : frequencia === 2 ? 8 : 4);
 /** Uma sessão "emenda" na outra quando começa até 10 minutos depois do fim dela. */
@@ -481,13 +484,17 @@ export function encontrarEncaixes({
         proximos.push({ candidatos, faltam, pontos: pontuar(candidatos, faltam, pedido, existentes) });
       }
     }
-    planos = proximos.sort((a, b) => b.pontos - a.pontos).slice(0, TAMANHO_DA_BUSCA);
+    // Guarda os melhores e, mesmo que fiquem atrás, alguns com troca (senão as livres tomam tudo)
+    const ordenados = proximos.sort((a, b) => b.pontos - a.pontos);
+    const melhores = ordenados.slice(0, TAMANHO_DA_BUSCA - VAGAS_PARA_TROCA);
+    const comTroca = ordenados.slice(TAMANHO_DA_BUSCA - VAGAS_PARA_TROCA).filter((p) => trocaDo(p.candidatos)).slice(0, VAGAS_PARA_TROCA);
+    planos = [...melhores, ...comTroca];
   }
 
   const recusadas = new Set(bloqueios.flatMap((b) => (b.tipo === 'opcao' ? [b.chave] : [])));
   const vistas = new Set<string>();
   const opcoes: OpcaoDeEncaixe[] = [];
-  for (const plano of planos) {
+  for (const plano of planos.sort((a, b) => b.pontos - a.pontos)) {
     if (plano.candidatos.length === 0) continue;
     const chave = chaveDoPlano(plano.candidatos);
     if (vistas.has(chave) || recusadas.has(chave)) continue;
@@ -504,9 +511,14 @@ export function encontrarEncaixes({
       diasEmendados: diasEmendados(plano.candidatos, existentes),
       faltam: plano.faltam,
     });
-    if (opcoes.length === MAXIMO_DE_OPCOES) break;
   }
-  return opcoes;
+  // As livres vêm antes; mas a troca é o que mais poupa a coordenação: a melhor sobe para o destaque
+  const melhorTroca = opcoes.findIndex((o) => o.troca);
+  if (melhorTroca >= OPCOES_EM_DESTAQUE) {
+    const [troca] = opcoes.splice(melhorTroca, 1);
+    opcoes.splice(OPCOES_EM_DESTAQUE - 1, 0, troca);
+  }
+  return opcoes.slice(0, MAXIMO_DE_OPCOES);
 }
 
 /** "terca" → "terça", para frases. */

@@ -6,6 +6,10 @@ import { useEffect, useRef, useState } from "react";
 import type { IdDaTela, TelaDoPasso, Visao } from "@/lib/ajuda";
 import { TelaAgenda, ALVOS_DA_AGENDA, ALVOS_DA_AGENDA_DO_TERAPEUTA } from "./agenda";
 import {
+  TelaAssistenteOpcoes, TelaAssistentePedido, TelaDizerNao, TelaExcluirEncaixe, TelaMandarParaRecepcao, TelaParaAgendar, TelaRecusados,
+  ALVOS_DAS_OPCOES, ALVOS_DE_EXCLUIR_ENCAIXE, ALVOS_DE_MANDAR, ALVOS_DE_PARA_AGENDAR, ALVOS_DO_NAO, ALVOS_DO_PEDIDO, ALVOS_DOS_RECUSADOS,
+} from "./assistente";
+import {
   TelaEditarSessao, TelaNovoAgendamento, TelaRenovacoes, ALVOS_DAS_RENOVACOES, ALVOS_DE_EDITAR_SESSAO, ALVOS_DO_NOVO_AGENDAMENTO,
 } from "./agendamento";
 import { TelaAprovacao, TelaEntrada, TelaMinhaConta, ALVOS_DA_APROVACAO, ALVOS_DA_ENTRADA, ALVOS_DA_MINHA_CONTA } from "./acessos";
@@ -58,6 +62,14 @@ export const TELAS: Record<IdDaTela, { titulo: string; alvos: string[]; Tela: (p
   aprovacao: { titulo: "Aprovação de Acesso", alvos: ALVOS_DA_APROVACAO, Tela: TelaAprovacao },
   "minha-conta": { titulo: "Configurações", alvos: ALVOS_DA_MINHA_CONTA, Tela: TelaMinhaConta },
   entrada: { titulo: "Entrada no sistema", alvos: ALVOS_DA_ENTRADA, Tela: TelaEntrada },
+  // Assistente de agendamento (encaixes)
+  "assistente-pedido": { titulo: "Assistente de Agendamento", alvos: ALVOS_DO_PEDIDO, Tela: TelaAssistentePedido },
+  "assistente-opcoes": { titulo: "Assistente de Agendamento", alvos: ALVOS_DAS_OPCOES, Tela: TelaAssistenteOpcoes },
+  "mandar-para-recepcao": { titulo: "Mandar para a recepção", alvos: ALVOS_DE_MANDAR, Tela: TelaMandarParaRecepcao },
+  "dizer-nao": { titulo: "Por que não essa opção?", alvos: ALVOS_DO_NAO, Tela: TelaDizerNao },
+  "para-agendar": { titulo: "Para agendar", alvos: ALVOS_DE_PARA_AGENDAR, Tela: TelaParaAgendar },
+  "excluir-encaixe": { titulo: "Excluir este encaixe?", alvos: ALVOS_DE_EXCLUIR_ENCAIXE, Tela: TelaExcluirEncaixe },
+  recusados: { titulo: "Recusados", alvos: ALVOS_DOS_RECUSADOS, Tela: TelaRecusados },
 };
 
 /** A tela de exemplo no tamanho em que foi desenhada (o painel do guia aberto), do jeito do papel de quem lê. */
