@@ -1,7 +1,7 @@
 // __tests__/paginas/assistenteDeEncaixe.test.tsx
-// O assistente de agendamento, como no desenho aprovado: a coordenação procura o encaixe e manda para
-// a recepção (com a data de início e um recado) ou diz "Não" com o motivo; a recepção vê em "Para
-// agendar" o que falta fazer, agenda cada sessão pelo Novo Agendamento e pode excluir (com aviso).
+// O assistente de agendamento: a coordenação procura o encaixe (para criança com ou sem cadastro) e
+// manda para a recepção (com a data de início e um recado) ou diz "Não" com o motivo; a recepção vê
+// em "Para agendar" o recado guardado com o que falta fazer, toca em "Já agendei" e pode excluir.
 import '@testing-library/jest-dom';
 import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -9,7 +9,7 @@ import { AssistenteDeEncaixe } from '@/components/assistente/assistente-de-encai
 import { terapiasDaCrianca } from '@/components/assistente/procurar-encaixe';
 import { OpcaoDeEncaixe } from '@/lib/encaixes';
 import {
-  contarParaAgendar, dizerNao, excluirEncaixe, listarParaAgendar, listarRecusados, mandarParaRecepcao,
+  contarParaAgendar, dizerNao, excluirEncaixe, listarParaAgendar, listarRecusados, mandarParaRecepcao, marcarComoAgendado,
 } from '@/services/encaixeService';
 import { getPatients } from '@/services/patientService';
 import { getProfessionals } from '@/services/professionalService';
@@ -17,7 +17,7 @@ import { getSpecialties } from '@/services/specialtyService';
 
 jest.mock('@/services/encaixeService', () => ({
   contarParaAgendar: jest.fn(), dizerNao: jest.fn(), excluirEncaixe: jest.fn(), listarParaAgendar: jest.fn(),
-  listarRecusados: jest.fn(), mandarParaRecepcao: jest.fn(),
+  listarRecusados: jest.fn(), mandarParaRecepcao: jest.fn(), marcarComoAgendado: jest.fn(),
 }));
 jest.mock('@/services/patientService', () => ({ getPatients: jest.fn() }));
 jest.mock('@/services/professionalService', () => ({ getProfessionals: jest.fn() }));
@@ -143,20 +143,44 @@ it('sem troca, o motivo "a família da outra criança" nem aparece', async () =>
   expect(within(janela).getByLabelText(/O horário é ruim para a família de Theo/)).toBeInTheDocument();
 });
 
+it('criança sem cadastro: nome e convênio, as terapias do convênio, e vai assim para a recepção', async () => {
+  (getSpecialties as jest.Mock).mockResolvedValue([
+    { id: 'fono', name: 'Fonoaudiologia', value: 150 }, { id: 'fono-unimed', name: 'Fonoaudiologia Unimed', value: 120 },
+  ]);
+  render(<AssistenteDeEncaixe />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Ainda não tem cadastro' }));
+  fireEvent.change(screen.getByLabelText('Nome da criança'), { target: { value: '  Laura   Pires ' } });
+  fireEvent.change(screen.getByLabelText('Convênio'), { target: { value: 'Unimed' } });
+  const terapia = screen.getByLabelText('Terapia');
+  expect(within(terapia).queryByText('Fonoaudiologia')).not.toBeInTheDocument();
+  fireEvent.change(terapia, { target: { value: 'Fonoaudiologia Unimed' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Encontrar encaixes' }));
+  await screen.findByText('2 encaixes para Laura');
+
+  expect(JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body).pacienteId).toBe('sem-cadastro:laura-pires');
+  fireEvent.click(within(screen.getByRole('article', { name: 'Opção 1' })).getByRole('button', { name: /Vamos com essa/ }));
+  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mandar para a recepção' }));
+  await waitFor(() => expect(mandarParaRecepcao).toHaveBeenCalledWith(expect.objectContaining({
+    paciente: { id: 'sem-cadastro:laura-pires', nome: 'Laura Pires', semCadastro: true, convenio: 'Unimed' },
+  })));
+});
+
 describe('Para agendar (a recepção)', () => {
   const encaixe = {
     id: 'e1', status: 'para_agendar', paciente: { id: 'paciente-theo', nome: 'Theo Martins' },
     opcao: { ...comTroca, sessoes: [comTroca.sessoes[0], sessao(ana, 'quinta', '14:10', '15:00')] },
-    criadoPor: { uid: 'coord', nome: 'Carla Coordenadora' }, comecaEm: '2026-10-13', recado: 'Avisar pelo WhatsApp', agendadas: { 0: true },
+    criadoPor: { uid: 'coord', nome: 'Carla Coordenadora' }, comecaEm: '2026-10-13', recado: 'Avisar pelo WhatsApp',
   };
 
   beforeEach(() => {
     (contarParaAgendar as jest.Mock).mockResolvedValue(1);
     (listarParaAgendar as jest.Mock).mockResolvedValue([encaixe]);
     (excluirEncaixe as jest.Mock).mockResolvedValue(undefined);
+    (marcarComoAgendado as jest.Mock).mockResolvedValue(undefined);
   });
 
-  it('mostra o que falta fazer: a troca na agenda e cada sessão para agendar, já preenchida', async () => {
+  it('é um recado guardado: os horários, a troca na agenda e o que falta fazer, sem botão de agendar', async () => {
     render(<AssistenteDeEncaixe abaInicial="para-agendar" />);
 
     const item = await screen.findByRole('article', { name: 'Theo Martins' });
@@ -165,10 +189,35 @@ describe('Para agendar (a recepção)', () => {
     expect(item).toHaveTextContent('Recado da coordenação: Avisar pelo WhatsApp');
     expect(item).toHaveTextContent('Confirmar com a família de Lucas Souza a mudança de 14:10 para 15:00 na terça.');
     expect(within(item).getByRole('link', { name: 'Abrir a agenda de terça, 13/10' })).toHaveAttribute('href', '/agendamentos?data=2026-10-13');
-    expect(within(item).getAllByRole('link', { name: 'Agendar' })).toHaveLength(1);
-    expect(within(item).getByRole('link', { name: 'Agendar' })).toHaveAttribute('href', '/agendamentos/novo?encaixe=e1&sessao=1');
-    expect(item).toHaveTextContent('Agendada');
+    expect(item).toHaveTextContent('Fonoaudiologia com Ana Costa · toda quinta às 14:10 · a partir de 15/10');
+    expect(item).toHaveTextContent('Agendar Theo pelo Novo Agendamento, como sempre');
+    expect(within(item).queryByRole('link', { name: 'Agendar' })).not.toBeInTheDocument();
+    expect(within(item).queryByText(/Cadastrar/)).not.toBeInTheDocument();
     expect(await screen.findByText('para agendar')).toBeInTheDocument(); // o número laranja da aba
+  });
+
+  it('"Já agendei" marca o encaixe como agendado e baixa o número laranja', async () => {
+    render(<AssistenteDeEncaixe abaInicial="para-agendar" />);
+    const item = await screen.findByRole('article', { name: 'Theo Martins' });
+    (contarParaAgendar as jest.Mock).mockResolvedValue(0);
+
+    fireEvent.click(within(item).getByRole('button', { name: /Já agendei/ }));
+
+    await waitFor(() => expect(marcarComoAgendado).toHaveBeenCalledWith('e1'));
+    expect(await within(item).findByText(/A recepção marcou como agendado/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('para agendar')).not.toBeInTheDocument());
+  });
+
+  it('criança sem cadastro: a etiqueta, o convênio e o passo de cadastrar antes', async () => {
+    (listarParaAgendar as jest.Mock).mockResolvedValue([{
+      ...encaixe, paciente: { id: 'sem-cadastro:laura-pires', nome: 'Laura Pires', semCadastro: true, convenio: 'Unimed' },
+    }]);
+    render(<AssistenteDeEncaixe abaInicial="para-agendar" />);
+
+    const item = await screen.findByRole('article', { name: 'Laura Pires' });
+    expect(item).toHaveTextContent('Ainda sem cadastro');
+    expect(item).toHaveTextContent('Convênio: Unimed');
+    expect(within(item).getByRole('link', { name: 'Cadastrar agora' })).toHaveAttribute('href', '/pacientes/novo');
   });
 
   it('excluir avisa que a sugestão pode voltar', async () => {

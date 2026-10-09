@@ -2,17 +2,12 @@
 // (status, data e horário, a série do horário fixo, salvar e excluir).
 import { Aceso, Botao, Campo, Chave, Janela, Titulo } from "./base";
 
-export const ALVOS_DO_NOVO_AGENDAMENTO = ["do-assistente", "quem", "quando", "repete", "salvar"];
+export const ALVOS_DO_NOVO_AGENDAMENTO = ["quem", "quando", "repete", "salvar"];
 
 export function TelaNovoAgendamento({ alvo }: { alvo?: string }) {
   return (
     <Janela>
       <Titulo>Novo Agendamento</Titulo>
-      {alvo === "do-assistente" && (
-        <Aceso nome="do-assistente" alvo={alvo} className="rounded-lg border border-[#a8d8d9] bg-[#f3fbfb] p-1.5 text-[9.5px]">
-          <b>Do assistente de agendamento</b> · Theo Martins · Fono com Ana, toda quinta às 14:10, a partir de quinta, 15/10. Confira o número de sessões e salve.
-        </Aceso>
-      )}
       <Aceso nome="quem" alvo={alvo} className="grid grid-cols-3 gap-1.5 rounded-lg p-0.5">
         <Campo rotulo="Paciente" valor="Lucas Souza ▾" />
         <Campo rotulo="Profissional" valor="Paula ▾" />

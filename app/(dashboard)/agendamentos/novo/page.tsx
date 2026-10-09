@@ -3,10 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
-// ?encaixe=<id>&sessao=<n>: vindo do assistente (Para agendar), o formulário abre preenchido
-export default async function NovoAgendamentoPage({ searchParams }: { searchParams: Promise<{ encaixe?: string; sessao?: string }> }) {
-  const { encaixe, sessao } = await searchParams;
-  const doEncaixe = encaixe && sessao && /^\d+$/.test(sessao) ? { id: encaixe, sessao: Number(sessao) } : undefined;
+export default function NovoAgendamentoPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -18,7 +15,7 @@ export default async function NovoAgendamentoPage({ searchParams }: { searchPara
           <p className="text-muted-foreground">Cadastre um novo agendamento no sistema.</p>
         </div>
       </div>
-      <AppointmentForm doEncaixe={doEncaixe} />
+      <AppointmentForm />
     </div>
   );
 }

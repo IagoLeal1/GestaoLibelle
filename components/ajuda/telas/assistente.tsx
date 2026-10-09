@@ -3,7 +3,7 @@
 // excluir e os "Recusados".
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Aceso, Botao, Caixa, Campo, Janela, Linha, Titulo } from "./base";
+import { Aceso, Botao, Caixa, Campo, Janela, Titulo } from "./base";
 
 function Abas({ ativa }: { ativa: "procurar" | "para-agendar" | "recusados" }) {
   const aba = (id: typeof ativa, texto: React.ReactNode) => (
@@ -26,7 +26,7 @@ const Dia = ({ dia, children }: { dia: string; children: React.ReactNode }) => (
   <div className="flex flex-col gap-0.5 rounded-md bg-[#f3f6f8] px-1.5 py-1 text-[9.5px]"><b>{dia}</b>{children}</div>
 );
 
-export const ALVOS_DO_PEDIDO = ["crianca", "terapias", "dias", "emendar", "encontrar"];
+export const ALVOS_DO_PEDIDO = ["crianca", "sem-cadastro", "terapias", "dias", "emendar", "encontrar"];
 
 export function TelaAssistentePedido({ alvo }: { alvo?: string }) {
   const terapia = (nome: string, vezes: string) => (
@@ -35,7 +35,23 @@ export function TelaAssistentePedido({ alvo }: { alvo?: string }) {
   return (
     <Janela className="gap-1.5">
       <Abas ativa="procurar" />
-      <Aceso nome="crianca" alvo={alvo} className="rounded-lg p-0.5"><Campo rotulo="1. Criança" valor="Theo Martins ▾" /></Aceso>
+      <Aceso nome={alvo === "sem-cadastro" ? "sem-cadastro" : "crianca"} alvo={alvo} className="flex flex-col gap-1 rounded-lg p-0.5">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] font-semibold text-[#37474f]">1. Criança</span>
+          <span className="ml-auto flex rounded-md bg-[#e2e9ed] p-0.5 text-[9px] font-semibold text-[#52646d]">
+            <span className={cn("rounded px-1.5", alvo !== "sem-cadastro" && "bg-white text-[#0d5c5f]")}>Já tem cadastro</span>
+            <span className={cn("rounded px-1.5", alvo === "sem-cadastro" && "bg-white text-[#0d5c5f]")}>Ainda não tem cadastro</span>
+          </span>
+        </div>
+        {alvo === "sem-cadastro" ? (
+          <div className="grid grid-cols-[minmax(0,1fr)_90px] gap-1.5">
+            <span className="flex h-6 items-center rounded-md border border-[#cfd9de] bg-white px-2 text-[10px]">Laura Pires</span>
+            <span className="flex h-6 items-center rounded-md border border-[#cfd9de] bg-white px-2 text-[10px]">Unimed ▾</span>
+          </div>
+        ) : (
+          <span className="flex h-6 items-center rounded-md border border-[#cfd9de] bg-white px-2 text-[10px] text-[#52646d]">Theo Martins ▾</span>
+        )}
+      </Aceso>
       <Aceso nome="terapias" alvo={alvo} className="flex flex-col gap-1 rounded-lg p-0.5">
         <span className="text-[10px] font-semibold text-[#37474f]">2. Terapias</span>
         {terapia("Fonoaudiologia", "2x por semana")}
@@ -139,27 +155,40 @@ export function TelaDizerNao({ alvo }: { alvo?: string }) {
   );
 }
 
-export const ALVOS_DE_PARA_AGENDAR = ["item", "troca", "agenda", "agendar", "excluir"];
+export const ALVOS_DE_PARA_AGENDAR = ["item", "cadastrar", "agenda", "horarios", "ja-agendei", "excluir"];
 
+/** "Para agendar": o recado guardado. Com o alvo "cadastrar", é a criança que ainda não tem cadastro. */
 export function TelaParaAgendar({ alvo }: { alvo?: string }) {
+  const nova = alvo === "cadastrar";
   return (
     <Janela className="gap-1.5">
-      <Titulo>Assistente de Agendamento</Titulo>
       <Abas ativa="para-agendar" />
       <div className="flex flex-col gap-1.5 rounded-lg border border-[#dde5e9] bg-white p-1.5 text-[9.5px]">
         <Aceso nome="item" alvo={alvo} className="flex flex-col gap-1 rounded-md p-0.5">
-          <div className="flex items-center gap-1.5"><b className="text-[11px]">Theo Martins</b><Selo troca>Falta agendar</Selo><span className="ml-auto text-[#52646d]">Escolhido por Carla</span></div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <b className="text-[11px]">{nova ? "Laura Pires" : "Theo Martins"}</b><Selo troca>Falta agendar</Selo>
+            {nova && <Selo troca>Ainda sem cadastro</Selo>}
+            <span className="ml-auto text-[#52646d]">Escolhido por Carla</span>
+          </div>
           <div className="flex gap-1"><span className="rounded bg-[#e3f4f4] px-1 text-[#0d5c5f]"><b>Começa:</b> terça, 13/10</span><span className="truncate rounded bg-[#f3f6f8] px-1"><b>Recado:</b> avisar pelo WhatsApp</span></div>
         </Aceso>
-        <div className="flex flex-col gap-1 rounded-md bg-[#f3f6f8] p-1.5">
+        <Aceso nome="horarios" alvo={alvo} className="flex flex-col gap-0.5 rounded-md bg-[#f3f6f8] p-1">
+          <b>Os horários</b>
+          <span className="rounded bg-white px-1.5 py-0.5"><b>Fono</b> com Ana · toda terça às 14:10 · a partir de 13/10</span>
+          <span className="rounded bg-white px-1.5 py-0.5"><b>Fono</b> com Ana · toda quinta às 14:10 · a partir de 15/10</span>
+        </Aceso>
+        <div className="flex flex-col gap-0.5 rounded-md border border-dashed border-[#cfd9de] p-1">
           <b>O que falta fazer</b>
-          <Aceso nome="troca" alvo={alvo} className="rounded px-0.5">1. Confirmar com a família de <b>Lucas</b> a mudança de 14:10 para 15:00 na terça.</Aceso>
-          <Aceso nome="agenda" alvo={alvo} className="rounded px-0.5">2. Mudar a sessão de Lucas na agenda. <span className="font-semibold text-[#127a7e] underline">Abrir a agenda de terça, 13/10</span></Aceso>
-          <span className="px-0.5">3. Agendar Theo:</span>
-          <Linha className="min-h-6 py-0.5 text-[9.5px]"><span><b>Fono</b> com Ana · toda terça 14:10</span><span className="ml-auto flex items-center gap-0.5 font-semibold text-[#1f6b45]"><Check aria-hidden className="h-3 w-3" />Agendada</span></Linha>
-          <Linha className="min-h-6 py-0.5 text-[9.5px]"><span><b>Fono</b> com Ana · toda quinta 14:10</span><Aceso nome="agendar" alvo={alvo} className="ml-auto rounded-md"><Botao className="h-5 px-2">Agendar</Botao></Aceso></Linha>
+          {nova
+            ? <Aceso nome="cadastrar" alvo={alvo} className="rounded px-0.5">1. Cadastrar <b>Laura Pires</b> em Pacientes. <span className="font-semibold text-[#127a7e] underline">Cadastrar agora</span></Aceso>
+            : <Aceso nome="agenda" alvo={alvo} className="rounded px-0.5">1. Confirmar com a família de <b>Lucas</b> e mudar a sessão dele na agenda. <span className="font-semibold text-[#127a7e] underline">Abrir a agenda de terça, 13/10</span></Aceso>}
+          <span className="px-0.5">2. Agendar {nova ? "Laura" : "Theo"} pelo Novo Agendamento, como sempre.</span>
+          <span className="px-0.5">3. Tudo agendado? Toque em <b>Já agendei</b>.</span>
         </div>
-        <Aceso nome="excluir" alvo={alvo} className="self-end rounded-md px-1 font-semibold text-red-700">Excluir</Aceso>
+        <div className="flex items-center justify-between">
+          <Aceso nome="ja-agendei" alvo={alvo} className="rounded-md"><Botao>✓ Já agendei</Botao></Aceso>
+          <Aceso nome="excluir" alvo={alvo} className="rounded-md px-1 font-semibold text-red-700">Excluir</Aceso>
+        </div>
       </div>
     </Janela>
   );

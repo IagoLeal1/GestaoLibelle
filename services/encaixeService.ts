@@ -1,15 +1,15 @@
 // services/encaixeService.ts
 // Os encaixes do assistente de agendamento: a coordenação escolhe uma opção ("Vamos com essa") e manda
-// para a recepção, ou recusa com o motivo ("Não"). A recepção vê os que chegaram em "Para agendar" e
-// agenda pelo Novo Agendamento, que marca cada sessão agendada; com todas, o encaixe vira "Agendado"
-// e sai da lista depois de 7 dias. O assistente nunca cria atendimentos.
+// para a recepção, ou recusa com o motivo ("Não"). A recepção vê os que chegaram em "Para agendar",
+// como um recado guardado: agenda pelo Novo Agendamento, como sempre, e toca em "Já agendei"; o
+// encaixe vira "Agendado" e sai da lista depois de 7 dias. O assistente nunca cria atendimentos.
+// A criança pode ainda não ter cadastro: vai só o nome e o convênio, e a recepção cadastra antes.
 import {
   addDoc,
   collection,
   deleteDoc,
   doc,
   getCountFromServer,
-  getDoc,
   getDocs,
   query,
   serverTimestamp,
@@ -22,18 +22,22 @@ import { Bloqueio, bloqueiosDoNao, MotivoDoNao, OpcaoDeEncaixe, Pessoa } from "@
 
 export type StatusDoEncaixe = "para_agendar" | "agendado" | "recusado";
 
+/** A criança do encaixe. Sem cadastro: o id é "sem-cadastro:<nome>", e vão o nome e o convênio. */
+export interface CriancaDoEncaixe extends Pessoa {
+  semCadastro?: boolean;
+  convenio?: string;
+}
+
 export interface Encaixe {
   id: string;
   status: StatusDoEncaixe;
-  paciente: Pessoa;
+  paciente: CriancaDoEncaixe;
   opcao: OpcaoDeEncaixe;
   criadoPor: { uid: string; nome: string };
   criadoEm?: Timestamp;
   /** Para agendar: a data da primeira sessão (aaaa-mm-dd) e o recado da coordenação. */
   comecaEm?: string;
   recado?: string;
-  /** As sessões da opção já agendadas pela recepção, pela posição em opcao.sessoes. */
-  agendadas?: Record<string, boolean>;
   agendadoEm?: Timestamp;
   /** Recusado: o motivo e o que ele tira das próximas buscas. */
   motivo?: { tipo: MotivoDoNao; texto?: string };
@@ -45,7 +49,7 @@ const UM_DIA = 24 * 60 * 60 * 1000;
 const encaixes = () => collection(db, "encaixes");
 
 export async function mandarParaRecepcao(dados: {
-  paciente: Pessoa;
+  paciente: CriancaDoEncaixe;
   opcao: OpcaoDeEncaixe;
   comecaEm: string;
   recado?: string;
@@ -58,7 +62,6 @@ export async function mandarParaRecepcao(dados: {
     opcao: dados.opcao,
     comecaEm: dados.comecaEm,
     recado,
-    agendadas: {},
     criadoPor: dados.autor,
     criadoEm: serverTimestamp(),
   });
@@ -66,7 +69,7 @@ export async function mandarParaRecepcao(dados: {
 }
 
 export async function dizerNao(dados: {
-  paciente: Pessoa;
+  paciente: CriancaDoEncaixe;
   opcao: OpcaoDeEncaixe;
   motivo: MotivoDoNao;
   texto?: string;
@@ -85,24 +88,12 @@ export async function dizerNao(dados: {
   return novo.id;
 }
 
-/** Um encaixe só: o Novo Agendamento abre preenchido com uma das sessões dele. */
-export async function lerEncaixe(id: string): Promise<Encaixe | null> {
-  const encaixe = await getDoc(doc(db, "encaixes", id));
-  return encaixe.exists() ? { id: encaixe.id, ...(encaixe.data() as Omit<Encaixe, "id">) } : null;
-}
-
 /** Excluir da lista "Para agendar", ou desfazer um "Não" (a sugestão pode voltar). */
 export const excluirEncaixe = (id: string) => deleteDoc(doc(db, "encaixes", id));
 
-/** A recepção agendou uma das sessões pelo Novo Agendamento; com todas, o encaixe vira "Agendado". */
-export async function marcarSessaoAgendada(encaixe: Pick<Encaixe, "id" | "opcao" | "agendadas">, indice: number) {
-  const agendadas: Record<string, boolean> = { ...encaixe.agendadas, [indice]: true };
-  const todas = encaixe.opcao.sessoes.every((_, i) => agendadas[i]);
-  await updateDoc(doc(db, "encaixes", encaixe.id), {
-    [`agendadas.${indice}`]: true,
-    ...(todas ? { status: "agendado", agendadoEm: serverTimestamp() } : {}),
-  });
-  return todas;
+/** A recepção agendou tudo pelo Novo Agendamento: o encaixe vira "Agendado" e sai da conta laranja. */
+export async function marcarComoAgendado(id: string) {
+  await updateDoc(doc(db, "encaixes", id), { status: "agendado", agendadoEm: serverTimestamp() });
 }
 
 const ler = (snapshot: Awaited<ReturnType<typeof getDocs>>) =>

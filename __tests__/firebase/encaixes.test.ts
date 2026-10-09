@@ -1,14 +1,14 @@
 // __tests__/firebase/encaixes.test.ts
-// Os encaixes do assistente: a coordenação manda para a recepção ou diz "Não" com o motivo; a
-// recepção vê, agenda (sessão por sessão) e pode excluir. Só a gestão lê e escreve; ninguém assina
-// por outra pessoa, e depois de criado só se marca o que foi agendado.
+// Os encaixes do assistente: a coordenação manda para a recepção (a criança pode ainda não ter
+// cadastro) ou diz "Não" com o motivo; a recepção vê, toca em "Já agendei" e pode excluir. Só a gestão
+// lê e escreve; ninguém assina por outra pessoa, e depois de criado só se marca o que foi agendado.
 // Roda contra o emulador: npm run test:firebase
 import { RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { addDoc, collection, doc, getDocs, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebaseConfig';
 import { OpcaoDeEncaixe } from '@/lib/encaixes';
 import {
-  contarParaAgendar, dizerNao, excluirEncaixe, listarParaAgendar, listarRecusados, mandarParaRecepcao, marcarSessaoAgendada,
+  contarParaAgendar, dizerNao, excluirEncaixe, listarParaAgendar, listarRecusados, mandarParaRecepcao, marcarComoAgendado,
 } from '@/services/encaixeService';
 import { criarUsuario, encerrarAmbiente, entrarComo, iniciarAmbiente, limparDados, type UsuarioDeTeste } from './helpers';
 
@@ -60,21 +60,27 @@ it('a coordenação manda para a recepção, que vê o encaixe com a data e o re
   expect(await contarParaAgendar()).toBe(1);
 });
 
-it('a recepção marca as sessões agendadas; com todas, o encaixe vira "Agendado" e sai da conta', async () => {
+it('"Já agendei": o encaixe vira "Agendado" e sai da conta laranja', async () => {
   await entrarComo(coordenacao);
   await mandarParaRecepcao({ paciente: theo, opcao, comecaEm: '2026-10-13', autor: autor(coordenacao) });
   await entrarComo(recepcao);
-  let [encaixe] = await listarParaAgendar();
+  const [encaixe] = await listarParaAgendar();
 
-  expect(await marcarSessaoAgendada(encaixe, 0)).toBe(false);
-  [encaixe] = await listarParaAgendar();
-  expect(encaixe).toEqual(expect.objectContaining({ status: 'para_agendar', agendadas: { 0: true } }));
+  await marcarComoAgendado(encaixe.id);
 
-  expect(await marcarSessaoAgendada(encaixe, 1)).toBe(true);
-  [encaixe] = await listarParaAgendar();
-  expect(encaixe.status).toBe('agendado');
-  expect(encaixe.agendadoEm).toBeInstanceOf(Timestamp);
+  const [agendado] = await listarParaAgendar();
+  expect(agendado.status).toBe('agendado');
+  expect(agendado.agendadoEm).toBeInstanceOf(Timestamp);
   expect(await contarParaAgendar()).toBe(0);
+});
+
+it('a criança pode ainda não ter cadastro: vão o nome e o convênio', async () => {
+  const nova = { id: 'sem-cadastro:laura-pires', nome: 'Laura Pires', semCadastro: true, convenio: 'Unimed' };
+  await entrarComo(coordenacao);
+  await mandarParaRecepcao({ paciente: nova, opcao, comecaEm: '2026-10-13', autor: autor(coordenacao) });
+
+  await entrarComo(recepcao);
+  expect((await listarParaAgendar())[0].paciente).toEqual(nova);
 });
 
 it('agendado há mais de 7 dias sai da lista', async () => {

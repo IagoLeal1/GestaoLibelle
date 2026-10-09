@@ -35,7 +35,6 @@ export const dataPorExtenso = (iso: string) => format(parseISO(iso), "EEEE, dd/M
 
 export const primeiroNome = (nome: string) => nome.split(" ")[0];
 
-export const linkParaAgendar = (encaixeId: string, sessao: number) => `/agendamentos/novo?encaixe=${encaixeId}&sessao=${sessao}`;
 export const linkDaAgenda = (data: string) => `/agendamentos?data=${data}`;
 
 /** As sessões da opção agrupadas por dia, na ordem da semana. */

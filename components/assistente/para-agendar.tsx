@@ -1,13 +1,14 @@
 "use client"
 
-// "Para agendar": os encaixes que a coordenação escolheu. A recepção confirma a troca com a família,
-// muda a sessão da outra criança na agenda e agenda cada sessão pelo Novo Agendamento, que já abre
-// preenchido (com a recorrência semanal) e marca a sessão aqui. Excluir avisa que a sugestão pode voltar.
+// "Para agendar": os encaixes que a coordenação escolheu, guardados como um recado para a recepção.
+// Ela cadastra a criança (se ainda não tiver cadastro), confirma a troca com a família, muda a sessão
+// da outra criança na agenda e agenda pelo Novo Agendamento, como sempre; no fim, toca em "Já agendei".
+// Excluir avisa que a sugestão pode voltar.
 // "Recusados": os "Não" com o motivo, que dá para desfazer.
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { format, isToday, isYesterday } from "date-fns";
-import { Check, Trash2 } from "lucide-react";
+import { Check, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -16,8 +17,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Timestamp } from "firebase/firestore";
 import { MotivoDoNao } from "@/lib/encaixes";
-import { Encaixe, excluirEncaixe, listarParaAgendar, listarRecusados } from "@/services/encaixeService";
-import { dataPorExtenso, linkDaAgenda, linkParaAgendar, nomeDoDia, primeiraData, primeiroNome, Selo } from "./comum";
+import { Encaixe, excluirEncaixe, listarParaAgendar, listarRecusados, marcarComoAgendado } from "@/services/encaixeService";
+import { dataPorExtenso, linkDaAgenda, nomeDoDia, primeiraData, primeiroNome, Selo } from "./comum";
 import { resumoDaOpcao } from "./janelas";
 
 const quando = (momento?: Timestamp) => {
@@ -32,24 +33,36 @@ function Carregando() {
   return <p className="rounded-2xl border bg-card p-5 text-[15px] text-muted-foreground">Carregando...</p>;
 }
 
-function ItemParaAgendar({ encaixe, onExcluir }: { encaixe: Encaixe; onExcluir: () => void }) {
+function ItemParaAgendar({ encaixe, onJaAgendei, onExcluir }: { encaixe: Encaixe; onJaAgendei: () => Promise<void>; onExcluir: () => void }) {
   const { opcao, paciente } = encaixe;
   const agendado = encaixe.status === "agendado";
   const comecaEm = encaixe.comecaEm ?? "";
   const { troca } = opcao;
   const nome = primeiroNome(paciente.nome);
+  const [marcando, setMarcando] = useState(false);
+
+  const jaAgendei = async () => {
+    setMarcando(true);
+    try {
+      await onJaAgendei();
+    } finally {
+      setMarcando(false);
+    }
+  };
 
   return (
     <article aria-label={paciente.nome} className={`flex flex-col gap-3.5 rounded-2xl border p-4 sm:p-[18px] ${agendado ? "border-[#cfe6d8] bg-[#f7fbf8]" : "bg-card"}`}>
       <div className="flex flex-wrap items-center gap-2.5">
         <h2 className="text-lg font-bold">{paciente.nome}</h2>
         {agendado ? <Selo tipo="agendado"><Check aria-hidden className="h-3.5 w-3.5" strokeWidth={3} />Agendado</Selo> : <Selo tipo="falta">Falta agendar</Selo>}
+        {paciente.semCadastro && <Selo tipo="troca">Ainda sem cadastro</Selo>}
         {troca ? <Selo tipo="troca">Com 1 troca</Selo> : <Selo tipo="livre">Tudo livre</Selo>}
         <span className="text-[13px] text-muted-foreground sm:ml-auto">Escolhido por {encaixe.criadoPor.nome || "a coordenação"} · {quando(encaixe.criadoEm)}</span>
       </div>
 
       <div className="flex flex-wrap gap-2.5 text-sm">
         {comecaEm && <span className="rounded-lg bg-[#e3f4f4] px-2.5 py-1.5 text-[#0d5c5f]"><strong>Começa:</strong> {dataPorExtenso(comecaEm)}</span>}
+        {paciente.semCadastro && paciente.convenio && <span className="rounded-lg bg-[#f3f6f8] px-2.5 py-1.5"><strong>Convênio:</strong> {paciente.convenio}</span>}
         {encaixe.recado && (
           <span className="min-w-0 flex-[1_1_260px] rounded-lg bg-[#f3f6f8] px-2.5 py-1.5 [overflow-wrap:anywhere]">
             <strong>Recado da coordenação:</strong> {encaixe.recado}
@@ -57,12 +70,31 @@ function ItemParaAgendar({ encaixe, onExcluir }: { encaixe: Encaixe; onExcluir: 
         )}
       </div>
 
+      <div className="flex flex-col gap-2 rounded-xl bg-[#f3f6f8] p-3.5">
+        <strong className="text-sm">Os horários</strong>
+        <ul className="flex flex-col gap-1.5">
+          {opcao.sessoes.map((s, i) => (
+            <li key={i} className="rounded-lg bg-white px-3 py-2 text-sm">
+              <strong>{s.terapia}</strong> com {s.profissional.nome} · toda {nomeDoDia(s.dia)} às {s.horario}
+              {comecaEm ? ` · a partir de ${format(new Date(`${primeiraData(comecaEm, s.dia)}T12:00:00`), "dd/MM")}` : ""}
+              {s.sala ? ` · ${s.sala.nome}` : ""}
+            </li>
+          ))}
+        </ul>
+      </div>
+
       {agendado ? (
-        <p className="text-sm text-[#1f6b45]">Todas as sessões foram agendadas{encaixe.agendadoEm ? ` em ${format(encaixe.agendadoEm.toDate(), "dd/MM")}` : ""}. Este item sai da lista sozinho em 7 dias.</p>
+        <p className="text-sm text-[#1f6b45]">A recepção marcou como agendado{encaixe.agendadoEm ? ` em ${format(encaixe.agendadoEm.toDate(), "dd/MM")}` : ""}. Este item sai da lista sozinho em 7 dias.</p>
       ) : (
-        <div className="flex flex-col gap-2.5 rounded-xl bg-[#f3f6f8] p-3.5">
+        <div className="flex flex-col gap-2.5 rounded-xl border border-dashed p-3.5">
           <strong className="text-sm">O que falta fazer</strong>
-          <ol className="flex list-decimal flex-col gap-2.5 pl-5 text-[15px] leading-snug">
+          <ol className="flex list-decimal flex-col gap-2 pl-5 text-[15px] leading-snug">
+            {paciente.semCadastro && (
+              <li>
+                Cadastrar <strong>{paciente.nome}</strong> em Pacientes.{" "}
+                <Link className="font-semibold text-[#127a7e] underline-offset-2 hover:underline" href="/pacientes/novo">Cadastrar agora</Link>
+              </li>
+            )}
             {troca && (
               <>
                 <li>Confirmar com a família de <strong>{troca.paciente.nome}</strong> a mudança de {troca.de} para {troca.para} na {nomeDoDia(troca.dia)}.</li>
@@ -73,38 +105,18 @@ function ItemParaAgendar({ encaixe, onExcluir }: { encaixe: Encaixe; onExcluir: 
                 </li>
               </>
             )}
-            <li>
-              Agendar {nome}: cada botão abre o Novo Agendamento já preenchido, com a recorrência semanal. É só conferir e salvar.
-              <ul className="mt-2 flex flex-col gap-2">
-                {opcao.sessoes.map((s, i) => {
-                  const feita = !!encaixe.agendadas?.[i];
-                  return (
-                    <li key={i} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2">
-                      <span className="text-sm">
-                        <strong>{s.terapia}</strong> com {s.profissional.nome} · toda {nomeDoDia(s.dia)} às {s.horario}
-                        {comecaEm ? ` · a partir de ${format(new Date(`${primeiraData(comecaEm, s.dia)}T12:00:00`), "dd/MM")}` : ""}
-                      </span>
-                      {feita ? (
-                        <span className="flex items-center gap-1 text-sm font-semibold text-[#1f6b45]"><Check aria-hidden className="h-4 w-4" /> Agendada</span>
-                      ) : (
-                        <Link
-                          href={linkParaAgendar(encaixe.id, i)}
-                          className="flex h-10 items-center rounded-lg bg-[#127a7e] px-3.5 text-sm font-bold text-white hover:bg-[#0d5c5f]"
-                        >
-                          Agendar
-                        </Link>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </li>
+            <li>Agendar {nome} pelo <strong>Novo Agendamento</strong>, como sempre, com os horários acima.</li>
+            <li>Tudo agendado? Toque em <strong>Já agendei</strong>.</li>
           </ol>
         </div>
       )}
 
       {!agendado && (
-        <div className="flex justify-end">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <Button className="h-11 gap-2 bg-[#127a7e] px-4 text-[15px] font-bold hover:bg-[#0d5c5f]" onClick={jaAgendei} disabled={marcando}>
+            {marcando ? <Loader2 aria-hidden className="h-4 w-4 animate-spin" /> : <Check aria-hidden className="h-4 w-4" strokeWidth={2.5} />}
+            Já agendei
+          </Button>
           <Button variant="ghost" className="h-11 gap-1.5 text-[15px] font-semibold text-[#b3261e] hover:text-[#b3261e]" onClick={onExcluir}>
             <Trash2 aria-hidden className="h-4 w-4" /> Excluir
           </Button>
@@ -126,6 +138,17 @@ export function ParaAgendar({ onMudou }: { onMudou: () => void }) {
   }, []);
   useEffect(carregar, [carregar]);
 
+  const jaAgendei = async (encaixe: Encaixe) => {
+    try {
+      await marcarComoAgendado(encaixe.id);
+      setEncaixes((atual) => atual?.map((e) => (e.id === encaixe.id ? { ...e, status: "agendado", agendadoEm: Timestamp.now() } : e)) ?? null);
+      onMudou();
+      toast.success(`${primeiroNome(encaixe.paciente.nome)}: marcado como agendado.`);
+    } catch {
+      toast.error("Não foi possível marcar agora. Tente de novo.");
+    }
+  };
+
   const excluir = async () => {
     if (!excluindo) return;
     try {
@@ -145,10 +168,12 @@ export function ParaAgendar({ onMudou }: { onMudou: () => void }) {
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4">
       <p className="rounded-xl border bg-card px-3.5 py-3 text-[15px] leading-relaxed text-[#37474f]">
-        Aqui chegam os encaixes que a <strong>coordenação</strong> escolheu. O assistente <strong>não agenda sozinho</strong>: a recepção confirma com as famílias e agenda pelo Novo Agendamento, como sempre.
+        Aqui chegam os encaixes que a <strong>coordenação</strong> escolheu, como um recado guardado. O assistente <strong>não agenda sozinho</strong>: a recepção agenda pelo Novo Agendamento, como sempre, e no fim toca em <strong>Já agendei</strong>.
       </p>
       {encaixes.length === 0 && <p className="rounded-2xl border border-dashed bg-card p-5 text-[15px] text-muted-foreground">Nada para agendar agora.</p>}
-      {encaixes.map((encaixe) => <ItemParaAgendar key={encaixe.id} encaixe={encaixe} onExcluir={() => setExcluindo(encaixe)} />)}
+      {encaixes.map((encaixe) => (
+        <ItemParaAgendar key={encaixe.id} encaixe={encaixe} onJaAgendei={() => jaAgendei(encaixe)} onExcluir={() => setExcluindo(encaixe)} />
+      ))}
 
       <AlertDialog open={!!excluindo} onOpenChange={(aberta) => !aberta && setExcluindo(null)}>
         <AlertDialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-md">

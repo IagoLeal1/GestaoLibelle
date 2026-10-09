@@ -18,7 +18,7 @@ import { ORDEM_DOS_DIAS, SEMANAS_ANALISADAS } from "@/lib/horariosRecorrentes";
 import { getPatients, Patient } from "@/services/patientService";
 import { getProfessionals, Professional } from "@/services/professionalService";
 import { getSpecialties, Specialty } from "@/services/specialtyService";
-import { dizerNao, mandarParaRecepcao } from "@/services/encaixeService";
+import { CriancaDoEncaixe, dizerNao, mandarParaRecepcao } from "@/services/encaixeService";
 import { DIA_CURTO, primeiroNome } from "./comum";
 import { DizerNao, MandarParaRecepcao } from "./janelas";
 import { OpcaoDeEncaixeCartao } from "./opcao-de-encaixe";
@@ -37,6 +37,19 @@ export function terapiasDaCrianca(especialidades: Specialty[], convenio?: string
 }
 
 interface Necessidade { terapia: string; frequencia: number; }
+
+/** Os convênios para a criança sem cadastro (o valor é como aparece no nome das terapias). */
+const CONVENIOS_DA_CRIANCA_NOVA = [
+  { valor: "Particular", rotulo: "Particular" },
+  { valor: "Unimed", rotulo: "Unimed" },
+  { valor: "Bradesco", rotulo: "Bradesco" },
+  { valor: "Amil", rotulo: "Amil" },
+  { valor: "SulAmerica", rotulo: "SulAmérica" },
+];
+
+/** O id da criança sem cadastro: o nome sem acento, para o "Não" dela valer nas próximas buscas. */
+export const idSemCadastro = (nome: string) =>
+  `sem-cadastro:${nome.normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase().replace(/\s+/g, "-")}`;
 
 function Cartao({ titulo, detalhe, children }: { titulo: string; detalhe?: string; children: React.ReactNode }) {
   return (
@@ -57,6 +70,10 @@ export function ProcurarEncaixe({ onMandou }: { onMandou: () => void }) {
   const [profissionais, setProfissionais] = useState<Professional[]>([]);
 
   const [pacienteId, setPacienteId] = useState("");
+  // A criança pode ainda não ter cadastro: vai o nome e o convênio, e a recepção cadastra antes de agendar
+  const [semCadastro, setSemCadastro] = useState(false);
+  const [nomeNovo, setNomeNovo] = useState("");
+  const [convenioNovo, setConvenioNovo] = useState("Particular");
   const [necessidades, setNecessidades] = useState<Necessidade[]>([{ terapia: "", frequencia: 1 }]);
   const [dias, setDias] = useState<string[]>([]);
   const [desde, setDesde] = useState("");
@@ -80,21 +97,38 @@ export function ProcurarEncaixe({ onMandou }: { onMandou: () => void }) {
   }, []);
 
   const crianca = criancas.find((c) => c.id === pacienteId);
-  const terapias = useMemo(() => (crianca ? terapiasDaCrianca(especialidades, crianca.convenio) : []), [crianca, especialidades]);
+  const nomeLimpo = nomeNovo.trim().replace(/\s+/g, " ");
+  const paciente: CriancaDoEncaixe | null = semCadastro
+    ? nomeLimpo ? { id: idSemCadastro(nomeLimpo), nome: nomeLimpo, semCadastro: true, convenio: convenioNovo } : null
+    : crianca ? { id: crianca.id, nome: crianca.fullName } : null;
+  const convenio = semCadastro ? convenioNovo : crianca?.convenio;
+  const temCrianca = !!paciente;
+  const terapias = useMemo(
+    () => (temCrianca ? terapiasDaCrianca(especialidades, convenio) : []),
+    [temCrianca, convenio, especialidades]
+  );
   const autor = { uid: firestoreUser?.uid ?? "", nome: firestoreUser?.displayName ?? "" };
-  const nome = crianca?.fullName ?? "";
+  const nome = paciente?.nome ?? "";
 
-  const escolherCrianca = (id: string) => {
-    setPacienteId(id);
+  const recomecar = () => {
     setNecessidades([{ terapia: "", frequencia: 1 }]);
     setOpcoes(null);
+  };
+  const escolherCrianca = (id: string) => {
+    setPacienteId(id);
+    recomecar();
+  };
+  const escolherModo = (novo: boolean) => {
+    if (novo === semCadastro) return;
+    setSemCadastro(novo);
+    recomecar();
   };
   const mudarNecessidade = (i: number, mudanca: Partial<Necessidade>) =>
     setNecessidades((atual) => atual.map((n, j) => (j === i ? { ...n, ...mudanca } : n)));
   const alternarDia = (dia: string) => setDias((atual) => (atual.includes(dia) ? atual.filter((d) => d !== dia) : [...atual, dia]));
 
   const buscar = async () => {
-    if (!pacienteId || necessidades.some((n) => !n.terapia)) {
+    if (!paciente || necessidades.some((n) => !n.terapia)) {
       toast.error("Escolha a criança e as terapias.");
       return;
     }
@@ -108,7 +142,7 @@ export function ProcurarEncaixe({ onMandou }: { onMandou: () => void }) {
       const resposta = await fetch("/api/schedule-assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${login ?? ""}` },
-        body: JSON.stringify({ pacienteId, necessidades, familia: { dias, desde, ate }, emendar, preferidos }),
+        body: JSON.stringify({ pacienteId: paciente.id, necessidades, familia: { dias, desde, ate }, emendar, preferidos }),
       });
       const dados = await resposta.json();
       if (!resposta.ok) throw new Error(dados.error || "Não foi possível buscar os horários.");
@@ -121,9 +155,9 @@ export function ProcurarEncaixe({ onMandou }: { onMandou: () => void }) {
   };
 
   const mandar = async ({ comecaEm, recado }: { comecaEm: string; recado: string }) => {
-    if (!paraMandar || !crianca) return;
+    if (!paraMandar || !paciente) return;
     try {
-      await mandarParaRecepcao({ paciente: { id: crianca.id, nome: crianca.fullName }, opcao: paraMandar, comecaEm, recado, autor });
+      await mandarParaRecepcao({ paciente, opcao: paraMandar, comecaEm, recado, autor });
       setMandadas((atual) => [...atual, paraMandar.chave]);
       setParaMandar(null);
       toast.success("Mandado para a recepção. Ela vê em Para agendar.");
@@ -134,11 +168,11 @@ export function ProcurarEncaixe({ onMandou }: { onMandou: () => void }) {
   };
 
   const recusar = async ({ motivo, texto }: { motivo: Parameters<typeof dizerNao>[0]["motivo"]; texto: string }) => {
-    if (!paraRecusar || !crianca) return;
+    if (!paraRecusar || !paciente) return;
     try {
-      await dizerNao({ paciente: { id: crianca.id, nome: crianca.fullName }, opcao: paraRecusar, motivo, texto, autor });
-      const bloqueios = bloqueiosDoNao(motivo, paraRecusar, crianca.id);
-      setOpcoes((atual) => (atual ? filtrarPorBloqueios(atual, bloqueios, crianca.id) : atual));
+      await dizerNao({ paciente, opcao: paraRecusar, motivo, texto, autor });
+      const bloqueios = bloqueiosDoNao(motivo, paraRecusar, paciente.id);
+      setOpcoes((atual) => (atual ? filtrarPorBloqueios(atual, bloqueios, paciente.id) : atual));
       setParaRecusar(null);
       toast.success("Guardado em Recusados.");
     } catch {
@@ -152,11 +186,52 @@ export function ProcurarEncaixe({ onMandou }: { onMandou: () => void }) {
     <div className="flex flex-wrap items-start gap-5">
       <section aria-label="O pedido" className="flex min-w-0 flex-[1_1_340px] flex-col gap-3.5">
         <Cartao titulo="1. Criança">
-          <Label htmlFor="crianca" className="text-[13px] font-normal text-muted-foreground">Quem precisa de horário</Label>
-          <Select value={pacienteId} onValueChange={escolherCrianca}>
-            <SelectTrigger id="crianca" className="h-11"><SelectValue placeholder="Escolha a criança" /></SelectTrigger>
-            <SelectContent>{criancas.map((c) => <SelectItem key={c.id} value={c.id}>{c.fullName}</SelectItem>)}</SelectContent>
-          </Select>
+          <div role="group" aria-label="A criança já tem cadastro?" className="grid grid-cols-2 gap-1 rounded-lg bg-[#e2e9ed] p-1">
+            {[{ novo: false, rotulo: "Já tem cadastro" }, { novo: true, rotulo: "Ainda não tem cadastro" }].map(({ novo, rotulo }) => (
+              <button
+                key={rotulo}
+                type="button"
+                aria-pressed={semCadastro === novo}
+                onClick={() => escolherModo(novo)}
+                className={cn(
+                  "min-h-10 rounded-md px-2 text-sm font-semibold text-[#52646d]",
+                  semCadastro === novo && "bg-white text-[#0d5c5f] shadow-sm"
+                )}
+              >
+                {rotulo}
+              </button>
+            ))}
+          </div>
+          {semCadastro ? (
+            <div className="grid gap-2.5 sm:grid-cols-[minmax(0,1fr)_150px]">
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="nome-da-crianca" className="text-[13px] font-normal text-muted-foreground">Nome da criança</Label>
+                <Input
+                  id="nome-da-crianca"
+                  className="h-11"
+                  maxLength={120}
+                  value={nomeNovo}
+                  onChange={(e) => { setNomeNovo(e.target.value); setOpcoes(null); }}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="convenio-da-crianca" className="text-[13px] font-normal text-muted-foreground">Convênio</Label>
+                <Select value={convenioNovo} onValueChange={(valor) => { setConvenioNovo(valor); recomecar(); }}>
+                  <SelectTrigger id="convenio-da-crianca" className="h-11"><SelectValue /></SelectTrigger>
+                  <SelectContent>{CONVENIOS_DA_CRIANCA_NOVA.map((c) => <SelectItem key={c.valor} value={c.valor}>{c.rotulo}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground sm:col-span-2">A recepção vê que ela ainda não tem cadastro e cadastra antes de agendar.</p>
+            </div>
+          ) : (
+            <>
+              <Label htmlFor="crianca" className="text-[13px] font-normal text-muted-foreground">Quem precisa de horário</Label>
+              <Select value={pacienteId} onValueChange={escolherCrianca}>
+                <SelectTrigger id="crianca" className="h-11"><SelectValue placeholder="Escolha a criança" /></SelectTrigger>
+                <SelectContent>{criancas.map((c) => <SelectItem key={c.id} value={c.id}>{c.fullName}</SelectItem>)}</SelectContent>
+              </Select>
+            </>
+          )}
         </Cartao>
 
         <Cartao titulo="2. Terapias" detalhe="definidas pela coordenação">
@@ -164,9 +239,9 @@ export function ProcurarEncaixe({ onMandou }: { onMandou: () => void }) {
             <div key={i} className="flex items-end gap-2 rounded-xl bg-[#f3f6f8] p-2.5">
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <Label htmlFor={`terapia-${i}`} className="text-[13px] font-normal text-muted-foreground">Terapia</Label>
-                <Select value={n.terapia} onValueChange={(terapia) => mudarNecessidade(i, { terapia })} disabled={!crianca}>
+                <Select value={n.terapia} onValueChange={(terapia) => mudarNecessidade(i, { terapia })} disabled={!paciente}>
                   <SelectTrigger id={`terapia-${i}`} className="h-11 bg-white">
-                    <SelectValue placeholder={crianca ? "Escolha..." : "Escolha a criança antes"} />
+                    <SelectValue placeholder={paciente ? "Escolha..." : "Escolha a criança antes"} />
                   </SelectTrigger>
                   <SelectContent>{terapias.map((t) => <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>)}</SelectContent>
                 </Select>
