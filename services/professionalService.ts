@@ -1,4 +1,5 @@
 import { db } from "@/lib/firebaseConfig";
+import { esquecer, lembrar } from "@/lib/memoria";
 import {
   collection,
   query,
@@ -65,19 +66,18 @@ export interface ProfessionalFormData {
   }
 }
 
+const lerProfissionais = async (status?: 'ativo' | 'inativo' | 'licenca'): Promise<Professional[]> => {
+  const q = status
+    ? query(collection(db, 'professionals'), where('status', '==', status), orderBy('fullName'))
+    : query(collection(db, 'professionals'), orderBy('fullName'));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Professional));
+};
+
+// Lida uma vez e reaproveitada pelas outras telas por 10 minutos (lib/memoria); quem grava, esquece
 export const getProfessionals = async (status?: 'ativo' | 'inativo' | 'licenca'): Promise<Professional[]> => {
   try {
-    let q;
-    if (status) {
-      q = query(collection(db, 'professionals'), where('status', '==', status), orderBy('fullName'));
-    } else {
-      q = query(collection(db, 'professionals'), orderBy('fullName'));
-    }
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) {
-      return [];
-    }
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Professional));
+    return [...(await lembrar(`professionals:${status ?? 'todos'}`, () => lerProfissionais(status)))];
   } catch (error) {
     console.error("Erro ao buscar profissionais:", error);
     return [];
@@ -112,6 +112,7 @@ export const createProfessional = async (data: ProfessionalFormData): Promise<{s
       status: 'ativo',
       dataContratacao: Timestamp.now(),
     });
+    esquecer("professionals:");
     return { success: true };
   } catch (error) {
     console.error("Erro ao criar profissional:", error);
@@ -123,6 +124,7 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
   try {
     const docRef = doc(db, 'professionals', id);
     await updateDoc(docRef, data);
+    esquecer("professionals:");
     return { success: true };
   } catch (error) {
     console.error("Erro ao atualizar profissional:", error);
@@ -134,6 +136,7 @@ export const deleteProfessional = async (id: string) => {
   try {
     const docRef = doc(db, 'professionals', id);
     await deleteDoc(docRef);
+    esquecer("professionals:");
     return { success: true };
   } catch (error) {
     console.error("Erro ao deletar profissional:", error);
@@ -145,6 +148,7 @@ export const updateProfessionalStatus = async (id: string, status: 'ativo' | 'in
   try {
     const docRef = doc(db, 'professionals', id);
     await updateDoc(docRef, { status: status });
+    esquecer("professionals:");
     return { success: true };
   } catch (error) {
     console.error("Erro ao atualizar status do profissional:", error);

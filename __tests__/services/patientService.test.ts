@@ -1,6 +1,6 @@
 // __tests__/services/patientService.test.ts
 
-import { addPatientObservation, deleteLegacyPatientObservation, deletePatientObservation, getPatientById, getPatientObservations, getPatients } from '@/services/patientService';
+import { addPatientObservation, deleteLegacyPatientObservation, deletePatientObservation, getPatientById, getPatientObservations, getPatients, updatePatientStatus } from '@/services/patientService';
 import { db } from '@/lib/firebaseConfig';
 import { collection, getDocs, doc, getDoc, addDoc, deleteDoc, deleteField, updateDoc, query, orderBy, where, Timestamp, limit, serverTimestamp } from 'firebase/firestore';
 
@@ -31,6 +31,30 @@ describe('Patient Service', () => {
 
   // Teste para a função getPatients
   describe('getPatients', () => {
+    it('lê do banco uma vez e as outras telas reaproveitam; depois de salvar, lê de novo', async () => {
+      mockedGetDocs.mockResolvedValue({ docs: [{ id: '1', data: () => ({ fullName: 'Ana', status: 'ativo' }) }] });
+      mockedUpdateDoc.mockResolvedValue(undefined);
+
+      await getPatients('ativo');
+      const segunda = await getPatients('ativo');
+      expect(mockedGetDocs).toHaveBeenCalledTimes(1);
+      expect(segunda).toEqual([{ id: '1', fullName: 'Ana', status: 'ativo' }]);
+
+      await updatePatientStatus('1', 'inativo');
+      await getPatients('ativo');
+      expect(mockedGetDocs).toHaveBeenCalledTimes(2);
+    });
+
+    it('cada tela recebe a própria cópia da lista (ordenar numa não bagunça a outra)', async () => {
+      mockedGetDocs.mockResolvedValue({ docs: [{ id: '2', data: () => ({ fullName: 'Zelia' }) }, { id: '1', data: () => ({ fullName: 'Ana' }) }] });
+
+      const primeira = await getPatients();
+      primeira.reverse();
+      const segunda = await getPatients();
+
+      expect(segunda.map((p) => p.fullName)).toEqual(['Zelia', 'Ana']);
+    });
+
     it('should fetch and return all patients sorted by name', async () => {
       // 1. Arrange: Preparamos os dados falsos que o Firestore "retornaria"
       const mockPatients = [

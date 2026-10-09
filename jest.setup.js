@@ -8,3 +8,6 @@ import 'whatwg-fetch';
 
 // Importa os "matchers" personalizados do jest-dom.
 import '@testing-library/jest-dom';
+// A memória das listas (lib/memoria) começa vazia em cada teste
+import { esquecerTudo } from '@/lib/memoria';
+beforeEach(() => esquecerTudo());

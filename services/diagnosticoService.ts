@@ -2,6 +2,7 @@
 // coordenação e recepção): as regras de patients não mudam. A equipe vem da agenda da criança.
 import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebaseConfig";
+import { esquecer } from "@/lib/memoria";
 import { janelaDaEquipe, limparDiagnosticos, type Diagnostico, type SessaoDaEquipe } from "@/lib/diagnostico";
 import { getAppointmentsForReport } from "@/services/appointmentService";
 
@@ -13,6 +14,7 @@ export async function salvarDiagnostico(patientId: string, lista: Partial<Diagno
     diagnosticoAtualizadoEm: serverTimestamp(),
     diagnosticoAtualizadoPor: autorNome,
   });
+  esquecer("patients:");
   return diagnosticos;
 }
 

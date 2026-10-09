@@ -12,6 +12,7 @@ import {
 } from "@/services/adminService";
 import { getProfessionals, type Professional } from "@/services/professionalService";
 import { ligacaoDoProfissional, type TrocaDeCadastro } from "@/lib/ligarProfissional";
+import { esquecer } from "@/lib/memoria";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -118,6 +119,8 @@ export default function GerenciarUsuariosPage() {
 
   const fetchUsers = async () => {
     setLoading(true);
+    // A ligação automática precisa dos cadastros de agora, não dos guardados na memória (lib/memoria)
+    esquecer("professionals:");
     const [data, cadastros] = await Promise.all([getAllApprovedUsers(), getProfessionals()]);
     setUsers(data);
     setLoading(false);
@@ -168,6 +171,7 @@ export default function GerenciarUsuariosPage() {
         )
       );
       if (newRole === "profissional" && conta) {
+        esquecer("professionals:");
         const { ligadas, semCadastro: faltando } = await ligarProfissionais([conta], await getProfessionals());
         toast(
           faltando.length > 0

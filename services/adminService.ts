@@ -14,6 +14,7 @@ import {
   deleteField,
 } from "firebase/firestore";
 import { db } from "@/lib/firebaseConfig";
+import { esquecer } from "@/lib/memoria";
 
 // INTERFACE (Correta, sem alterações)
 export interface UserForApproval {
@@ -209,6 +210,7 @@ export const approveUser = async (userId: string) => {
     // ETAPA 3: Commit
     // Envia todas as escritas de uma vez
     await batch.commit();
+    esquecer("professionals:");
     return { success: true };
 
   } catch (error) {
@@ -306,6 +308,7 @@ export const ligarContaAoProfissional = async (
     if (noCadastro) batch.update(doc(db, "professionals", professionalId), { userId, updatedAt: Timestamp.now() });
     if (noPerfil) batch.update(doc(db, "users", userId), { "profile.professionalId": professionalId });
     await batch.commit();
+    esquecer("professionals:");
     return { success: true };
   } catch (error) {
     console.error("Erro ao ligar a conta ao cadastro de profissional:", error);
@@ -330,6 +333,7 @@ export const trocarCadastroDoProfissional = async (
     for (const id of soltarCadastros) batch.update(doc(db, "professionals", id), { userId: deleteField(), updatedAt: agora });
     for (const uid of soltarContas) batch.update(doc(db, "users", uid), { "profile.professionalId": deleteField() });
     await batch.commit();
+    esquecer("professionals:");
     return { success: true };
   } catch (error) {
     console.error("Erro ao trocar o cadastro de profissional da conta:", error);

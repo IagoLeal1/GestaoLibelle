@@ -1,5 +1,6 @@
 // __tests__/firebase/helpers.ts
 // Apoio para os testes que rodam contra o emulador do Firebase (npm run test:firebase).
+import { esquecerTudo } from '@/lib/memoria';
 import { readFileSync } from 'fs';
 import { initializeTestEnvironment, RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { deleteApp } from 'firebase/app';
@@ -32,6 +33,7 @@ export async function iniciarAmbiente() {
 
 /** Apaga todos os documentos e contas do emulador. */
 export async function limparDados() {
+  esquecerTudo(); // as listas guardadas na memória (lib/memoria) também começam do zero
   await signOut(auth);
   await testEnv.clearFirestore();
   await fetch(

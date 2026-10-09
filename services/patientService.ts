@@ -1,4 +1,5 @@
 import { db } from "@/lib/firebaseConfig";
+import { esquecer, lembrar } from "@/lib/memoria";
 import type { Diagnostico } from "@/lib/diagnostico";
 import { 
   collection, 
@@ -132,16 +133,18 @@ const dateStringToTimestamp = (date: string) => {
 
 // --- Funções do Serviço ---
 
+const lerPacientes = async (status?: 'ativo' | 'inativo' | 'suspenso'): Promise<Patient[]> => {
+  const q = status
+    ? query(collection(db, 'patients'), where('status', '==', status), orderBy('fullName'))
+    : query(collection(db, 'patients'), orderBy('fullName'));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Patient));
+};
+
+// Lida uma vez e reaproveitada pelas outras telas por 10 minutos (lib/memoria); quem grava, esquece
 export const getPatients = async (status?: 'ativo' | 'inativo' | 'suspenso'): Promise<Patient[]> => {
   try {
-    let q;
-    if (status) {
-      q = query(collection(db, 'patients'), where('status', '==', status), orderBy('fullName'));
-    } else {
-      q = query(collection(db, 'patients'), orderBy('fullName'));
-    }
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Patient));
+    return [...(await lembrar(`patients:${status ?? 'todos'}`, () => lerPacientes(status)))];
   } catch (error) {
     console.error("Erro ao buscar pacientes:", error);
     return [];
@@ -173,6 +176,7 @@ export const createPatient = async (patientData: PatientFormData) => {
       dataCadastro: Timestamp.now(),
       status: 'ativo',
     });
+    esquecer("patients:");
     return { success: true };
   } catch (error) {
     console.error("Erro ao criar paciente:", error);
@@ -202,6 +206,7 @@ export const updatePatient = async (id: string, patientData: Partial<PatientForm
     }
 
     await updateDoc(patientDocRef, dataToUpdate);
+    esquecer("patients:");
     return { success: true };
   } catch (error) {
     console.error("Erro ao atualizar paciente:", error);
@@ -213,6 +218,7 @@ export const updatePatientStatus = async (id: string, newStatus: 'ativo' | 'inat
   try {
     const docRef = doc(db, 'patients', id);
     await updateDoc(docRef, { status: newStatus });
+    esquecer("patients:");
     return { success: true };
   } catch (error) {
     console.error("Erro ao atualizar status do paciente:", error);

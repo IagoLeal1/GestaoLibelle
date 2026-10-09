@@ -1,4 +1,5 @@
 import { db } from "@/lib/firebaseConfig";
+import { esquecer, lembrar } from "@/lib/memoria";
 import { 
   collection, 
   getDocs, 
@@ -45,11 +46,16 @@ export interface RoomFormData {
 /**
  * Busca todas as salas cadastradas, ordenadas por andar e número.
  */
+const lerSalas = async (): Promise<Room[]> => {
+  const q = query(collection(db, 'rooms'), orderBy('floor'), orderBy('number'));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+};
+
+// Lida uma vez e reaproveitada pelas outras telas por 10 minutos (lib/memoria); quem grava, esquece
 export const getRooms = async (): Promise<Room[]> => {
   try {
-    const q = query(collection(db, 'rooms'), orderBy('floor'), orderBy('number'));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+    return [...(await lembrar('rooms:todas', lerSalas))];
   } catch (error) {
     console.error("Erro ao buscar salas:", error);
     return [];
@@ -75,6 +81,7 @@ export const createRoom = async (data: RoomFormData) => {
       status: data.status,
       createdAt: serverTimestamp()
     });
+    esquecer("rooms:");
     return { success: true };
   } catch (error) {
     console.error("Erro ao criar sala:", error);
@@ -100,6 +107,7 @@ export const updateRoom = async (id: string, data: Partial<RoomFormData>) => {
       if (data.capacity) dataToUpdate.capacity = Number(data.capacity);
 
       await updateDoc(docRef, dataToUpdate);
+      esquecer("rooms:");
       return { success: true };
     } catch (error) {
       console.error("Erro ao atualizar sala:", error);
@@ -114,6 +122,7 @@ export const deleteRoom = async (id: string) => {
   try {
     const docRef = doc(db, 'rooms', id);
     await deleteDoc(docRef);
+    esquecer("rooms:");
     return { success: true };
   } catch (error) {
     console.error("Erro ao deletar sala:", error);
