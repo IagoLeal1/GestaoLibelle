@@ -392,6 +392,19 @@ service cloud.firestore {
 
     // Avisos (lib/avisos.ts): a gestão vê todos; terapeutas, os da equipe e os dos terapeutas
     // ("profissional" são os avisos internos antigos); famílias, os das famílias.
+    // Assistente de agendamento: a coordenação escolhe ou recusa opções de encaixe, a recepção agenda.
+    // Só a gestão. Quem cria assina em seu nome; depois, só se marca o que foi agendado.
+    match /encaixes/{encaixeId} {
+      allow read, delete: if canManage();
+      allow create: if canManage()
+        && request.resource.data.status in ['para_agendar', 'recusado']
+        && request.resource.data.criadoPor.uid == request.auth.uid;
+      allow update: if canManage()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['agendadas', 'status', 'agendadoEm'])
+        && resource.data.status in ['para_agendar', 'agendado']
+        && request.resource.data.status in ['para_agendar', 'agendado'];
+    }
+
     match /communications/{communicationId} {
       function podeLerAviso(aviso) {
         return canManage()

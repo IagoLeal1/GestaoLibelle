@@ -1,7 +1,8 @@
 // __tests__/firebase/assistente.test.ts
-// O assistente de agendamento de ponta a ponta: a rota lê a agenda no banco e devolve os horários
-// livres. As regras do cálculo estão em __tests__/lib/horariosRecorrentes.test.ts; aqui, que a rota
-// lê os atendimentos certos (datas, profissional, criança, cancelados) e só responde à gestão.
+// O assistente de encaixe de ponta a ponta: a rota lê a agenda no banco e devolve as opções de
+// horário. As regras do cálculo estão em __tests__/lib/encaixes.test.ts; aqui, que a rota lê os
+// atendimentos certos (datas, profissional, criança, cancelados), respeita o que a coordenação
+// recusou e só responde à gestão.
 // Roda contra o emulador: npm run test:firebase
 import admin from 'firebase-admin';
 import { NextRequest } from 'next/server';
@@ -66,7 +67,12 @@ const pedir = (login: string | null) =>
   POST(new NextRequest('http://localhost/api/schedule-assistant', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(login ? { Authorization: login } : {}) },
-    body: JSON.stringify({ patientId: 'paciente-lucas', patientNeeds: [{ terapia: 'Fonoaudiologia', frequencia: 1 }] }),
+    body: JSON.stringify({
+      pacienteId: 'paciente-lucas',
+      necessidades: [{ terapia: 'Fonoaudiologia', frequencia: 1 }],
+      familia: { dias: ['quinta'] },
+      emendar: true,
+    }),
   }));
 
 describe('assistente de agendamento', () => {
@@ -76,10 +82,24 @@ describe('assistente de agendamento', () => {
     const resposta = await pedir(await loginDe(recepcao));
 
     expect(resposta.status).toBe(200);
-    const { sugestoes } = await resposta.json();
-    expect(sugestoes[0].sugestao.horarios).toEqual([
-      expect.objectContaining({ diaSemana: 'Quinta-feira', horario: '08:10', semanasLivres: 10 }),
+    const { opcoes } = await resposta.json();
+    expect(opcoes[0].sessoes).toEqual([
+      expect.objectContaining({ dia: 'quinta', horario: '08:10', semanasLivres: 10, comTroca: false }),
     ]);
+  });
+
+  it('não oferece o que a coordenação recusou', async () => {
+    const recepcao = await criarUsuario('Rafa Recepção', { role: 'funcionario' });
+    await testEnv.withSecurityRulesDisabled(async (contexto) => {
+      await setDoc(doc(contexto.firestore(), 'encaixes', 'recusa-1'), {
+        status: 'recusado',
+        bloqueios: [{ tipo: 'horario', pacienteId: 'paciente-lucas', dia: 'quinta', horario: '08:10' }],
+      });
+    });
+
+    const { opcoes } = await (await pedir(await loginDe(recepcao))).json();
+
+    expect(opcoes).toEqual([]);
   });
 
   it('só responde à gestão', async () => {

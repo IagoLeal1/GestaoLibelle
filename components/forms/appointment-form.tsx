@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react";
+import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,8 +18,13 @@ import { getPatients, Patient } from "@/services/patientService";
 import { getProfessionals, Professional } from "@/services/professionalService";
 import { getSpecialties, Specialty } from "@/services/specialtyService";
 import { getRooms, Room } from "@/services/roomService";
+import { Encaixe, lerEncaixe, marcarSessaoAgendada } from "@/services/encaixeService";
+import { primeiraData, nomeDoDia, dataPorExtenso } from "@/components/assistente/comum";
 
-export function AppointmentForm() {
+/** Vindo do assistente de agendamento (Para agendar): o encaixe e qual das sessões dele agendar. */
+export interface DoEncaixe { id: string; sessao: number; }
+
+export function AppointmentForm({ doEncaixe }: { doEncaixe?: DoEncaixe } = {}) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +38,7 @@ export function AppointmentForm() {
   const [availableConvenios, setAvailableConvenios] = useState<string[]>([]);
 
   const [isRecurring, setIsRecurring] = useState(false);
+  const [encaixe, setEncaixe] = useState<Encaixe | null>(null);
   const [formData, setFormData] = useState<Partial<AppointmentFormData & AppointmentBlockFormData>>({
     sessions: 4,
     frequency: 'weekly', // <-- Valor padrão para frequência
@@ -76,6 +83,39 @@ export function AppointmentForm() {
     checkRoomAvailability();
   }, [formData.data, formData.horaInicio, formData.horaFim]);
 
+  // Do assistente: preenche a criança, a terapeuta, a terapia, o primeiro dia, o horário, a sala e a
+  // recorrência semanal. A recepção confere e salva; ao salvar, a sessão fica marcada como agendada.
+  useEffect(() => {
+    if (!doEncaixe || patients.length === 0 || specialties.length === 0) return;
+    let cancelado = false;
+    lerEncaixe(doEncaixe.id).then((lido) => {
+      const sessao = lido?.opcao.sessoes[doEncaixe.sessao];
+      const paciente = patients.find(p => p.id === lido?.paciente.id);
+      if (cancelado || !lido || !sessao || !paciente) return;
+      setEncaixe(lido);
+      const convenios = conveniosDoPaciente(paciente);
+      const convenio = convenios.find(c => c.toLowerCase() !== 'particular' && sessao.terapia.toLowerCase().includes(c.toLowerCase())) ?? convenios[0];
+      setAvailableConvenios(convenios);
+      filterSpecialtiesByConvenio(convenio);
+      setIsRecurring(true);
+      setFormData(prev => ({
+        ...prev,
+        patientId: paciente.id,
+        convenio,
+        professionalId: sessao.profissional.id,
+        tipo: sessao.terapia,
+        valorConsulta: specialties.find(s => s.name === sessao.terapia)?.value || 0,
+        data: primeiraData(lido.comecaEm || format(new Date(), 'yyyy-MM-dd'), sessao.dia),
+        horaInicio: sessao.horario,
+        horaFim: sessao.fim,
+        sala: sessao.sala?.id,
+        frequency: 'weekly',
+      }));
+    });
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doEncaixe?.id, doEncaixe?.sessao, patients, specialties]);
+
   const handleInputChange = (field: keyof typeof formData, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
@@ -108,21 +148,23 @@ export function AppointmentForm() {
     });
   };
 
-  const handlePatientChange = (patientId: string) => {
-    const selectedPatient = patients.find(p => p.id === patientId);
-    if (!selectedPatient) return;
-
-    const rawConvenio = selectedPatient.convenio || '';
-    const conveniosList = rawConvenio
+  const conveniosDoPaciente = (paciente: Patient) => {
+    const conveniosList = (paciente.convenio || '')
         .split(',')
         .map(c => c.trim())
         .filter(c => c.length > 0);
-    
     // Garantir "Particular" como padrão/fallback se não existir
     if (!conveniosList.some(c => c.toLowerCase() === 'particular')) {
         conveniosList.push('Particular');
     }
+    return conveniosList;
+  };
 
+  const handlePatientChange = (patientId: string) => {
+    const selectedPatient = patients.find(p => p.id === patientId);
+    if (!selectedPatient) return;
+
+    const conveniosList = conveniosDoPaciente(selectedPatient);
     setAvailableConvenios(conveniosList);
     const defaultConvenio = conveniosList[0];
 
@@ -173,10 +215,14 @@ export function AppointmentForm() {
         result = await createAppointment(formData as AppointmentFormData);
     }
 
+    if (result.success && encaixe && doEncaixe) {
+        // O assistente marca esta sessão do encaixe como agendada (com todas, ele vira "Agendado")
+        await marcarSessaoAgendada(encaixe, doEncaixe.sessao).catch(() => undefined);
+    }
     setLoading(false);
     if (result.success) {
         alert(`Agendamento(s) criado(s) com sucesso!`);
-        router.push("/agendamentos");
+        router.push(encaixe ? "/agendamentos/assistente?aba=para-agendar" : "/agendamentos");
         router.refresh();
     } else {
         setError(result.error || "Ocorreu um erro desconhecido.");
@@ -191,20 +237,31 @@ export function AppointmentForm() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
+          {encaixe && doEncaixe && encaixe.opcao.sessoes[doEncaixe.sessao] && (
+            <Alert className="border-[#a8d8d9] bg-[#f3fbfb]">
+              <Repeat className="h-4 w-4" />
+              <AlertTitle>Do assistente de agendamento</AlertTitle>
+              <AlertDescription>
+                {encaixe.paciente.nome} · {encaixe.opcao.sessoes[doEncaixe.sessao].terapia} com {encaixe.opcao.sessoes[doEncaixe.sessao].profissional.nome},
+                toda {nomeDoDia(encaixe.opcao.sessoes[doEncaixe.sessao].dia)} às {encaixe.opcao.sessoes[doEncaixe.sessao].horario}
+                {formData.data ? `, a partir de ${dataPorExtenso(formData.data)}` : ""}. Confira o número de sessões e salve.
+              </AlertDescription>
+            </Alert>
+          )}
           {error && (<Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Erro</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>)}
           
           <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-6">
             
             <div className="space-y-2 lg:col-span-3">
                 <Label>Paciente *</Label>
-                <Select onValueChange={handlePatientChange} required>
+                <Select value={formData.patientId ?? ""} onValueChange={handlePatientChange} required>
                     <SelectTrigger><SelectValue placeholder="Selecione o paciente" /></SelectTrigger>
                     <SelectContent>{patients.map(p => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent>
                 </Select>
             </div>
             <div className="space-y-2 lg:col-span-3">
                 <Label>Profissional *</Label>
-                <Select onValueChange={(v) => handleInputChange("professionalId", v)} required>
+                <Select value={formData.professionalId ?? ""} onValueChange={(v) => handleInputChange("professionalId", v)} required>
                     <SelectTrigger><SelectValue placeholder="Selecione o profissional" /></SelectTrigger>
                     <SelectContent>{professionals.map(p => <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>)}</SelectContent>
                 </Select>
@@ -219,15 +276,15 @@ export function AppointmentForm() {
             </div>
             <div className="space-y-2 lg:col-span-2">
                 <Label>Data *</Label>
-                <Input type="date" onChange={(e) => handleInputChange("data", e.target.value)} required />
+                <Input type="date" value={formData.data ?? ""} onChange={(e) => handleInputChange("data", e.target.value)} required />
             </div>
             <div className="space-y-2 lg:col-span-1">
                 <Label>Horário Inicial *</Label>
-                <Input type="time" onChange={(e) => handleInputChange("horaInicio", e.target.value)} required />
+                <Input type="time" value={formData.horaInicio ?? ""} onChange={(e) => handleInputChange("horaInicio", e.target.value)} required />
             </div>
             <div className="space-y-2 lg:col-span-1">
                 <Label>Horário Final *</Label>
-                <Input type="time" onChange={(e) => handleInputChange("horaFim", e.target.value)} required />
+                <Input type="time" value={formData.horaFim ?? ""} onChange={(e) => handleInputChange("horaFim", e.target.value)} required />
             </div>
 
             <div className="space-y-2 lg:col-span-2">
@@ -239,6 +296,8 @@ export function AppointmentForm() {
                 <Select 
                     value={formData.convenio || undefined} 
                     onValueChange={(val) => {
+                        // O Select às vezes avisa um valor vazio enquanto a lista ainda chega: convênio vazio não existe
+                        if (!val) return;
                         handleInputChange("convenio", val);
                         filterSpecialtiesByConvenio(val);
                     }}

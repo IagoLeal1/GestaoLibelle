@@ -39,6 +39,7 @@ import { addDays, format, parseISO } from "date-fns"
 import { toast } from "sonner" // 🔥 Sonner
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatSpecialtyName } from "@/lib/formatters";
+import { contarParaAgendar } from "@/services/encaixeService";
 
 // --- Funções de Ajuda (Helpers) ---
 const getStatusBadge = (status: string) => {
@@ -83,7 +84,20 @@ const primaryStatusOptions: { value: AppointmentStatus; label: string }[] = [
     { value: "cancelado", label: "Cancelado" },
 ];
 
-export function AgendamentosClientPage() {
+/** O item do assistente no menu, com o número laranja de encaixes que a recepção ainda vai agendar. */
+function ItemDoAssistente({ faltam }: { faltam: number }) {
+  return (
+    <>
+      <CalendarSearch className="mr-2 h-4 w-4" />
+      Assistente de Agendamento
+      {faltam > 0 && <span className="ml-auto rounded-full bg-[#e68b00] px-2 py-px text-[11px] font-bold text-white">{faltam} para agendar</span>}
+    </>
+  );
+}
+
+// dataInicial (aaaa-mm-dd): /agendamentos?data=2026-10-14 abre a agenda naquele dia (o assistente usa
+// para a recepção mudar a sessão da criança da troca)
+export function AgendamentosClientPage({ dataInicial }: { dataInicial?: string } = {}) {
   // Só a recepção e a gestão alteram a agenda; o terapeuta consulta (as regras do banco também barram)
   const { firestoreUser } = useAuth();
   const podeEditar = ehGestao(firestoreUser?.profile?.role);
@@ -101,7 +115,14 @@ export function AgendamentosClientPage() {
   const [isTableLoading, setIsTableLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // O dia no relógio do aparelho: em UTC, depois das 21h de Brasília já seria amanhã
-  const [selectedDate, setSelectedDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  const [selectedDate, setSelectedDate] = useState(() => dataInicial ?? format(new Date(), 'yyyy-MM-dd'));
+  const [encaixesParaAgendar, setEncaixesParaAgendar] = useState(0);
+  // Uma leitura só: quantos encaixes a coordenação mandou e a recepção ainda não agendou
+  useEffect(() => {
+    if (!podeEditar) return;
+    contarParaAgendar().then(setEncaixesParaAgendar).catch(() => undefined);
+  }, [podeEditar]);
+  const linkDoAssistente = encaixesParaAgendar > 0 ? "/agendamentos/assistente?aba=para-agendar" : "/agendamentos/assistente";
   const [searchTerm, setSearchTerm] = useState("");
   const [professionalFilter, setProfessionalFilter] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
@@ -479,7 +500,14 @@ export function AgendamentosClientPage() {
             {podeEditar && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button size="icon" className="h-11 w-11" aria-label="Novo agendamento"><Plus className="h-5 w-5" /></Button>
+                  <Button
+                    size="icon"
+                    className="relative h-11 w-11"
+                    aria-label={encaixesParaAgendar > 0 ? `Novo agendamento (${encaixesParaAgendar} encaixes para agendar)` : "Novo agendamento"}
+                  >
+                    <Plus className="h-5 w-5" />
+                    {encaixesParaAgendar > 0 && <span aria-hidden className="absolute -right-1 -top-1 h-3.5 w-3.5 rounded-full border-2 border-white bg-[#e68b00]" />}
+                  </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem asChild><Link href="/agendamentos/novo">Agendamento Único/Sequencial</Link></DropdownMenuItem>
@@ -487,7 +515,7 @@ export function AgendamentosClientPage() {
                   <DropdownMenuItem asChild><Link href="/agendamentos/terapia">Agendamento em Grade por terapia</Link></DropdownMenuItem>
                   <DropdownMenuItem asChild><Link href="/agendamentos/terapeuta">Grade por terapeuta</Link></DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild><Link href="/agendamentos/assistente"><CalendarSearch className="mr-2 h-4 w-4" />Assistente de Agendamento</Link></DropdownMenuItem>
+                  <DropdownMenuItem asChild><Link href={linkDoAssistente}><ItemDoAssistente faltam={encaixesParaAgendar} /></Link></DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -524,7 +552,13 @@ export function AgendamentosClientPage() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                   <Button className="w-full">
-                      <Plus className="mr-2 h-4 w-4" /> Novo Agendamento <ChevronDown className="ml-2 h-4 w-4" />
+                      <Plus className="mr-2 h-4 w-4" /> Novo Agendamento
+                      {encaixesParaAgendar > 0 && (
+                        <span className="ml-2 rounded-full bg-[#e68b00] px-1.5 text-[11px] font-bold text-white">
+                          {encaixesParaAgendar}<span className="sr-only"> encaixes para agendar</span>
+                        </span>
+                      )}
+                      <ChevronDown className="ml-2 h-4 w-4" />
                   </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -533,12 +567,7 @@ export function AgendamentosClientPage() {
                   <Link href="/agendamentos/terapia" passHref><DropdownMenuItem>Agendamento em Grade por terapia</DropdownMenuItem></Link>
                   <DropdownMenuItem asChild><Link href="/agendamentos/terapeuta">Grade por terapeuta</Link></DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <Link href="/agendamentos/assistente" passHref>
-                    <DropdownMenuItem>
-                        <CalendarSearch className="mr-2 h-4 w-4" />
-                        Assistente de Agendamento
-                    </DropdownMenuItem>
-                  </Link>
+                  <DropdownMenuItem asChild><Link href={linkDoAssistente}><ItemDoAssistente faltam={encaixesParaAgendar} /></Link></DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             )}
