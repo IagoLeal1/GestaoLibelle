@@ -10,6 +10,8 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  limit,
+  orderBy,
   query,
   Timestamp,
   updateDoc,
@@ -65,6 +67,21 @@ export const getCommunications = async (userRole: string): Promise<Communication
     return snapshot.docs
       .map((aviso) => ({ id: aviso.id, ...aviso.data() }) as Communication)
       .sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+  } catch (error) {
+    console.error("Erro ao buscar avisos:", error);
+    return [];
+  }
+};
+
+// Só para o sininho: a gestão contava os novos lendo todos os avisos já publicados; os 30 mais
+// recentes bastam (menos leituras). Os demais papéis já recebem só os do seu público.
+const AVISOS_DO_SININHO = 30;
+
+export const getAvisosParaContar = async (userRole: string): Promise<Communication[]> => {
+  if (!ehGestao(userRole)) return getCommunications(userRole);
+  try {
+    const snapshot = await getDocs(query(collection(db, "communications"), orderBy("createdAt", "desc"), limit(AVISOS_DO_SININHO)));
+    return snapshot.docs.map((aviso) => ({ id: aviso.id, ...aviso.data() }) as Communication);
   } catch (error) {
     console.error("Erro ao buscar avisos:", error);
     return [];

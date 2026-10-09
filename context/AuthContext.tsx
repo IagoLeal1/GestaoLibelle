@@ -5,7 +5,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebaseConfig';
-import { getCommunications } from '@/services/communicationService';
+import { getAvisosParaContar } from '@/services/communicationService';
 import { contarNovos, PapelDeUsuario } from '@/lib/avisos';
 
 export interface FirestoreUser {
@@ -46,7 +46,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // --- NOVA FUNÇÃO PARA BUSCAR NÃO LIDOS ---
   const fetchUnreadCount = async () => {
     if (auth.currentUser && firestoreUser) {
-      const comms = await getCommunications(firestoreUser.profile.role);
+      const comms = await getAvisosParaContar(firestoreUser.profile.role);
       setUnreadCount(contarNovos(comms, { uid: auth.currentUser.uid, papel: firestoreUser.profile.role as PapelDeUsuario }));
     } else {
       setUnreadCount(0);
@@ -75,7 +75,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setFirestoreUser(fsUser);
 
           // Após ter o perfil, busca os comunicados
-          const comms = await getCommunications(fsUser.profile.role);
+          const comms = await getAvisosParaContar(fsUser.profile.role);
           setUnreadCount(contarNovos(comms, { uid: userAuth.uid, papel: fsUser.profile.role as PapelDeUsuario }));
           
         } else {

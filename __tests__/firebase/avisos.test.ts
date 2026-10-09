@@ -7,7 +7,7 @@ import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebaseConfig';
 import { FirestoreUser } from '@/context/AuthContext';
 import {
-  Communication, createCommunication, getCommunications, getPessoasDaClinica, markCommunicationAsRead, updateCommunication,
+  Communication, createCommunication, getAvisosParaContar, getCommunications, getPessoasDaClinica, markCommunicationAsRead, updateCommunication,
 } from '@/services/communicationService';
 import { criarUsuario, encerrarAmbiente, entrarComo, iniciarAmbiente, limparDados, UsuarioDeTeste } from './helpers';
 
@@ -98,5 +98,36 @@ describe('avisos pelo app', () => {
       'Paula Fonoaudióloga (profissional)',
       'Rafa Recepção (funcionario)',
     ]);
+  });
+});
+
+// O sininho da gestão contava os novos lendo todos os avisos já publicados. Agora lê só os 30 mais
+// recentes (menos leituras); a página de Avisos continua com todos.
+describe('sininho de avisos', () => {
+  it('a gestão conta os novos só entre os 30 avisos mais recentes', async () => {
+    await testEnv.withSecurityRulesDisabled(async (contexto) => {
+      const banco = contexto.firestore();
+      for (let i = 1; i <= 31; i++) {
+        await setDoc(doc(banco, 'communications', `antigo-${i}`), {
+          title: `Antigo ${i}`, message: 'Texto.', isImportant: false, targetRole: 'equipe',
+          authorId: carla.uid, authorName: carla.displayName, readBy: {},
+          createdAt: Timestamp.fromMillis(Date.now() - (10 + i) * 24 * 60 * 60 * 1000),
+        });
+      }
+    });
+    await entrarComo(carla);
+
+    const avisos = await getAvisosParaContar('coordenador');
+
+    expect(avisos).toHaveLength(30);
+    expect(avisos[0].title).toBe('Para familiar'); // o mais novo primeiro
+    expect(titulos(avisos)).not.toContain('Antigo 31');
+    expect(await getCommunications('coordenador')).toHaveLength(35); // a página de Avisos mostra todos
+  });
+
+  it('quem não é da gestão conta pelos avisos do seu público, como antes', async () => {
+    await entrarComo(paula);
+
+    expect(titulos(await getAvisosParaContar('profissional'))).toEqual(['Para terapeutas', 'Para equipe']);
   });
 });
