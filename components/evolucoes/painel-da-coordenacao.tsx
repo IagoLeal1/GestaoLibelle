@@ -229,7 +229,9 @@ function CartaoDoTerapeuta({ linha: t, escolhido, grande = false, onEscolher }: 
 // ——— A página ———
 
 export function PainelDaCoordenacao() {
-  const { carregando, erro, sessoes, agora, desde } = useEvolucoes();
+  const { carregando, erro, sessoes, agora, desde, pedirAgenda } = useEvolucoes();
+  // A agenda da clínica só é lida quando alguém abre esta página (ou o Início sem número recente)
+  useEffect(() => pedirAgenda(), [pedirAgenda]);
   const telaLarga = useTelaLarga();
   const [filtros, setFiltros] = useState<Filtros>({ periodo: "7dias" });
   const [datas, setDatas] = useState({ de: format(EVOLUCOES_DESDE, "yyyy-MM-dd"), ate: format(new Date(), "yyyy-MM-dd") });

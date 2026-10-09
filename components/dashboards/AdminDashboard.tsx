@@ -39,8 +39,12 @@ export function AdminDashboard() {
   const ehAdmin = firestoreUser?.profile.role === 'admin';
   const agora = useAgora();
   // As de hoje ainda podem ser escritas no fim do dia: o aviso conta só as dos dias anteriores
-  const { escopo, pendentes } = useEvolucoes();
-  const evolucoesAtrasadas = escopo === "equipe" ? pendentes.filter((p) => p.diasDeAtraso > 0).length : 0;
+  // Sem um número recente no aparelho, pede a agenda da clínica (lida no máximo a cada 15 minutos)
+  const { escopo, atrasadas, pedirAgenda } = useEvolucoes();
+  useEffect(() => {
+    if (escopo === "equipe" && atrasadas === null) pedirAgenda();
+  }, [escopo, atrasadas, pedirAgenda]);
+  const evolucoesAtrasadas = atrasadas ?? 0;
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [stats, setStats] = useState<AdminDashboardStats>({ activePatients: 0, activeProfessionals: 0, pendingUsers: 0 });

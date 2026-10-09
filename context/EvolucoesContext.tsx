@@ -4,6 +4,8 @@
 // As sessões da janela de cobrança das evoluções (lib/evolucoes), carregadas uma vez por visita:
 // o terapeuta, as dele; a coordenação e o admin, as da clínica. O menu, as telas iniciais e a
 // página de evoluções leem daqui. Só a agenda é lida: a marca da evolução está na própria sessão.
+// A agenda da clínica é grande: para o admin e a coordenação ela só é lida quando uma tela pede
+// (pedirAgenda), e o Início usa o número de atrasadas guardado no aparelho por 15 minutos.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { addDays, endOfDay } from "date-fns";
 import { useAuth } from "@/context/AuthContext";
@@ -33,6 +35,10 @@ interface EvolucoesContextType {
   /** Atualiza a marca de uma sessão depois de escrever, corrigir ou apagar, sem buscar de novo. */
   marcar: (appointmentId: string, marca?: MarcaDaEvolucao) => void;
   recarregar: () => void;
+  /** Admin e coordenação: a tela que precisa das sessões da clínica pede que sejam lidas. */
+  pedirAgenda: () => void;
+  /** Admin e coordenação: evoluções atrasadas na equipe (null enquanto não há um número recente). */
+  atrasadas: number | null;
 }
 
 const SEM_EVOLUCOES: EvolucoesContextType = {
@@ -46,7 +52,32 @@ const SEM_EVOLUCOES: EvolucoesContextType = {
   pendentes: [],
   marcar: () => {},
   recarregar: () => {},
+  pedirAgenda: () => {},
+  atrasadas: null,
 };
+
+// O número de atrasadas guardado no aparelho: só o número, por pessoa, valendo 15 minutos
+const VALIDADE_DO_NUMERO = 15 * 60 * 1000;
+const chaveDoNumero = (uid: string) => `libelle:evolucoes-atrasadas:${uid}`;
+
+function numeroGuardado(uid: string): number | null {
+  try {
+    const guardado = JSON.parse(localStorage.getItem(chaveDoNumero(uid)) ?? "null") as { n: number; em: number } | null;
+    return guardado && typeof guardado.n === "number" && Date.now() - guardado.em < VALIDADE_DO_NUMERO ? guardado.n : null;
+  } catch {
+    return null;
+  }
+}
+
+function guardarNumero(uid: string, n: number) {
+  try {
+    localStorage.setItem(chaveDoNumero(uid), JSON.stringify({ n, em: Date.now() }));
+  } catch {
+    // Sem como guardar (navegação privada): o Início só lê a agenda de novo na próxima vez
+  }
+}
+
+const contarAtrasadas = (pendentes: Pendencia[]) => pendentes.filter((p) => p.diasDeAtraso > 0).length;
 
 const EvolucoesContext = createContext<EvolucoesContextType>(SEM_EVOLUCOES);
 
@@ -61,6 +92,8 @@ export function EvolucoesProvider({ children }: { children: React.ReactNode }) {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(false);
   const [versao, setVersao] = useState(0);
+  const [pedida, setPedida] = useState(false);
+  const [carregada, setCarregada] = useState(false);
   // A janela é fixada na hora de carregar; a lista de pendências anda com o relógio
   const [desde, setDesde] = useState(() => inicioDaJanela(new Date()));
 
@@ -69,6 +102,8 @@ export function EvolucoesProvider({ children }: { children: React.ReactNode }) {
       setCarregando(false);
       return;
     }
+    // A agenda da clínica só é lida quando alguma tela pede
+    if (escopo === "equipe" && !pedida) return;
     let ativo = true;
     (async () => {
       setCarregando(true);
@@ -93,9 +128,14 @@ export function EvolucoesProvider({ children }: { children: React.ReactNode }) {
           if (ativo) setSessoes(agenda);
         } else {
           const agenda = (await getAppointmentsForReport({ startDate: inicio, endDate: endOfDay(hoje) })).map(sessaoDaAgenda);
-          if (ativo) setSessoes(agenda);
+          if (!ativo) return;
+          setSessoes(agenda);
+          guardarNumero(uid, contarAtrasadas(paraEscrever(agenda, { agora: hoje, desde: inicio })));
         }
-        if (ativo) setDesde(inicio);
+        if (ativo) {
+          setDesde(inicio);
+          setCarregada(true);
+        }
       } catch (e) {
         console.error("Erro ao carregar as evoluções:", e);
         if (ativo) setErro(true);
@@ -108,17 +148,23 @@ export function EvolucoesProvider({ children }: { children: React.ReactNode }) {
     };
     // firestoreUser muda de identidade a cada atualização do perfil; o que importa é quem e qual papel
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uid, escopo, versao]);
+  }, [uid, escopo, versao, pedida]);
 
   const pendentes = useMemo(() => paraEscrever(sessoes, { agora, desde }), [sessoes, agora, desde]);
   const marcar = useCallback((appointmentId: string, marca?: MarcaDaEvolucao) => {
     setSessoes((atuais) => atuais.map((s) => (s.id === appointmentId ? { ...s, evolucao: marca } : s)));
   }, []);
   const recarregar = useCallback(() => setVersao((v) => v + 1), []);
+  const pedirAgenda = useCallback(() => setPedida(true), []);
+  // Com a agenda lida, o número vem dela; antes disso, do aparelho (se for recente)
+  const atrasadas = useMemo(
+    () => (escopo !== "equipe" || !uid ? null : carregada ? contarAtrasadas(pendentes) : numeroGuardado(uid)),
+    [escopo, uid, carregada, pendentes]
+  );
 
   return (
     <EvolucoesContext.Provider
-      value={{ escopo, carregando, erro, semCadastro, professionalId, agora, desde, sessoes, pendentes, marcar, recarregar }}
+      value={{ escopo, carregando, erro, semCadastro, professionalId, agora, desde, sessoes, pendentes, marcar, recarregar, pedirAgenda, atrasadas }}
     >
       {children}
     </EvolucoesContext.Provider>

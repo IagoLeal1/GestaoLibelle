@@ -37,7 +37,7 @@ const atendimento = (paciente: string, hora: number, status = 'agendado', extra:
 
 beforeEach(() => {
   jest.clearAllMocks();
-  (useEvolucoes as jest.Mock).mockReturnValue({ escopo: 'equipe', pendentes: [] });
+  (useEvolucoes as jest.Mock).mockReturnValue({ escopo: 'equipe', atrasadas: 0, pedirAgenda: jest.fn() });
   entrarComo('coordenador');
   (getAppointmentsByDate as jest.Mock).mockResolvedValue([]);
   (getAdminDashboardStats as jest.Mock).mockResolvedValue({ activePatients: 12, activeProfessionals: 5, pendingUsers: 2 });
@@ -109,24 +109,35 @@ it.each(['coordenador', 'funcionario'])('%s não vê pedidos de acesso, que só 
 });
 
 it('a coordenação vê quantas evoluções da equipe estão atrasadas, e o aviso leva à página de evoluções', async () => {
-  (useEvolucoes as jest.Mock).mockReturnValue({
-    escopo: 'equipe',
-    pendentes: [{ diasDeAtraso: 3 }, { diasDeAtraso: 1 }, { diasDeAtraso: 0 }],
-  });
+  const pedirAgenda = jest.fn();
+  (useEvolucoes as jest.Mock).mockReturnValue({ escopo: 'equipe', atrasadas: 2, pedirAgenda });
 
   render(<AdminDashboard />);
 
-  // As de hoje ainda não estão atrasadas: só contam as dos dias anteriores
   const aviso = await screen.findByRole('link', { name: /2 evoluções atrasadas na equipe/ });
   expect(aviso).toHaveAttribute('href', '/evolucoes');
+  // Com o número recente guardado no aparelho, não lê a agenda da clínica de novo
+  expect(pedirAgenda).not.toHaveBeenCalled();
+});
+
+it('sem um número recente, o Início pede a agenda da clínica', async () => {
+  const pedirAgenda = jest.fn();
+  (useEvolucoes as jest.Mock).mockReturnValue({ escopo: 'equipe', atrasadas: null, pedirAgenda });
+
+  render(<AdminDashboard />);
+
+  await screen.findByRole('group', { name: 'Pacientes ativos' });
+  expect(pedirAgenda).toHaveBeenCalled();
 });
 
 it('a recepção não vê aviso de evoluções', async () => {
   entrarComo('funcionario');
-  (useEvolucoes as jest.Mock).mockReturnValue({ escopo: null, pendentes: [] });
+  const pedirAgenda = jest.fn();
+  (useEvolucoes as jest.Mock).mockReturnValue({ escopo: null, atrasadas: null, pedirAgenda });
 
   render(<AdminDashboard />);
 
   await screen.findByRole('group', { name: 'Pacientes ativos' });
   expect(screen.queryByText(/evoluç/)).not.toBeInTheDocument();
+  expect(pedirAgenda).not.toHaveBeenCalled();
 });

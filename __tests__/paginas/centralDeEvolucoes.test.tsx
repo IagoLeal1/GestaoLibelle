@@ -49,6 +49,7 @@ function telaLarga(larga: boolean) {
 beforeEach(() => {
   telaLarga(true);
   (useEvolucoes as jest.Mock).mockReturnValue({
+    pedirAgenda: jest.fn(),
     escopo: 'equipe', carregando: false, erro: false, sessoes: SESSOES, agora: AGORA, desde: new Date(2026, 9, 6),
   });
   (getEvolucao as jest.Mock).mockReset().mockResolvedValue(evolucao('Trabalhamos frases com o livro de figuras.'));
@@ -152,6 +153,7 @@ it('no celular, tocar num número também abre a lista, e a leitura abre numa fo
 it('a lista mostra 20 sessões de cada vez', () => {
   const muitas = Array.from({ length: 25 }, (_, i) => sessao(`m${i}`, 9, { start: new Date(2026, 9, 14, 8, i), end: new Date(2026, 9, 14, 8, i + 1), evolucao: 'escrita' }));
   (useEvolucoes as jest.Mock).mockReturnValue({
+    pedirAgenda: jest.fn(),
     escopo: 'equipe', carregando: false, erro: false, sessoes: muitas, agora: AGORA, desde: new Date(2026, 9, 6),
   });
   render(<PainelDaCoordenacao />);
