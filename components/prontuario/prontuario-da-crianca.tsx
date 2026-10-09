@@ -24,7 +24,7 @@ import { corDaCrianca, corDaTerapia, corEscura } from "@/lib/coresDasTerapias";
 import { useDemorando } from "@/hooks/use-demorando";
 import { daTerapia, idade, minhaSessaoCom, paraLembrar, terapiasDoProntuario, type Anotacao } from "@/lib/prontuario";
 import { corrigirAnotacao, escreverAnotacao, getAnotacoes } from "@/services/prontuarioService";
-import { entrarNaEquipeDaCrianca } from "@/services/evolucaoService";
+import { entrarNaEquipeDaCrianca, esquecerEquipe } from "@/services/evolucaoService";
 import { getPatientById } from "@/services/patientService";
 import { diagnosticosDaFicha, type Diagnostico } from "@/lib/diagnostico";
 import { useEquipeDaCrianca } from "@/hooks/use-equipe-da-crianca";
@@ -94,6 +94,8 @@ export function ProntuarioDaCrianca({ patientId, terapiaInicial }: { patientId: 
         setAnotacoes(lidas);
       } catch (e) {
         console.error("Erro ao abrir o prontuário:", e);
+        // A equipe lembrada no aparelho pode estar errada: o "Tentar de novo" confere no banco
+        if (ehTerapeuta) esquecerEquipe(uid, patientId);
         if (ativo) setErro(true);
       } finally {
         if (ativo) setCarregando(false);

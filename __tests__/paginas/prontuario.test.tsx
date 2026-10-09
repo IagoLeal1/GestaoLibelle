@@ -7,7 +7,7 @@ import { useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useEvolucoes } from '@/context/EvolucoesContext';
 import { corrigirAnotacao, escreverAnotacao, getAnotacoes } from '@/services/prontuarioService';
-import { entrarNaEquipeDaCrianca } from '@/services/evolucaoService';
+import { entrarNaEquipeDaCrianca, esquecerEquipe } from '@/services/evolucaoService';
 import { getPatientById } from '@/services/patientService';
 import { getSessoesDaEquipe } from '@/services/diagnosticoService';
 import { ProntuarioDaCrianca } from '@/components/prontuario/prontuario-da-crianca';
@@ -16,7 +16,7 @@ import type { Anotacao } from '@/lib/prontuario';
 jest.mock('@/context/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('@/context/EvolucoesContext', () => ({ useEvolucoes: jest.fn() }));
 jest.mock('@/services/prontuarioService', () => ({ getAnotacoes: jest.fn(), escreverAnotacao: jest.fn(), corrigirAnotacao: jest.fn() }));
-jest.mock('@/services/evolucaoService', () => ({ entrarNaEquipeDaCrianca: jest.fn() }));
+jest.mock('@/services/evolucaoService', () => ({ entrarNaEquipeDaCrianca: jest.fn(), esquecerEquipe: jest.fn() }));
 jest.mock('@/services/patientService', () => ({ getPatientById: jest.fn() }));
 jest.mock('@/services/diagnosticoService', () => ({ getSessoesDaEquipe: jest.fn() }));
 jest.mock('@/components/evolucoes/folha-da-evolucao', () => ({ FolhaDaEvolucao: () => null }));
@@ -161,6 +161,8 @@ it('quando não abre (internet fraca), deixa tentar de novo', async () => {
 
   expect(await screen.findByRole('heading', { name: 'Lucas Souza' })).toBeInTheDocument();
   expect(getAnotacoes).toHaveBeenCalledTimes(2);
+  // A equipe lembrada no aparelho é conferida de novo no banco na nova tentativa
+  expect(esquecerEquipe).toHaveBeenCalledWith('paula', 'lucas');
 });
 
 // ——— Topo do prontuário: diagnóstico (da ficha) e equipe (da agenda), para todos que veem o prontuário ———

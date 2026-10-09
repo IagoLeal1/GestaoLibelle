@@ -11,7 +11,7 @@ import { useEvolucoes } from "@/context/EvolucoesContext";
 import { cn } from "@/lib/utils";
 import { useDemorando } from "@/hooks/use-demorando";
 import { incompatibilidade, type Evolucao, type SessaoDaAgenda } from "@/lib/evolucoes";
-import { entrarNaEquipeDaCrianca, getHistoriaDaCrianca, getSessoesPorId } from "@/services/evolucaoService";
+import { entrarNaEquipeDaCrianca, getHistoriaDaCrianca, getSessoesPorId, esquecerEquipe } from "@/services/evolucaoService";
 import type { AlvoDaFolha } from "./folha-da-evolucao";
 import { AlertaDeIncompatibilidade, quandoFoi, SeloIncompativel, SeloNaoAconteceu, TextoDaEvolucao } from "./comum";
 
@@ -73,6 +73,8 @@ export function HistoriaDaCrianca({ patientId, versao = 0, onAbrir, terapia: ter
         setTemMais(mais);
       } catch (e) {
         console.error("Erro ao carregar a história da criança:", e);
+        // A equipe lembrada no aparelho pode estar errada: na próxima tentativa, confere no banco
+        if (escopo === "terapeuta" && uid) esquecerEquipe(uid, patientId);
         if (ativo) setErro(true);
       } finally {
         if (ativo) setCarregando(false);

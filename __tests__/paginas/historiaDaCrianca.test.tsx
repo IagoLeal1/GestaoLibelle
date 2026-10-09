@@ -12,6 +12,7 @@ jest.mock('@/context/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('@/context/EvolucoesContext', () => ({ useEvolucoes: jest.fn() }));
 jest.mock('@/services/evolucaoService', () => ({
   entrarNaEquipeDaCrianca: jest.fn(),
+  esquecerEquipe: jest.fn(),
   getHistoriaDaCrianca: jest.fn(),
   getSessoesPorId: jest.fn(),
 }));

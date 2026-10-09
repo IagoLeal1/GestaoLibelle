@@ -96,28 +96,70 @@ export async function apagarEvolucao(patientId: string, appointmentId: string) {
 }
 
 /** Coloca o terapeuta na equipe de cada criança das sessões dele, para ele poder ler a história delas. */
+// O aparelho lembra em quais crianças o terapeuta já está na equipe (só os códigos, por pessoa), para
+// não conferir no banco toda vez que o site abre. A regra do banco continua decidindo quem lê.
+const chaveDasEquipes = (uid: string) => `libelle:equipes:${uid}`;
+
+function equipesConferidas(uid: string): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(chaveDasEquipes(uid)) ?? "[]") as string[]);
+  } catch {
+    return new Set();
+  }
+}
+
+function lembrarEquipes(uid: string, patientIds: string[]) {
+  try {
+    const conferidas = equipesConferidas(uid);
+    patientIds.forEach((id) => conferidas.add(id));
+    localStorage.setItem(chaveDasEquipes(uid), JSON.stringify([...conferidas]));
+  } catch {
+    // Sem como guardar (navegação privada ou fora do navegador): confere de novo na próxima vez
+  }
+}
+
+/** Para quando o prontuário de uma criança falhar: na próxima tentativa, confere a equipe no banco. */
+export function esquecerEquipe(uid: string, patientId: string) {
+  try {
+    const conferidas = equipesConferidas(uid);
+    conferidas.delete(patientId);
+    localStorage.setItem(chaveDasEquipes(uid), JSON.stringify([...conferidas]));
+  } catch {
+    // Nada guardado para esquecer
+  }
+}
+
 export async function entrarNasEquipes(uid: string, sessoes: Pick<SessaoDaAgenda, "id" | "patientId" | "status">[]) {
+  const conferidas = equipesConferidas(uid);
   const provaPorCrianca = new Map<string, string>();
   for (const s of sessoes) {
-    if (s.status !== "cancelado" && !provaPorCrianca.has(s.patientId)) provaPorCrianca.set(s.patientId, s.id);
+    if (s.status !== "cancelado" && !conferidas.has(s.patientId) && !provaPorCrianca.has(s.patientId)) provaPorCrianca.set(s.patientId, s.id);
   }
-  await Promise.all(
+  const entrou = await Promise.all(
     [...provaPorCrianca].map(async ([patientId, atendimentoId]) => {
-      if ((await getDoc(equipeRef(patientId, uid))).exists()) return;
-      await setDoc(equipeRef(patientId, uid), { atendimentoId, criadoEm: serverTimestamp() });
+      if (!(await getDoc(equipeRef(patientId, uid))).exists()) {
+        await setDoc(equipeRef(patientId, uid), { atendimentoId, criadoEm: serverTimestamp() });
+      }
+      return patientId;
     })
   );
+  lembrarEquipes(uid, entrou);
 }
 
 /** Para abrir a história de uma criança: entra na equipe se o terapeuta tem sessão com ela. */
 export async function entrarNaEquipeDaCrianca(uid: string, patientId: string, professionalId: string): Promise<boolean> {
-  if ((await getDoc(equipeRef(patientId, uid))).exists()) return true;
+  if (equipesConferidas(uid).has(patientId)) return true;
+  if ((await getDoc(equipeRef(patientId, uid))).exists()) {
+    lembrarEquipes(uid, [patientId]);
+    return true;
+  }
   const sessoes = await getDocs(
     query(collection(db, "appointments"), where("patientId", "==", patientId), where("professionalId", "==", professionalId), limit(20))
   );
   const prova = sessoes.docs.find((s) => s.data().status !== "cancelado");
   if (!prova) return false;
   await setDoc(equipeRef(patientId, uid), { atendimentoId: prova.id, criadoEm: serverTimestamp() });
+  lembrarEquipes(uid, [patientId]);
   return true;
 }
 
