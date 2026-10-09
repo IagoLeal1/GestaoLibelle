@@ -6,7 +6,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { trechos, type Guia, type IdDoAssunto, type Miniatura as TipoDaMiniatura } from "@/lib/ajuda";
+import { duracaoDoGuia, trechos, type Guia, type IdDoAssunto, type Miniatura as TipoDaMiniatura } from "@/lib/ajuda";
 
 const ICONES: Record<IdDoAssunto, { icone: LucideIcon; cor: string }> = {
   comecar: { icone: Rocket, cor: "bg-[#fdf0dc] text-[#9a5b00]" },
@@ -20,6 +20,9 @@ const ICONES: Record<IdDoAssunto, { icone: LucideIcon; cor: string }> = {
   acessos: { icone: Lock, cor: "bg-[#eceff1] text-[#37474f]" },
   regras: { icone: ListChecks, cor: "bg-[#e8eef9] text-[#16375b]" },
 };
+
+/** As cores de cada assunto (fundo claro e texto escuro), para os selos e os ícones. */
+export const CORES_DO_ASSUNTO = Object.fromEntries(Object.entries(ICONES).map(([id, { cor }]) => [id, cor])) as Record<IdDoAssunto, string>;
 
 export function IconeDoAssunto({ assunto, className }: { assunto: IdDoAssunto; className?: string }) {
   const { icone: Icone, cor } = ICONES[assunto];
@@ -39,7 +42,6 @@ export function Texto({ children }: { children: string }) {
   );
 }
 
-export const quantosPassos = (guia: Guia) => (guia.passos.length === 1 ? "1 passo" : `${guia.passos.length} passos`);
 
 /** Um guia na lista: ícone do assunto, título e quantos passos tem. */
 export function CartaoDoGuia({ guia }: { guia: Guia }) {
@@ -51,7 +53,7 @@ export function CartaoDoGuia({ guia }: { guia: Guia }) {
       <IconeDoAssunto assunto={guia.assunto} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-[15px] font-semibold leading-snug">{guia.titulo}</span>
-        <span className="text-[13px] text-muted-foreground">{quantosPassos(guia)}</span>
+        <span className="text-[13px] text-muted-foreground">{duracaoDoGuia(guia)}</span>
       </span>
       <ChevronRight aria-hidden className="h-[18px] w-[18px] shrink-0 text-muted-foreground" />
     </Link>

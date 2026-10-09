@@ -2,8 +2,8 @@
 // A página de Ajuda: cada papel vê só os guias do que pode fazer, a busca ignora acentos e nenhum guia
 // manda alguém para uma tela que o papel dele não abre.
 import {
-  ASSUNTOS, GUIAS, PAPEIS, assuntosDoPapel, buscarGuias, comecePorAqui, guiaPorId, guiasDoPapel, podeVerGuia,
-  proximoGuia, trechos,
+  ASSUNTOS, GUIAS, PAPEIS, assuntosDoPapel, buscarGuias, comecePorAqui, duracaoDoGuia, guiaPorId, guiasDoPapel, podeVerGuia,
+  proximoGuia, telaParaPasso, temTelas, trechos, type Guia,
 } from '@/lib/ajuda';
 import { podeAcessar } from '@/lib/permissoes';
 
@@ -119,4 +119,36 @@ describe('trechos', () => {
       { texto: ' e pronto.', negrito: false },
     ]);
   });
+});
+
+// ——— Ajuda nova: cada passo pode mostrar uma tela de exemplo, com o lugar de tocar aceso ———
+describe('telaParaPasso', () => {
+  const guia = (passos: Guia['passos']) => ({ ...GUIAS[0], passos });
+
+  it('o passo com tela mostra a dele, com o lugar aceso', () => {
+    expect(telaParaPasso(guia([{ texto: 'a', tela: { id: 'agenda', alvo: 'novo' } }]), 0)).toEqual({ id: 'agenda', alvo: 'novo' });
+  });
+
+  it('o passo sem tela repete a do passo anterior, sem acender nada', () => {
+    const g = guia([{ texto: 'a', tela: { id: 'agenda', alvo: 'novo' } }, { texto: 'b' }]);
+    expect(telaParaPasso(g, 1)).toEqual({ id: 'agenda' });
+  });
+
+  it('o primeiro passo sem tela usa a do próximo passo que tem', () => {
+    const g = guia([{ texto: 'a' }, { texto: 'b', tela: { id: 'prontuario', alvo: 'abas' } }]);
+    expect(telaParaPasso(g, 0)).toEqual({ id: 'prontuario' });
+  });
+
+  it('guia sem nenhuma tela não tem', () => {
+    expect(telaParaPasso(guia([{ texto: 'a' }]), 0)).toBeNull();
+    expect(temTelas(guia([{ texto: 'a' }]))).toBe(false);
+  });
+});
+
+it('a duração do guia: uns 2 passos e meio por minuto, no mínimo 1 minuto', () => {
+  const passos = (n: number) => ({ ...GUIAS[0], passos: Array.from({ length: n }, () => ({ texto: 'x' })) });
+  expect(duracaoDoGuia(passos(2))).toBe('2 passos · 1 minuto');
+  expect(duracaoDoGuia(passos(4))).toBe('4 passos · 1 minuto');
+  expect(duracaoDoGuia(passos(5))).toBe('5 passos · 2 minutos');
+  expect(duracaoDoGuia(passos(1))).toBe('1 passo · 1 minuto');
 });

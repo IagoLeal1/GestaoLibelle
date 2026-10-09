@@ -49,10 +49,22 @@ export type Miniatura =
   | { tipo: "opcoes"; itens: string[]; escolhida: string }
   | { tipo: "chave"; rotulo: string; ligada: boolean };
 
+/** As telas de exemplo da Ajuda (components/ajuda/telas): versões pequenas das telas do site. */
+export type IdDaTela =
+  | "inicio" | "agenda" | "agenda-do-terapeuta" | "novo-agendamento" | "editar-sessao" | "para-escrever" | "folha-evolucao" | "prontuario"
+  | "gerenciar-usuarios";
+
+/** A tela de exemplo de um passo e o lugar que acende nela (onde tocar). */
+export interface TelaDoPasso {
+  id: IdDaTela;
+  alvo?: string;
+}
+
 export interface Passo {
   /** **negrito** marca o nome exato do botão ou do campo. */
   texto: string;
   mini?: Miniatura;
+  tela?: TelaDoPasso;
 }
 
 export interface Guia {
@@ -145,4 +157,23 @@ export function trechos(texto: string) {
         ? { texto: parte.slice(2, -2), negrito: true }
         : { texto: parte, negrito: false }
     );
+}
+
+/** O guia tem telas de exemplo? Os que ainda não têm continuam com as miniaturas de cada passo. */
+export const temTelas = (guia: Guia) => guia.passos.some((p) => p.tela);
+
+/** A tela que o passo mostra: a dele ou, sem uma, a do passo mais perto (antes ou depois), sem nada aceso. */
+export function telaParaPasso(guia: Guia, i: number): TelaDoPasso | null {
+  const propria = guia.passos[i]?.tela;
+  if (propria) return propria;
+  const vizinhos = [...guia.passos.slice(0, i).reverse(), ...guia.passos.slice(i + 1)];
+  const perto = vizinhos.find((p) => p.tela)?.tela;
+  return perto ? { id: perto.id } : null;
+}
+
+/** "5 passos · 2 minutos": uns 2 passos e meio por minuto, para a pessoa saber que é rápido. */
+export function duracaoDoGuia(guia: Guia) {
+  const n = guia.passos.length;
+  const minutos = Math.max(1, Math.floor(n / 2.5));
+  return `${n} ${n === 1 ? "passo" : "passos"} · ${minutos} ${minutos === 1 ? "minuto" : "minutos"}`;
 }

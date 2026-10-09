@@ -100,3 +100,20 @@
     font-family: var(--font-roboto), system-ui, sans-serif;
   }
 }
+
+/* Ajuda: na tela de exemplo de cada passo, o lugar de tocar acende em laranja e pulsa */
+@keyframes alvo-pulso {
+  0% { box-shadow: 0 0 0 0 rgba(255, 183, 77, 0.8); }
+  70% { box-shadow: 0 0 0 10px rgba(255, 183, 77, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 183, 77, 0); }
+}
+.alvo-aceso {
+  position: relative;
+  z-index: 1;
+  outline: 3px solid #ffb74d;
+  outline-offset: 3px;
+  animation: alvo-pulso 1.6s ease-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .alvo-aceso { animation: none; }
+}

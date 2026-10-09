@@ -17,7 +17,7 @@ describe('a página de Ajuda', () => {
     comoPapel('profissional');
     render(<PaginaDeAjuda />);
 
-    expect(screen.getByRole('heading', { name: 'Como usar o Libelle' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Olá, Teste! O que você quer fazer hoje?' })).toBeInTheDocument();
     expect(screen.getByText('terapeuta')).toBeInTheDocument();
     const comeco = screen.getByRole('region', { name: 'Comece por aqui' });
     expect(within(comeco).getByRole('link', { name: /Escrever a evolução de uma sessão/ })).toHaveAttribute('href', '/ajuda/escrever-evolucao');
@@ -43,6 +43,28 @@ describe('a página de Ajuda', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar nos guias' }), { target: { value: 'xyzw' } });
 
     expect(screen.getByText(/Nenhum guia encontrado/)).toBeInTheDocument();
+  });
+
+  it('as sugestões preenchem a busca', () => {
+    comoPapel('profissional');
+    render(<PaginaDeAjuda />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'escrever evolução' }));
+
+    expect(screen.getByRole('searchbox', { name: 'Buscar nos guias' })).toHaveValue('escrever evolução');
+    expect(within(screen.getByRole('region', { name: 'Resultados da busca' })).getAllByRole('link').length).toBeGreaterThan(0);
+  });
+
+  it('cada assunto abre a lista dos seus guias, e dá para voltar', () => {
+    comoPapel('funcionario');
+    render(<PaginaDeAjuda />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Agenda/ }));
+
+    const agenda = screen.getByRole('region', { name: 'Agenda' });
+    expect(within(agenda).getByRole('link', { name: /Marcar uma sessão/ })).toHaveAttribute('href', '/ajuda/marcar-uma-sessao');
+    fireEvent.click(screen.getByRole('button', { name: /Todos os assuntos/ }));
+    expect(screen.getByRole('region', { name: 'Comece por aqui' })).toBeInTheDocument();
   });
 
   it('o admin vê tudo e pode ver a ajuda como cada papel', () => {
@@ -101,5 +123,47 @@ describe('um guia aberto', () => {
     render(<GuiaAberto id="escrever-evolucao" />);
 
     expect(screen.getByRole('list', { name: 'Passos' })).toBeInTheDocument();
+  });
+});
+
+describe('a tela de exemplo do guia', () => {
+  const aceso = () => document.querySelector('[data-alvo-aceso]')?.getAttribute('data-alvo-aceso');
+
+  it('começa no passo 1, com o lugar de tocar aceso, e anda com Próximo e Anterior', () => {
+    comoPapel('profissional');
+    render(<GuiaAberto id="escrever-evolucao" />);
+
+    const andar = screen.getByRole('navigation', { name: 'Andar pelos passos' });
+    expect(within(andar).getByText('Passo 1 de 4')).toBeInTheDocument();
+    expect(aceso()).toBe('aviso-evolucao');
+
+    fireEvent.click(screen.getByRole('button', { name: /Próximo passo/ }));
+    expect(within(andar).getByText('Passo 2 de 4')).toBeInTheDocument();
+    expect(aceso()).toBe('item');
+
+    fireEvent.click(screen.getByRole('button', { name: /Anterior/ }));
+    expect(aceso()).toBe('aviso-evolucao');
+    expect(screen.getByRole('button', { name: /Anterior/ })).toBeDisabled();
+  });
+
+  it('tocar num passo da lista mostra a tela dele; no último, o botão leva para a tela do site', () => {
+    comoPapel('profissional');
+    render(<GuiaAberto id="escrever-evolucao" />);
+
+    const passos = within(screen.getByRole('list', { name: 'Passos' })).getAllByRole('button');
+    fireEvent.click(passos[3]);
+
+    expect(passos[3]).toHaveAttribute('aria-current', 'step');
+    expect(aceso()).toBe('salvar');
+    const andar = screen.getByRole('navigation', { name: 'Andar pelos passos' });
+    expect(within(andar).getByRole('link', { name: /Ir para Evoluções/ })).toHaveAttribute('href', '/evolucoes');
+  });
+
+  it('guia que ainda não tem tela de exemplo continua com os passos e as miniaturas', () => {
+    comoPapel('admin');
+    render(<GuiaAberto id="lancar-movimentacao" />);
+
+    expect(screen.getByRole('list', { name: 'Passos' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Tela de exemplo' })).not.toBeInTheDocument();
   });
 });
